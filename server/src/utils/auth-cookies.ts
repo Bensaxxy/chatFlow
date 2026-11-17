@@ -2,10 +2,12 @@ import type { CookieOptions, Response } from "express";
 
 import { env } from "../config/env";
 
+const isProduction = env.NODE_ENV === "production";
+
 const baseCookieOptions: CookieOptions = {
   httpOnly: true,
-  secure: env.NODE_ENV === "production",
-  sameSite: "lax",
+  secure: isProduction,
+  sameSite: isProduction ? "none" : "lax",
   path: "/",
 };
 
@@ -27,6 +29,5 @@ export const setAuthCookies = (
 
 export const clearAuthCookies = (response: Response): void => {
   response.clearCookie("accessToken", baseCookieOptions);
-
   response.clearCookie("refreshToken", baseCookieOptions);
 };
