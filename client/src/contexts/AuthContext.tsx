@@ -16,6 +16,7 @@ import {
   loginUser,
   logoutUser,
   registerUser,
+  changeUserPassword,
 } from "@/services/auth.service";
 import {
   removeMyAvatar,
@@ -27,6 +28,7 @@ import type {
   LoginInput,
   RegisterInput,
   UpdateProfileInput,
+  ChangePasswordInput,
 } from "@/types/auth";
 
 interface AuthContextValue {
@@ -43,6 +45,7 @@ interface AuthContextValue {
   refreshUser: () => Promise<AuthUser | null>;
 
   updateProfile: (input: UpdateProfileInput) => Promise<AuthUser>;
+  changePassword: (input: ChangePasswordInput) => Promise<string>;
 
   updateAvatar: (file: File) => Promise<AuthUser>;
 
@@ -136,6 +139,21 @@ export function AuthProvider({ children }: AuthProviderProps) {
     return updatedUser;
   }, []);
 
+  const changePassword = useCallback(
+    async (input: ChangePasswordInput): Promise<string> => {
+      const message = await changeUserPassword(input);
+
+      /*
+       * The backend clears the authentication cookies
+       * after a successful password change.
+       */
+      setUser(null);
+
+      return message;
+    },
+    [],
+  );
+
   const logout = useCallback(async (): Promise<void> => {
     try {
       await logoutUser();
@@ -156,6 +174,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       updateProfile,
       updateAvatar,
       removeAvatar,
+      changePassword,
     }),
     [
       user,
@@ -167,6 +186,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       updateProfile,
       updateAvatar,
       removeAvatar,
+      changePassword,
     ],
   );
 

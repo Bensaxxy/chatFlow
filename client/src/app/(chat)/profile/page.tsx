@@ -22,6 +22,7 @@ import { toast } from "react-toastify";
 
 import { useAuth } from "@/contexts/AuthContext";
 import { getApiErrorMessage } from "@/lib/api/errors";
+import ChangePasswordForm from "@/components/profile/ChangePasswordForm";
 
 const MAX_AVATAR_SIZE = 5 * 1024 * 1024;
 
@@ -407,6 +408,10 @@ export default function ProfilePage() {
             </div>
           </div>
         </form>
+
+        <div className="mx-auto mt-6 w-full max-w-2xl">
+          <ChangePasswordForm />
+        </div>
       </div>
     </section>
   );

@@ -24,3 +24,34 @@ export const loginSchema = z.object({
 });
 
 export type LoginInput = z.infer<typeof loginSchema>;
+
+export const changePasswordSchema = z
+  .object({
+    currentPassword: z.string().min(1, "Current password is required"),
+
+    newPassword: z
+      .string()
+      .min(8, "New password must contain at least 8 characters")
+      .max(72, "New password cannot exceed 72 characters"),
+
+    confirmPassword: z.string().min(1, "Confirm your new password"),
+  })
+  .superRefine((input, context) => {
+    if (input.newPassword !== input.confirmPassword) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["confirmPassword"],
+        message: "Password confirmation does not match",
+      });
+    }
+
+    if (input.currentPassword === input.newPassword) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["newPassword"],
+        message: "New password must be different from your current password",
+      });
+    }
+  });
+
+export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;

@@ -1,19 +1,32 @@
 import type { RequestHandler } from "express";
 
 import {
+  changeUserPassword,
   getCurrentUser,
   loginUser,
   registerUser,
 } from "../services/auth.service";
-import { asyncHandler } from "../utils/async-handler";
-import type { LoginInput, RegisterInput } from "../validations/auth.validation";
+import { AppError } from "../utils/app-error";
+import { clearAuthCookies, setAuthCookies } from "../utils/auth-cookies";
 import {
   createAccessToken,
   createRefreshToken,
   verifyRefreshToken,
 } from "../utils/auth-tokens";
-import { clearAuthCookies, setAuthCookies } from "../utils/auth-cookies";
-import { AppError } from "../utils/app-error";
+import { asyncHandler } from "../utils/async-handler";
+import type {
+  ChangePasswordInput,
+  LoginInput,
+  RegisterInput,
+} from "../validations/auth.validation";
+
+const getAuthenticatedUserId = (userId: string | undefined): string => {
+  if (!userId) {
+    throw new Error("Authenticated request is missing its user ID");
+  }
+
+  return userId;
+};
 
 export const register: RequestHandler = asyncHandler(
   async (request, response) => {
@@ -35,6 +48,7 @@ export const login: RequestHandler = asyncHandler(async (request, response) => {
   const input = request.body as LoginInput;
 
   const user = await loginUser(input);
+
   const userId = user._id.toString();
 
   const accessToken = createAccessToken(userId);
@@ -53,11 +67,7 @@ export const login: RequestHandler = asyncHandler(async (request, response) => {
 });
 
 export const me: RequestHandler = asyncHandler(async (request, response) => {
-  const userId = request.auth?.userId;
-
-  if (!userId) {
-    throw new Error("Authenticated request is missing its user ID");
-  }
+  const userId = getAuthenticatedUserId(request.auth?.userId);
 
   const user = await getCurrentUser(userId);
 
@@ -87,20 +97,12 @@ export const refresh: RequestHandler = asyncHandler(
     try {
       const payload = verifyRefreshToken(existingRefreshToken);
 
-      /*
-       * Confirm that the token still belongs to an
-       * existing user.
-       */
       const user = await getCurrentUser(payload.userId);
 
       const newAccessToken = createAccessToken(user._id.toString());
 
       const newRefreshToken = createRefreshToken(user._id.toString());
 
-      /*
-       * Rotate both cookies instead of continuing to
-       * reuse the same refresh token.
-       */
       setAuthCookies(response, newAccessToken, newRefreshToken);
 
       response.status(200).json({
@@ -116,6 +118,24 @@ export const refresh: RequestHandler = asyncHandler(
         "INVALID_REFRESH_TOKEN",
       );
     }
+  },
+);
+
+export const changePassword: RequestHandler = asyncHandler(
+  async (request, response) => {
+    const userId = getAuthenticatedUserId(request.auth?.userId);
+
+    const input = request.body as ChangePasswordInput;
+
+    await changeUserPassword(userId, input);
+
+    clearAuthCookies(response);
+
+    response.status(200).json({
+      success: true,
+      message:
+        "Password changed successfully. Sign in again with your new password.",
+    });
   },
 );
 

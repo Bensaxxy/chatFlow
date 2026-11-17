@@ -2,7 +2,13 @@ import bcrypt from "bcryptjs";
 
 import { User } from "../models/user.model";
 import { AppError } from "../utils/app-error";
-import type { LoginInput, RegisterInput } from "../validations/auth.validation";
+import type {
+  ChangePasswordInput,
+  LoginInput,
+  RegisterInput,
+} from "../validations/auth.validation";
+
+const PASSWORD_HASH_ROUNDS = 12;
 
 export const registerUser = async (input: RegisterInput) => {
   const existingUser = await User.exists({
@@ -17,7 +23,7 @@ export const registerUser = async (input: RegisterInput) => {
     );
   }
 
-  const passwordHash = await bcrypt.hash(input.password, 12);
+  const passwordHash = await bcrypt.hash(input.password, PASSWORD_HASH_ROUNDS);
 
   const user = await User.create({
     name: input.name,
@@ -61,4 +67,52 @@ export const getCurrentUser = async (userId: string) => {
   }
 
   return user;
+};
+
+export const changeUserPassword = async (
+  userId: string,
+  input: ChangePasswordInput,
+): Promise<void> => {
+  const user = await User.findById(userId).select("+passwordHash");
+
+  if (!user) {
+    throw new AppError(
+      "Authenticated user was not found",
+      401,
+      "USER_NOT_FOUND",
+    );
+  }
+
+  const currentPasswordMatches = await bcrypt.compare(
+    input.currentPassword,
+    user.passwordHash,
+  );
+
+  if (!currentPasswordMatches) {
+    throw new AppError(
+      "Current password is incorrect",
+      400,
+      "INCORRECT_CURRENT_PASSWORD",
+    );
+  }
+
+  const newPasswordMatchesCurrent = await bcrypt.compare(
+    input.newPassword,
+    user.passwordHash,
+  );
+
+  if (newPasswordMatchesCurrent) {
+    throw new AppError(
+      "New password must be different from your current password",
+      400,
+      "PASSWORD_UNCHANGED",
+    );
+  }
+
+  user.passwordHash = await bcrypt.hash(
+    input.newPassword,
+    PASSWORD_HASH_ROUNDS,
+  );
+
+  await user.save();
 };

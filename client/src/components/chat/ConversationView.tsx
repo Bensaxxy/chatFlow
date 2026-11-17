@@ -1111,6 +1111,32 @@ export default function ConversationView({
                   }),
                 ).filter(({ count }) => count > 0);
 
+                const reactionButton = !isDeletedForEveryone ? (
+                  <button
+                    type="button"
+                    disabled={isReacting}
+                    onClick={() => {
+                      setOpenMessageMenuId(null);
+                      setReactionPickerMessageId(
+                        isReactionPickerOpen ? null : message._id,
+                      );
+                    }}
+                    aria-label="React to message"
+                    title="React to message"
+                    className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border shadow-sm transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                      isMine
+                        ? "border-cyan-200 bg-white text-cyan-700 hover:bg-cyan-50"
+                        : "border-slate-200 bg-white text-slate-500 hover:border-cyan-200 hover:bg-cyan-50 hover:text-cyan-700"
+                    }`}
+                  >
+                    {isReacting ? (
+                      <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <SmilePlus className="h-4 w-4" />
+                    )}
+                  </button>
+                ) : null;
+
                 const previousMessage = messages[messageIndex - 1];
 
                 const showDateSeparator =
@@ -1145,6 +1171,8 @@ export default function ConversationView({
                         />
                       )}
 
+                      {isMine && reactionButton}
+
                       <div
                         className={`relative min-w-0 max-w-[75%] rounded-2xl px-3 py-2 shadow-sm sm:max-w-[60%] lg:max-w-[55%] ${
                           isMine
@@ -1176,33 +1204,6 @@ export default function ConversationView({
                             <MoreVertical className="h-4 w-4" />
                           )}
                         </button>
-
-                        {!isDeletedForEveryone && (
-                          <button
-                            type="button"
-                            disabled={isReacting}
-                            onClick={() => {
-                              setOpenMessageMenuId(null);
-
-                              setReactionPickerMessageId(
-                                isReactionPickerOpen ? null : message._id,
-                              );
-                            }}
-                            aria-label="React to message"
-                            title="React to message"
-                            className={`absolute right-8 top-1 z-30 flex h-7 w-7 items-center justify-center rounded-full transition disabled:opacity-50 ${
-                              isMine
-                                ? "text-cyan-100 hover:bg-cyan-500 hover:text-white"
-                                : "text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-                            }`}
-                          >
-                            {isReacting ? (
-                              <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
-                            ) : (
-                              <SmilePlus className="h-4 w-4" />
-                            )}
-                          </button>
-                        )}
 
                         {isReactionPickerOpen && !isDeletedForEveryone && (
                           <>
@@ -1362,7 +1363,7 @@ export default function ConversationView({
                         )}
 
                         <p
-                          className={`whitespace-pre-wrap break-words pr-14 text-sm leading-5 ${
+                          className={`whitespace-pre-wrap break-words pr-10 text-sm leading-5 ${
                             isDeletedForEveryone ? "italic opacity-80" : ""
                           }`}
                         >
@@ -1441,6 +1442,8 @@ export default function ConversationView({
                           )}
                         </div>
                       </div>
+
+                      {!isMine && reactionButton}
 
                       {isMine && (
                         <UserAvatar

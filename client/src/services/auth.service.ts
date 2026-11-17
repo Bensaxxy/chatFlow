@@ -5,6 +5,7 @@ import type { ApiSuccessResponse } from "@/types/api";
 import type {
   AuthUser,
   AuthUserData,
+  ChangePasswordInput,
   LoginInput,
   RegisterInput,
 } from "@/types/auth";
@@ -31,4 +32,20 @@ export const getCurrentUser = async (): Promise<AuthUser> => {
 
 export const logoutUser = async (): Promise<void> => {
   await apiClient.post("/auth/logout");
+};
+
+interface ChangePasswordResponse {
+  success: boolean;
+  message: string;
+}
+
+export const changeUserPassword = async (
+  input: ChangePasswordInput,
+): Promise<string> => {
+  const { data } = await apiClient.patch<ChangePasswordResponse>(
+    "/auth/change-password",
+    input,
+  );
+
+  return data.message;
 };
