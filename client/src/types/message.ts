@@ -27,10 +27,23 @@ export interface MessageReaction {
   reactedAt: string;
 }
 
+export interface MessageAttachment {
+  url: string;
+  resourceType: "image" | "raw";
+  fileName: string;
+  mimeType: string;
+  size: number;
+  width: number | null;
+  height: number | null;
+}
+
 export interface RepliedMessage {
   _id: string;
   content: string;
+  type: "text" | "image" | "file";
+  attachment: MessageAttachment | null;
   sender: MessageSender;
+  isForwarded: boolean;
   deletedFor: string[];
   deletedForEveryoneAt: string | null;
   editedAt: string | null;
@@ -41,8 +54,9 @@ export interface ChatMessage {
   _id: string;
   conversation: string;
   sender: MessageSender;
-  type: "text";
+  type: "text" | "image" | "file";
   content: string;
+  attachment: MessageAttachment | null;
   replyTo: RepliedMessage | null;
   isForwarded: boolean;
   deliveredTo: string[];

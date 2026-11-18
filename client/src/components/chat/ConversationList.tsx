@@ -452,7 +452,11 @@ export default function ConversationList() {
 
         const senderId = lastMessage?.sender?._id;
 
-        const content = lastMessage?.content ?? "";
+        const content =
+          lastMessage?.content ||
+          (lastMessage?.type === "image"
+            ? "📷 Image"
+            : lastMessage?.attachment?.fileName || "File");
 
         const messagePreview = lastMessage
           ? deletedFor.includes(user._id)

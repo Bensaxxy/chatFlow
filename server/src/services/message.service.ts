@@ -1,5 +1,13 @@
+import { randomUUID } from "node:crypto";
+import { extname } from "node:path";
+
 import { Types } from "mongoose";
 
+import {
+  deleteMessageAttachmentFromCloudinary,
+  uploadMessageAttachmentToCloudinary,
+  type MessageAttachmentResourceType,
+} from "../config/cloudinary";
 import { Conversation } from "../models/conversation.model";
 import { Message } from "../models/message.model";
 import { getSocketServer } from "../socket/socket.server";
@@ -9,6 +17,7 @@ import type {
   EditMessageInput,
   ForwardMessageInput,
   ListMessagesInput,
+  SendAttachmentMessageInput,
   SendMessageInput,
   UpdateMessageReactionInput,
 } from "../validations/message.validation";
@@ -16,7 +25,8 @@ import type {
 const senderFields = "name email avatarUrl";
 
 const replyMessageFields =
-  "content sender deletedFor deletedForEveryoneAt editedAt createdAt";
+  "content type attachment sender isForwarded deletedFor " +
+  "deletedForEveryoneAt editedAt createdAt";
 
 const messagePopulateOptions = [
   {
@@ -33,8 +43,60 @@ const messagePopulateOptions = [
   },
 ];
 
+interface StoredMessageAttachment {
+  url: string;
+  publicId: string;
+  resourceType: MessageAttachmentResourceType;
+  fileName: string;
+  mimeType: string;
+  size: number;
+  width: number | null;
+  height: number | null;
+}
+
 const escapeRegularExpression = (value: string): string =>
   value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const sanitizeFileName = (value: string): string => {
+  const normalizedName = value
+    .replace(/[<>:"/\\|?*\u0000-\u001F]/g, "_")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return normalizedName.slice(0, 255) || "attachment";
+};
+
+const mimeTypeByExtension: Record<string, string> = {
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".png": "image/png",
+  ".webp": "image/webp",
+  ".gif": "image/gif",
+  ".pdf": "application/pdf",
+  ".txt": "text/plain",
+  ".csv": "text/csv",
+  ".doc": "application/msword",
+  ".docx":
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  ".xls": "application/vnd.ms-excel",
+  ".xlsx":
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  ".ppt": "application/vnd.ms-powerpoint",
+  ".pptx":
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  ".zip": "application/zip",
+};
+
+const resolveAttachmentMimeType = (
+  mimeType: string,
+  fileName: string,
+): string => {
+  if (mimeType && mimeType !== "application/octet-stream") {
+    return mimeType;
+  }
+
+  return mimeTypeByExtension[extname(fileName).toLowerCase()] ?? mimeType;
+};
 
 const verifyConversationMembership = async (
   conversationId: string,
@@ -56,11 +118,40 @@ const verifyConversationMembership = async (
   return conversation;
 };
 
+const verifyReplyMessage = async (
+  conversationId: string,
+  replyToMessageId: string | null | undefined,
+  currentUserId: string,
+): Promise<void> => {
+  if (!replyToMessageId) {
+    return;
+  }
+
+  const replyMessageExists = await Message.exists({
+    _id: replyToMessageId,
+    conversation: conversationId,
+    deletedForEveryoneAt: null,
+    deletedFor: {
+      $ne: currentUserId,
+    },
+  });
+
+  if (!replyMessageExists) {
+    throw new AppError(
+      "The message you are replying to was not found",
+      404,
+      "REPLY_MESSAGE_NOT_FOUND",
+    );
+  }
+};
+
 interface CreateRealtimeMessageOptions {
   conversationId: string;
   participantIds: string[];
   senderId: string;
   content: string;
+  messageType?: "text" | "image" | "file";
+  attachment?: StoredMessageAttachment | null;
   replyToMessageId?: string | null;
   isForwarded?: boolean;
   forwardedFromMessageId?: string | null;
@@ -71,6 +162,8 @@ const createRealtimeMessage = async ({
   participantIds,
   senderId,
   content,
+  messageType = "text",
+  attachment = null,
   replyToMessageId = null,
   isForwarded = false,
   forwardedFromMessageId = null,
@@ -98,8 +191,9 @@ const createRealtimeMessage = async ({
   const message = await Message.create({
     conversation: conversationId,
     sender: senderId,
-    type: "text",
+    type: messageType,
     content,
+    attachment,
     replyTo: replyToMessageId,
     isForwarded,
     forwardedFrom: forwardedFromMessageId,
@@ -143,24 +237,7 @@ export const sendMessage = async (
     senderId,
   );
 
-  if (input.replyToMessageId) {
-    const replyMessageExists = await Message.exists({
-      _id: input.replyToMessageId,
-      conversation: conversationId,
-      deletedForEveryoneAt: null,
-      deletedFor: {
-        $ne: senderId,
-      },
-    });
-
-    if (!replyMessageExists) {
-      throw new AppError(
-        "The message you are replying to was not found",
-        404,
-        "REPLY_MESSAGE_NOT_FOUND",
-      );
-    }
-  }
+  await verifyReplyMessage(conversationId, input.replyToMessageId, senderId);
 
   return createRealtimeMessage({
     conversationId,
@@ -171,6 +248,85 @@ export const sendMessage = async (
     content: input.content,
     replyToMessageId: input.replyToMessageId,
   });
+};
+
+export const sendMessageAttachment = async (
+  conversationId: string,
+  senderId: string,
+  input: SendAttachmentMessageInput,
+  file: Express.Multer.File,
+) => {
+  const conversation = await verifyConversationMembership(
+    conversationId,
+    senderId,
+  );
+
+  await verifyReplyMessage(conversationId, input.replyToMessageId, senderId);
+
+  const mimeType = resolveAttachmentMimeType(file.mimetype, file.originalname);
+
+  const isImage = mimeType.startsWith("image/");
+
+  const resourceType: MessageAttachmentResourceType = isImage ? "image" : "raw";
+
+  const messageType: "image" | "file" = isImage ? "image" : "file";
+
+  const originalExtension = extname(file.originalname)
+    .toLowerCase()
+    .slice(0, 12);
+
+  /**
+   * Raw Cloudinary resources retain their extension in the
+   * public ID so browsers receive a useful download URL.
+   */
+  const publicId =
+    resourceType === "raw"
+      ? `${randomUUID()}${originalExtension}`
+      : randomUUID();
+
+  const uploadResult = await uploadMessageAttachmentToCloudinary({
+    buffer: file.buffer,
+    publicId,
+    resourceType,
+  });
+
+  const attachment: StoredMessageAttachment = {
+    url: uploadResult.secure_url,
+    publicId: uploadResult.public_id,
+    resourceType,
+    fileName: sanitizeFileName(file.originalname),
+    mimeType,
+    size: uploadResult.bytes || file.size,
+    width: typeof uploadResult.width === "number" ? uploadResult.width : null,
+    height:
+      typeof uploadResult.height === "number" ? uploadResult.height : null,
+  };
+
+  try {
+    return await createRealtimeMessage({
+      conversationId,
+      participantIds: conversation.participants.map((participantId) =>
+        participantId.toString(),
+      ),
+      senderId,
+      content: input.content,
+      messageType,
+      attachment,
+      replyToMessageId: input.replyToMessageId,
+    });
+  } catch (error) {
+    await deleteMessageAttachmentFromCloudinary(
+      attachment.publicId,
+      attachment.resourceType,
+    ).catch((cleanupError: unknown) => {
+      console.error(
+        "Could not clean up failed message attachment:",
+        cleanupError,
+      );
+    });
+
+    throw error;
+  }
 };
 
 export const forwardMessage = async (
@@ -224,6 +380,20 @@ export const forwardMessage = async (
 
   const forwardedMessages = [];
 
+  const forwardedAttachment: StoredMessageAttachment | null =
+    sourceMessage.attachment
+      ? {
+          url: sourceMessage.attachment.url,
+          publicId: sourceMessage.attachment.publicId,
+          resourceType: sourceMessage.attachment.resourceType,
+          fileName: sourceMessage.attachment.fileName,
+          mimeType: sourceMessage.attachment.mimeType,
+          size: sourceMessage.attachment.size,
+          width: sourceMessage.attachment.width ?? null,
+          height: sourceMessage.attachment.height ?? null,
+        }
+      : null;
+
   for (const targetConversationId of targetConversationIds) {
     const targetConversation = conversationsById.get(targetConversationId);
 
@@ -238,6 +408,8 @@ export const forwardMessage = async (
       ),
       senderId: currentUserId,
       content: sourceMessage.content,
+      messageType: sourceMessage.type,
+      attachment: forwardedAttachment,
       isForwarded: true,
       forwardedFromMessageId: sourceMessage._id.toString(),
     });
@@ -350,6 +522,7 @@ export const getMessageContext = async (
       })
       .limit(15)
       .lean(),
+
     Message.find({
       ...visibleMessageFilter,
       _id: {
@@ -472,7 +645,13 @@ export const deleteMessage = async (
 
   message.deletedForEveryoneAt = deletedAt;
   message.content = "This message was deleted";
+  message.type = "text";
+  message.attachment = null;
 
+  /**
+   * The physical Cloudinary asset is not removed here because
+   * forwarded messages may still reference the same attachment.
+   */
   await message.save();
 
   const payload = {
@@ -616,4 +795,3 @@ export const updateMessageReaction = async (
 
   return message;
 };
-  

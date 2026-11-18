@@ -1,3 +1,4 @@
+import type { MessageAttachment } from "@/types/message";
 import type { SearchUser } from "@/types/user";
 
 export interface ConversationParticipant {
@@ -19,7 +20,8 @@ export interface MessageSender {
 export interface ConversationLastMessage {
   _id: string;
   content: string;
-  type: "text";
+  type: "text" | "image" | "file";
+  attachment: MessageAttachment | null;
   sender: MessageSender;
   createdAt: string;
   editedAt: string | null;

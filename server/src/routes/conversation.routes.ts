@@ -6,6 +6,7 @@ import {
   listConversations,
 } from "../controllers/conversation.controller";
 import {
+  createAttachmentMessage,
   createMessage,
   forwardExistingMessage,
   getMessageContext,
@@ -16,6 +17,7 @@ import {
   updateMessage,
 } from "../controllers/message.controller";
 import { authenticate } from "../middleware/auth.middleware";
+import { uploadMessageAttachment } from "../middleware/message-attachment-upload.middleware";
 import { validateBody } from "../middleware/validate.middleware";
 import { createDirectConversationSchema } from "../validations/conversation.validation";
 import {
@@ -58,6 +60,13 @@ conversationRouter.post(
   authenticate,
   validateBody(sendMessageSchema),
   createMessage,
+);
+
+conversationRouter.post(
+  "/:conversationId/messages/attachment",
+  authenticate,
+  uploadMessageAttachment,
+  createAttachmentMessage,
 );
 
 conversationRouter.post(

@@ -4,6 +4,20 @@ import { z } from "zod";
 const objectIdSchema = (message: string) =>
   z.string().refine((value) => isValidObjectId(value), message);
 
+const optionalMultipartObjectId = (message: string) =>
+  z.preprocess((value) => {
+    if (
+      value === undefined ||
+      value === null ||
+      value === "" ||
+      value === "null"
+    ) {
+      return null;
+    }
+
+    return value;
+  }, objectIdSchema(message).nullable());
+
 export const conversationParamsSchema = z.object({
   conversationId: objectIdSchema("Conversation ID is invalid"),
 });
@@ -23,6 +37,19 @@ export const sendMessageSchema = z.object({
   replyToMessageId: objectIdSchema("Reply message ID is invalid")
     .nullable()
     .optional(),
+});
+
+export const sendAttachmentMessageSchema = z.object({
+  content: z
+    .string()
+    .trim()
+    .max(5000, "Message caption cannot exceed 5000 characters")
+    .optional()
+    .default(""),
+
+  replyToMessageId: optionalMultipartObjectId(
+    "Reply message ID is invalid",
+  ).optional(),
 });
 
 export const forwardMessageSchema = z.object({
@@ -72,6 +99,10 @@ export const updateMessageReactionSchema = z.object({
 });
 
 export type SendMessageInput = z.infer<typeof sendMessageSchema>;
+
+export type SendAttachmentMessageInput = z.infer<
+  typeof sendAttachmentMessageSchema
+>;
 
 export type ForwardMessageInput = z.infer<typeof forwardMessageSchema>;
 

@@ -1,5 +1,6 @@
 import type { RequestHandler } from "express";
 import multer, { MulterError } from "multer";
+import { extname } from "node:path";
 
 import { AppError } from "../utils/app-error";
 
@@ -32,6 +33,44 @@ const allowedAttachmentTypes = new Set([
   "application/x-zip-compressed",
 ]);
 
+const allowedAttachmentExtensions = new Set([
+  ".jpg",
+  ".jpeg",
+  ".png",
+  ".webp",
+  ".gif",
+  ".pdf",
+  ".txt",
+  ".csv",
+  ".doc",
+  ".docx",
+  ".xls",
+  ".xlsx",
+  ".ppt",
+  ".pptx",
+  ".zip",
+]);
+
+const isAllowedAttachment = (file: Express.Multer.File): boolean => {
+  if (allowedAttachmentTypes.has(file.mimetype)) {
+    return true;
+  }
+
+  /*
+   * Desktop browsers sometimes provide an empty MIME type or
+   * application/octet-stream for otherwise valid documents. Accept those
+   * only when their extension is on the same allow-list as the client.
+   */
+  if (
+    file.mimetype &&
+    file.mimetype !== "application/octet-stream"
+  ) {
+    return false;
+  }
+
+  return allowedAttachmentExtensions.has(extname(file.originalname).toLowerCase());
+};
+
 const messageAttachmentUpload = multer({
   storage: multer.memoryStorage(),
 
@@ -41,7 +80,7 @@ const messageAttachmentUpload = multer({
   },
 
   fileFilter: (_request, file, callback) => {
-    if (!allowedAttachmentTypes.has(file.mimetype)) {
+    if (!isAllowedAttachment(file)) {
       callback(
         new AppError(
           "This file type is not supported",

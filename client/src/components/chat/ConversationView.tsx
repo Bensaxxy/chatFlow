@@ -1,26 +1,9 @@
 "use client";
 
-import {
-  AlertCircle,
-  ArrowLeft,
-  Check,
-  CheckCheck,
-  LoaderCircle,
-  Forward,
-  MessageCircleMore,
-  MoreVertical,
-  Pencil,
-  Reply,
-  Search,
-  SendHorizontal,
-  SmilePlus,
-  Trash2,
-  X,
-} from "lucide-react";
+import { AlertCircle, LoaderCircle } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  Fragment,
   useCallback,
   useEffect,
   useRef,
@@ -30,7 +13,10 @@ import {
 } from "react";
 import { toast } from "react-toastify";
 
-import UserAvatar from "@/components/chat/UserAvatar";
+import ConversationComposer from "@/components/chat/ConversationComposer";
+import ConversationHeader from "@/components/chat/ConversationHeader";
+import ConversationMessageList from "@/components/chat/ConversationMessageList";
+import MessageSearchDrawer from "@/components/chat/MessageSearchDrawer";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSocket } from "@/contexts/SocketContext";
 import { getApiErrorMessage } from "@/lib/api/errors";
@@ -50,7 +36,6 @@ import type {
   ConversationParticipant,
 } from "@/types/conversation";
 import {
-  MESSAGE_REACTION_EMOJIS,
   type ChatMessage,
   type DeleteMessageScope,
   type MessageDeletedPayload,
@@ -62,22 +47,6 @@ import ForwardMessageModal from "@/components/chat/ForwardMessageModal";
 interface ConversationViewProps {
   conversationId: string;
 }
-
-const formatMessageTime = (value: string): string =>
-  new Date(value).toLocaleTimeString([], {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-
-const isSameCalendarDay = (
-  firstValue: string,
-  secondValue: string,
-): boolean => {
-  const firstDate = new Date(firstValue);
-  const secondDate = new Date(secondValue);
-
-  return firstDate.toDateString() === secondDate.toDateString();
-};
 
 const formatMessageDateLabel = (value: string): string => {
   const messageDate = new Date(value);
@@ -156,14 +125,19 @@ const normalizeReplyPreview = (
   replyTo
     ? {
         ...replyTo,
+        type: replyTo.type ?? "text",
+        attachment: replyTo.attachment ?? null,
+        isForwarded: replyTo.isForwarded ?? false,
         deletedFor: Array.isArray(replyTo.deletedFor) ? replyTo.deletedFor : [],
       }
     : null;
 
 const normalizeMessage = (message: ChatMessage): ChatMessage => ({
   ...message,
+  type: message.type ?? "text",
+  attachment: message.attachment ?? null,
+  isForwarded: message.isForwarded ?? false,
   replyTo: normalizeReplyPreview(message.replyTo),
-  isForwarded: Boolean(message.isForwarded),
   deliveredTo: Array.isArray(message.deliveredTo) ? message.deliveredTo : [],
   readBy: Array.isArray(message.readBy) ? message.readBy : [],
   deletedFor: Array.isArray(message.deletedFor) ? message.deletedFor : [],
@@ -186,7 +160,10 @@ const addMessageIfMissing = (
 const createReplyPreview = (message: ChatMessage): RepliedMessage => ({
   _id: message._id,
   content: message.content,
+  type: message.type,
+  attachment: message.attachment,
   sender: message.sender,
+  isForwarded: message.isForwarded,
   deletedFor: Array.isArray(message.deletedFor) ? message.deletedFor : [],
   deletedForEveryoneAt: message.deletedForEveryoneAt,
   editedAt: message.editedAt,
@@ -383,6 +360,8 @@ export default function ConversationView({
 
   const [floatingDate, setFloatingDate] = useState("");
 
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
+
   const [isMessageSearchOpen, setIsMessageSearchOpen] = useState(false);
 
   const [messageSearchQuery, setMessageSearchQuery] = useState("");
@@ -430,6 +409,11 @@ export default function ConversationView({
     const container = messagesContainerRef.current;
 
     if (!container) return;
+
+    const distanceFromBottom =
+      container.scrollHeight - container.scrollTop - container.clientHeight;
+
+    setShowScrollToBottom(distanceFromBottom > 160);
 
     const containerTop = container.getBoundingClientRect().top;
 
@@ -732,12 +716,10 @@ export default function ConversationView({
       return;
     }
 
-    document
-      .getElementById(`message-${highlightedMessageId}`)
-      ?.scrollIntoView({
-        behavior: "smooth",
-        block: "center",
-      });
+    document.getElementById(`message-${highlightedMessageId}`)?.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
 
     const timeoutId = window.setTimeout(() => {
       setHighlightedMessageId(null);
@@ -842,6 +824,14 @@ export default function ConversationView({
     } finally {
       setIsLoadingOlder(false);
     }
+  };
+
+  const handleScrollToBottom = (): void => {
+    messagesEndRef.current?.scrollIntoView({
+      behavior: "smooth",
+    });
+
+    setShowScrollToBottom(false);
   };
 
   const closeMessageSearch = (): void => {
@@ -1148,6 +1138,20 @@ export default function ConversationView({
     });
   };
 
+  const handleAttachmentSent = (attachmentMessage: ChatMessage): void => {
+    setMessages((currentMessages) =>
+      addMessageIfMissing(currentMessages, attachmentMessage),
+    );
+
+    setReplyingToMessage(null);
+
+    window.requestAnimationFrame(() => {
+      messagesEndRef.current?.scrollIntoView({
+        behavior: "smooth",
+      });
+    });
+  };
+
   const handleDeleteMessage = async (
     messageId: string,
     scope: DeleteMessageScope,
@@ -1261,839 +1265,132 @@ export default function ConversationView({
 
   return (
     <section className="relative flex h-full w-full flex-col overflow-hidden bg-white">
-      <header className="flex h-20 shrink-0 items-center gap-3 border-b border-slate-200 px-4 sm:px-6">
-        <Link
-          href="/chats"
-          aria-label="Back to conversations"
-          className="rounded-full p-2 text-slate-600 hover:bg-slate-100 md:hidden"
-        >
-          <ArrowLeft className="h-5 w-5" />
-        </Link>
-
-        <button
-          type="button"
-          disabled={!otherParticipantId}
-          onClick={() => {
-            if (otherParticipantId) {
-              router.push(`/users/${otherParticipantId}`);
-            }
-          }}
-          aria-label={`View ${displayName}'s profile`}
-          title={`View ${displayName}'s profile`}
-          className="relative shrink-0 rounded-full disabled:cursor-default"
-        >
-          <UserAvatar
-            name={displayName}
-            avatarUrl={
-              conversation.type === "direct"
-                ? updatedOtherProfile
-                  ? updatedOtherProfile.avatarUrl
-                  : otherParticipant?.avatarUrl
-                : null
-            }
-            className="h-11 w-11"
-            fallbackClassName="bg-cyan-100 font-semibold text-cyan-800"
-          />
-
-          {isOtherUserOnline && (
-            <span
-              title="Online"
-              aria-label="Online"
-              className="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full border-2 border-white bg-emerald-500 shadow-sm"
-            />
-          )}
-        </button>
-
-        <div className="min-w-0 flex-1">
-          <h1 className="truncate font-semibold text-slate-950">
-            {displayName}
-          </h1>
-
-          {isOtherUserTyping ? (
-            <div className="mt-0.5 flex items-center gap-1.5 text-xs font-semibold text-cyan-600">
-              <span>Typing</span>
-
-              <span className="flex items-center gap-0.5">
-                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-cyan-600 [animation-delay:-0.3s]" />
-                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-cyan-600 [animation-delay:-0.15s]" />
-                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-cyan-600" />
-              </span>
-            </div>
-          ) : isOtherUserOnline ? (
-            <p className="truncate text-xs font-medium text-emerald-600">
-              Online
-            </p>
-          ) : isDirectConversation ? (
-            <p className="truncate text-xs text-slate-500">
-              {formatLastSeen(otherUserLastSeenAt)}
-            </p>
-          ) : (
-            <p className="truncate text-xs text-slate-500">
-              Group conversation
-            </p>
-          )}
-        </div>
-
-        <button
-          type="button"
-          onClick={openMessageSearch}
-          aria-label="Search messages"
-          aria-expanded={isMessageSearchOpen}
-          title="Search messages"
-          className="rounded-full p-2 text-slate-600 transition hover:bg-slate-100 hover:text-slate-950"
-        >
-          <Search className="h-5 w-5" />
-        </button>
-      </header>
-
-      <div className="relative min-h-0 flex-1">
-        <div
-          ref={messagesContainerRef}
-          onScroll={handleMessagesScroll}
-          className="h-full overflow-y-auto bg-slate-50 px-4 py-5 sm:px-6"
-        >
-          {hasMore && (
-            <div className="mb-5 text-center">
-              <button
-                type="button"
-                onClick={handleLoadOlder}
-                disabled={isLoadingOlder}
-                className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-medium text-slate-600 shadow-sm hover:bg-slate-50 disabled:opacity-60"
-              >
-                {isLoadingOlder && (
-                  <LoaderCircle className="h-4 w-4 animate-spin" />
-                )}
-                Load older messages
-              </button>
-            </div>
-          )}
-
-          {messages.length === 0 ? (
-            <div className="flex h-full items-center justify-center text-center">
-              <div>
-                <MessageCircleMore className="mx-auto h-12 w-12 text-slate-300" />
-
-                <p className="mt-4 font-medium text-slate-700">
-                  No messages yet
-                </p>
-
-                <p className="mt-1 text-sm text-slate-500">
-                  Send the first message to {displayName}.
-                </p>
-              </div>
-            </div>
-          ) : (
-            <div className="mx-auto flex w-full max-w-7xl flex-col gap-3">
-              {messages.map((message, messageIndex) => {
-                const isMine = message.sender._id === user._id;
-
-                const updatedSenderProfile = updatedProfiles.get(
-                  message.sender._id,
-                );
-
-                const senderName = isMine
-                  ? user.name
-                  : (updatedSenderProfile?.name ??
-                    message.sender.name ??
-                    "Unknown user");
-
-                const senderAvatarUrl = isMine
-                  ? user.avatarUrl
-                  : updatedSenderProfile
-                    ? updatedSenderProfile.avatarUrl
-                    : message.sender.avatarUrl;
-
-                const updatedReplySenderProfile = message.replyTo
-                  ? updatedProfiles.get(message.replyTo.sender._id)
-                  : undefined;
-
-                const recipientId = otherParticipant?._id;
-
-                const readBy = Array.isArray(message.readBy)
-                  ? message.readBy
-                  : [];
-
-                const deliveredTo = Array.isArray(message.deliveredTo)
-                  ? message.deliveredTo
-                  : [];
-
-                const isReadByRecipient = recipientId
-                  ? readBy.includes(recipientId)
-                  : readBy.length > 1;
-
-                const isDeliveredToRecipient = recipientId
-                  ? deliveredTo.includes(recipientId)
-                  : deliveredTo.length > 1;
-
-                const receiptLabel = isReadByRecipient
-                  ? "Read"
-                  : isDeliveredToRecipient
-                    ? "Delivered"
-                    : "Sent";
-
-                const isDeletedForEveryone = Boolean(
-                  message.deletedForEveryoneAt,
-                );
-
-                const isDeleting = deletingMessageId === message._id;
-
-                const isMenuOpen = openMessageMenuId === message._id;
-
-                const isReactionPickerOpen =
-                  reactionPickerMessageId === message._id;
-
-                const isReacting = reactingMessageId === message._id;
-
-                const reactions = Array.isArray(message.reactions)
-                  ? message.reactions
-                  : [];
-
-                const currentUserReaction = reactions.find(
-                  (reaction) => reaction.user === user._id,
-                );
-
-                const groupedReactions = MESSAGE_REACTION_EMOJIS.map(
-                  (emoji) => ({
-                    emoji,
-                    count: reactions.filter(
-                      (reaction) => reaction.emoji === emoji,
-                    ).length,
-                  }),
-                ).filter(({ count }) => count > 0);
-
-                const previousMessage = messages[messageIndex - 1];
-
-                const showDateSeparator =
-                  !previousMessage ||
-                  !isSameCalendarDay(
-                    previousMessage.createdAt,
-                    message.createdAt,
-                  );
-
-                return (
-                  <Fragment key={message._id}>
-                    {showDateSeparator && (
-                      <div className="my-2 flex justify-center">
-                        <span className="rounded-full bg-slate-200/80 px-3 py-1 text-[11px] font-medium text-slate-600">
-                          {formatMessageDateLabel(message.createdAt)}
-                        </span>
-                      </div>
-                    )}
-
-                    <div
-                      id={`message-${message._id}`}
-                      data-message-date={message.createdAt}
-                      className={`scroll-mt-6 flex w-full items-end gap-2 ${
-                        isMine ? "justify-end" : "justify-start"
-                      }`}
-                    >
-                      {!isMine && (
-                        <UserAvatar
-                          name={senderName}
-                          avatarUrl={senderAvatarUrl}
-                          className="h-8 w-8 text-xs"
-                          fallbackClassName="bg-slate-200 font-semibold text-slate-700"
-                        />
-                      )}
-
-                      <div
-                        className={`relative min-w-0 max-w-[75%] rounded-2xl px-3 py-2 shadow-sm transition sm:max-w-[60%] lg:max-w-[55%] ${
-                          isMine
-                            ? "rounded-br-md bg-cyan-600 text-white"
-                            : "rounded-bl-md border border-slate-200 bg-white text-slate-900"
-                        } ${
-                          highlightedMessageId === message._id
-                            ? "ring-2 ring-amber-400 ring-offset-2"
-                            : ""
-                        }`}
-                      >
-                        <button
-                          type="button"
-                          disabled={isDeleting}
-                          onClick={() => {
-                            setReactionPickerMessageId(null);
-
-                            setOpenMessageMenuId(
-                              isMenuOpen ? null : message._id,
-                            );
-                          }}
-                          aria-label="Message options"
-                          title="Message options"
-                          className={`absolute right-1 top-1 z-30 flex h-7 w-7 items-center justify-center rounded-full transition disabled:opacity-50 ${
-                            isMine
-                              ? "text-cyan-100 hover:bg-cyan-500 hover:text-white"
-                              : "text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-                          }`}
-                        >
-                          {isDeleting ? (
-                            <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
-                          ) : (
-                            <MoreVertical className="h-4 w-4" />
-                          )}
-                        </button>
-
-                        {!isDeletedForEveryone && (
-                          <button
-                            type="button"
-                            disabled={isReacting}
-                            onClick={() => {
-                              setOpenMessageMenuId(null);
-
-                              setReactionPickerMessageId(
-                                isReactionPickerOpen ? null : message._id,
-                              );
-                            }}
-                            aria-label="React to message"
-                            title="React to message"
-                            className={`absolute right-8 top-1 z-30 flex h-7 w-7 items-center justify-center rounded-full transition disabled:opacity-50 ${
-                              isMine
-                                ? "text-cyan-100 hover:bg-cyan-500 hover:text-white"
-                                : "text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-                            }`}
-                          >
-                            {isReacting ? (
-                              <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
-                            ) : (
-                              <SmilePlus className="h-4 w-4" />
-                            )}
-                          </button>
-                        )}
-
-                        {isReactionPickerOpen && !isDeletedForEveryone && (
-                          <>
-                            <button
-                              type="button"
-                              aria-label="Close reaction picker"
-                              onClick={() => setReactionPickerMessageId(null)}
-                              className="fixed inset-0 z-40 cursor-default"
-                            />
-
-                            <div
-                              className={`absolute z-50 flex items-center gap-1 whitespace-nowrap rounded-full border border-slate-200 bg-white p-1.5 shadow-xl ${
-                                isMine ? "right-1" : "left-1"
-                              } ${
-                                messageIndex >= messages.length - 2
-                                  ? "bottom-9"
-                                  : "top-9"
-                              }`}
-                            >
-                              {MESSAGE_REACTION_EMOJIS.map((emoji) => {
-                                const isSelected =
-                                  currentUserReaction?.emoji === emoji;
-
-                                return (
-                                  <button
-                                    key={emoji}
-                                    type="button"
-                                    disabled={isReacting}
-                                    onClick={() =>
-                                      void handleMessageReaction(message, emoji)
-                                    }
-                                    aria-label={`React with ${emoji}`}
-                                    className={`flex h-9 w-9 items-center justify-center rounded-full text-xl transition hover:scale-110 hover:bg-slate-100 disabled:opacity-50 ${
-                                      isSelected
-                                        ? "bg-cyan-100 ring-2 ring-cyan-500"
-                                        : ""
-                                    }`}
-                                  >
-                                    {emoji}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          </>
-                        )}
-
-                        {isMenuOpen && (
-                          <>
-                            <button
-                              type="button"
-                              aria-label="Close message menu"
-                              onClick={() => setOpenMessageMenuId(null)}
-                              className="fixed inset-0 z-40 cursor-default"
-                            />
-
-                            <div
-                              className={`absolute right-1 z-50 w-48 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 text-left text-sm text-slate-700 shadow-xl ${
-                                messageIndex >= messages.length - 2
-                                  ? "bottom-9"
-                                  : "top-9"
-                              }`}
-                            >
-                              {!isDeletedForEveryone && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleStartReplying(message)}
-                                  className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left transition hover:bg-slate-50"
-                                >
-                                  <Reply className="h-4 w-4 text-slate-500" />
-                                  Reply
-                                </button>
-                              )}
-
-                              {!isDeletedForEveryone && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleStartForwarding(message)}
-                                  className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left transition hover:bg-slate-50"
-                                >
-                                  <Forward className="h-4 w-4 text-slate-500" />
-                                  Forward
-                                </button>
-                              )}
-
-                              {isMine && !isDeletedForEveryone && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleStartEditing(message)}
-                                  className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left transition hover:bg-slate-50"
-                                >
-                                  <Pencil className="h-4 w-4 text-slate-500" />
-                                  Edit message
-                                </button>
-                              )}
-
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  void handleDeleteMessage(message._id, "me")
-                                }
-                                className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left transition hover:bg-slate-50"
-                              >
-                                <Trash2 className="h-4 w-4 text-slate-500" />
-                                Delete for me
-                              </button>
-
-                              {isMine && !isDeletedForEveryone && (
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    void handleDeleteMessage(
-                                      message._id,
-                                      "everyone",
-                                    )
-                                  }
-                                  className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-red-600 transition hover:bg-red-50"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                  Delete for everyone
-                                </button>
-                              )}
-                            </div>
-                          </>
-                        )}
-                        {message.isForwarded && !isDeletedForEveryone && (
-                          <div
-                            className={`mb-1 flex items-center gap-1 text-[11px] font-medium ${
-                              isMine ? "text-cyan-100" : "text-slate-500"
-                            }`}
-                          >
-                            <Forward className="h-3 w-3" />
-                            Forwarded
-                          </div>
-                        )}
-                        {message.replyTo && (
-                          <div
-                            className={`mb-2 rounded-lg border-l-4 px-3 py-2 ${
-                              isMine
-                                ? "border-cyan-200 bg-cyan-700/40"
-                                : "border-cyan-500 bg-slate-100"
-                            }`}
-                          >
-                            {message.replyTo.deletedForEveryoneAt ||
-                            (Array.isArray(message.replyTo.deletedFor)
-                              ? message.replyTo.deletedFor
-                              : []
-                            ).includes(user._id) ? (
-                              <p
-                                className={`truncate text-xs italic ${
-                                  isMine ? "text-cyan-100" : "text-slate-500"
-                                }`}
-                              >
-                                Original message is unavailable
-                              </p>
-                            ) : (
-                              <>
-                                <p
-                                  className={`truncate text-xs font-semibold ${
-                                    isMine ? "text-cyan-100" : "text-cyan-700"
-                                  }`}
-                                >
-                                  {message.replyTo.sender._id === user._id
-                                    ? "You"
-                                    : (updatedReplySenderProfile?.name ??
-                                      message.replyTo.sender.name)}
-                                </p>
-
-                                <p
-                                  className={`mt-0.5 truncate text-xs ${
-                                    isMine ? "text-cyan-50" : "text-slate-600"
-                                  }`}
-                                >
-                                  {message.replyTo.content}
-                                </p>
-                              </>
-                            )}
-                          </div>
-                        )}
-
-                        <p
-                          className={`whitespace-pre-wrap break-words pr-14 text-sm leading-5 ${
-                            isDeletedForEveryone ? "italic opacity-80" : ""
-                          }`}
-                        >
-                          {isDeletedForEveryone
-                            ? "This message was deleted"
-                            : message.content}
-                        </p>
-
-                        {groupedReactions.length > 0 &&
-                          !isDeletedForEveryone && (
-                            <div className="mt-2 flex flex-wrap items-center gap-1">
-                              {groupedReactions.map(({ emoji, count }) => {
-                                const isSelected =
-                                  currentUserReaction?.emoji === emoji;
-
-                                return (
-                                  <button
-                                    key={emoji}
-                                    type="button"
-                                    disabled={isReacting}
-                                    onClick={() =>
-                                      void handleMessageReaction(message, emoji)
-                                    }
-                                    aria-label={`${emoji} reaction, ${count}`}
-                                    className={`inline-flex h-7 items-center gap-1 rounded-full border px-2 text-xs transition disabled:opacity-50 ${
-                                      isSelected
-                                        ? "border-cyan-500 bg-cyan-50 text-cyan-800"
-                                        : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
-                                    }`}
-                                  >
-                                    <span>{emoji}</span>
-
-                                    <span className="font-semibold">
-                                      {count}
-                                    </span>
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          )}
-
-                        <div
-                          className={`mt-1 flex items-center justify-end gap-1.5 text-[10px] ${
-                            isMine ? "text-cyan-100" : "text-slate-400"
-                          }`}
-                        >
-                          {message.editedAt && !isDeletedForEveryone && (
-                            <span className="italic">Edited</span>
-                          )}
-
-                          <span>{formatMessageTime(message.createdAt)}</span>
-
-                          {isMine && !isDeletedForEveryone && (
-                            <span
-                              title={receiptLabel}
-                              aria-label={receiptLabel}
-                              className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-white shadow-sm ring-1 ring-black/10"
-                            >
-                              {isReadByRecipient ? (
-                                <CheckCheck
-                                  strokeWidth={2.75}
-                                  className="h-3.5 w-3.5 text-emerald-600"
-                                />
-                              ) : isDeliveredToRecipient ? (
-                                <CheckCheck
-                                  strokeWidth={2.75}
-                                  className="h-3.5 w-3.5 text-blue-600"
-                                />
-                              ) : (
-                                <Check
-                                  strokeWidth={2.75}
-                                  className="h-3.5 w-3.5 text-slate-600"
-                                />
-                              )}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      {isMine && (
-                        <UserAvatar
-                          name={senderName}
-                          avatarUrl={senderAvatarUrl}
-                          className="h-8 w-8 text-xs"
-                          fallbackClassName="bg-cyan-100 font-semibold text-cyan-800"
-                        />
-                      )}
-                    </div>
-                  </Fragment>
-                );
-              })}
-
-              <div ref={messagesEndRef} />
-            </div>
-          )}
-        </div>
-
-        {showFloatingDate && floatingDate && (
-          <div className="pointer-events-none absolute left-0 right-0 top-2 z-30 flex justify-center">
-            <span className="rounded-full border border-slate-200 bg-white/95 px-3 py-1 text-[11px] font-semibold text-slate-600 shadow-sm backdrop-blur">
-              {floatingDate}
-            </span>
-          </div>
-        )}
-      </div>
-
-      <form
-        onSubmit={handleSendMessage}
-        className="shrink-0 border-t border-slate-200 bg-white p-3 sm:p-4"
-      >
-        {replyingToMessage && (
-          <div className="mb-3 flex items-center justify-between rounded-xl border-l-4 border-cyan-600 bg-cyan-50 px-4 py-2.5">
-            <div className="min-w-0">
-              <p className="text-xs font-semibold text-cyan-700">
-                Replying to{" "}
-                {replyingToMessage.sender._id === user._id
-                  ? "yourself"
-                  : (updatedProfiles.get(replyingToMessage.sender._id)?.name ??
-                    replyingToMessage.sender.name)}
-              </p>
-
-              <p className="mt-0.5 truncate text-xs text-slate-500">
-                {replyingToMessage.content}
-              </p>
-            </div>
-
-            <button
-              type="button"
-              onClick={handleCancelReplying}
-              aria-label="Cancel reply"
-              title="Cancel reply"
-              className="ml-3 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-slate-500 transition hover:bg-cyan-100 hover:text-slate-800"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-        )}
-
-        {editingMessageId && (
-          <div className="mb-3 flex items-center justify-between rounded-xl border-l-4 border-cyan-600 bg-cyan-50 px-4 py-2.5">
-            <div className="min-w-0">
-              <p className="text-xs font-semibold text-cyan-700">
-                Editing message
-              </p>
-
-              <p className="truncate text-xs text-slate-500">
-                Update the message and press the check button.
-              </p>
-            </div>
-
-            <button
-              type="button"
-              onClick={handleCancelEditing}
-              disabled={isEditingMessage}
-              aria-label="Cancel editing"
-              title="Cancel editing"
-              className="ml-3 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-slate-500 transition hover:bg-cyan-100 hover:text-slate-800 disabled:opacity-50"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-        )}
-
-        <div className="flex items-center gap-3">
-          <input
-            ref={messageInputRef}
-            type="text"
-            value={messageText}
-            onChange={handleMessageChange}
-            maxLength={5000}
-            placeholder={
-              editingMessageId
-                ? "Edit your message"
-                : replyingToMessage
-                  ? "Write a reply"
-                  : "Type a message"
-            }
-            aria-label={editingMessageId ? "Edit message" : "Message"}
-            className="min-w-0 flex-1 rounded-full border border-slate-300 bg-slate-100 px-5 py-3 text-sm text-slate-900 outline-none transition focus:border-cyan-500 focus:bg-white focus:ring-4 focus:ring-cyan-100"
-          />
-
-          <button
-            type="submit"
-            disabled={!messageText.trim() || isSending || isEditingMessage}
-            aria-label={
-              editingMessageId ? "Save edited message" : "Send message"
-            }
-            title={editingMessageId ? "Save changes" : "Send message"}
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-cyan-600 text-white transition hover:bg-cyan-700 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {isSending || isEditingMessage ? (
-              <LoaderCircle className="h-5 w-5 animate-spin" />
-            ) : editingMessageId ? (
-              <Check className="h-5 w-5" />
-            ) : (
-              <SendHorizontal className="h-5 w-5" />
-            )}
-          </button>
-
-          {currentUserId && (
-            <ForwardMessageModal
-              message={forwardingMessage}
-              sourceConversationId={conversationId}
-              currentUserId={currentUserId}
-              onClose={() => setForwardingMessage(null)}
-              onForwarded={handleMessagesForwarded}
-            />
-          )}
-        </div>
-      </form>
-
-      <button
-        type="button"
-        onClick={closeMessageSearch}
-        tabIndex={isMessageSearchOpen ? 0 : -1}
-        aria-label="Close message search"
-        className={[
-          "absolute inset-0 z-30 bg-slate-950/25 backdrop-blur-[1px] transition-opacity duration-300",
-          isMessageSearchOpen
-            ? "opacity-100"
-            : "pointer-events-none opacity-0",
-        ].join(" ")}
+      <ConversationHeader
+        displayName={displayName}
+        avatarUrl={
+          conversation.type === "direct"
+            ? (updatedOtherProfile?.avatarUrl ??
+              otherParticipant?.avatarUrl ??
+              null)
+            : null
+        }
+        canViewProfile={Boolean(otherParticipantId)}
+        isOtherUserOnline={isOtherUserOnline}
+        isOtherUserTyping={isOtherUserTyping}
+        statusText={
+          isDirectConversation
+            ? formatLastSeen(otherUserLastSeenAt)
+            : "Group conversation"
+        }
+        isMessageSearchOpen={isMessageSearchOpen}
+        onViewProfile={() => {
+          if (otherParticipantId) {
+            router.push(`/users/${otherParticipantId}`);
+          }
+        }}
+        onOpenSearch={openMessageSearch}
       />
 
-      <aside
-        aria-label="Message search"
-        aria-hidden={!isMessageSearchOpen}
-        inert={!isMessageSearchOpen}
-        className={[
-          "absolute inset-y-0 right-0 z-40 flex w-full max-w-md flex-col border-l border-slate-200 bg-white shadow-2xl transition-transform duration-300 ease-out",
-          isMessageSearchOpen ? "translate-x-0" : "translate-x-full",
-        ].join(" ")}
-      >
-        <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
-          <div>
-            <p className="font-semibold text-slate-950">Search messages</p>
-            <p className="mt-0.5 text-xs text-slate-500">
-              Results update as you type
-            </p>
-          </div>
+      <ConversationMessageList
+        messages={messages}
+        currentUser={user}
+        otherParticipantId={otherParticipantId}
+        updatedProfiles={updatedProfiles}
+        displayName={displayName}
+        hasMore={hasMore}
+        isLoadingOlder={isLoadingOlder}
+        showFloatingDate={showFloatingDate}
+        floatingDate={floatingDate}
+        showScrollToBottom={showScrollToBottom}
+        highlightedMessageId={highlightedMessageId}
+        openMessageMenuId={openMessageMenuId}
+        reactionPickerMessageId={reactionPickerMessageId}
+        deletingMessageId={deletingMessageId}
+        reactingMessageId={reactingMessageId}
+        messagesContainerRef={messagesContainerRef}
+        messagesEndRef={messagesEndRef}
+        onScroll={handleMessagesScroll}
+        onScrollToBottom={handleScrollToBottom}
+        onLoadOlder={() => {
+          void handleLoadOlder();
+        }}
+        onToggleMenu={(messageId) => {
+          setReactionPickerMessageId(null);
+          setOpenMessageMenuId((current) =>
+            current === messageId ? null : messageId,
+          );
+        }}
+        onToggleReactionPicker={(messageId) => {
+          setOpenMessageMenuId(null);
+          setReactionPickerMessageId((current) =>
+            current === messageId ? null : messageId,
+          );
+        }}
+        onCloseMenu={() => setOpenMessageMenuId(null)}
+        onCloseReactionPicker={() => setReactionPickerMessageId(null)}
+        onReply={handleStartReplying}
+        onForward={handleStartForwarding}
+        onEdit={handleStartEditing}
+        onDelete={(messageId, scope) => {
+          void handleDeleteMessage(messageId, scope);
+        }}
+        onReaction={(message, emoji) => {
+          void handleMessageReaction(message, emoji);
+        }}
+      />
+      <ConversationComposer
+        conversationId={conversationId}
+        messageInputRef={messageInputRef}
+        messageText={messageText}
+        replyingToMessage={replyingToMessage}
+        replySenderName={
+          replyingToMessage?.sender._id === user._id
+            ? "yourself"
+            : (replyingToMessage
+              ? (updatedProfiles.get(replyingToMessage.sender._id)?.name ??
+                replyingToMessage.sender.name)
+              : "")
+        }
+        editingMessageId={editingMessageId}
+        isSending={isSending}
+        isEditingMessage={isEditingMessage}
+        onSubmit={handleSendMessage}
+        onMessageChange={handleMessageChange}
+        onCancelReplying={handleCancelReplying}
+        onCancelEditing={handleCancelEditing}
+        onAttachmentSent={handleAttachmentSent}
+      />
 
-          <button
-            type="button"
-            onClick={closeMessageSearch}
-            aria-label="Close message search"
-            title="Close"
-            className="rounded-full p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
+      {currentUserId && (
+        <ForwardMessageModal
+          message={forwardingMessage}
+          sourceConversationId={conversationId}
+          currentUserId={currentUserId}
+          onClose={() => setForwardingMessage(null)}
+          onForwarded={handleMessagesForwarded}
+        />
+      )}
 
-        <div className="border-b border-slate-200 p-5">
-          <label className="sr-only" htmlFor="message-search">
-            Search this conversation
-          </label>
-
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-
-            <input
-              ref={messageSearchInputRef}
-              id="message-search"
-              type="search"
-              value={messageSearchQuery}
-              onChange={(event) => {
-                setMessageSearchQuery(event.target.value);
-                setMessageSearchError(null);
-                setMessageSearchResults([]);
-                setHasMessageSearchRun(false);
-              }}
-              placeholder="Type to search this chat"
-              className="w-full rounded-xl border border-slate-300 bg-white py-3 pl-10 pr-10 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-cyan-500 focus:ring-4 focus:ring-cyan-100"
-            />
-
-            {isSearchingMessages && (
-              <LoaderCircle className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-cyan-600" />
-            )}
-          </div>
-        </div>
-
-        <div className="min-h-0 flex-1 overflow-y-auto p-3">
-          {messageSearchError && (
-            <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">
-              {messageSearchError}
-            </p>
-          )}
-
-          {!messageSearchQuery.trim() && !messageSearchError && (
-            <div className="flex h-full flex-col items-center justify-center px-8 text-center">
-              <Search className="h-9 w-9 text-slate-300" />
-              <p className="mt-3 text-sm font-medium text-slate-700">
-                Find a message
-              </p>
-              <p className="mt-1 text-sm text-slate-500">
-                Start typing to search this conversation.
-              </p>
-            </div>
-          )}
-
-          {!isSearchingMessages &&
-            !messageSearchError &&
-            hasMessageSearchRun &&
-            messageSearchQuery.trim() &&
-            messageSearchResults.length === 0 && (
-              <div className="flex h-full flex-col items-center justify-center px-8 text-center">
-                <p className="text-sm font-medium text-slate-700">
-                  No messages found
-                </p>
-                <p className="mt-1 text-sm text-slate-500">
-                  Try another word or phrase.
-                </p>
-              </div>
-            )}
-
-          {messageSearchResults.length > 0 && (
-            <div className="space-y-1">
-              <p className="px-2 pb-1 text-xs font-medium text-slate-500">
-                {messageSearchResults.length} result
-                {messageSearchResults.length === 1 ? "" : "s"}
-              </p>
-
-              {messageSearchResults.map((message) => {
-                const isOwnMessage = message.sender._id === user._id;
-                const resultSenderName = isOwnMessage
-                  ? "You"
-                  : (message.sender.name ?? "Unknown user");
-
-                return (
-                  <button
-                    key={message._id}
-                    type="button"
-                    disabled={isSearchingMessages}
-                    onClick={() => {
-                      void handleMessageSearchResult(message);
-                    }}
-                    className="flex w-full flex-col gap-1 rounded-xl px-3 py-3 text-left transition hover:bg-slate-100 disabled:cursor-wait"
-                  >
-                    <span className="text-xs font-semibold text-slate-700">
-                      {resultSenderName}
-                      <span className="ml-2 font-normal text-slate-400">
-                        {formatMessageTime(message.createdAt)}
-                      </span>
-                    </span>
-
-                    <span className="line-clamp-2 text-sm leading-5 text-slate-600">
-                      {message.content}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </aside>
+      <MessageSearchDrawer
+        isOpen={isMessageSearchOpen}
+        inputRef={messageSearchInputRef}
+        query={messageSearchQuery}
+        results={messageSearchResults}
+        isSearching={isSearchingMessages}
+        hasSearchRun={hasMessageSearchRun}
+        errorMessage={messageSearchError}
+        currentUserId={user._id}
+        onClose={closeMessageSearch}
+        onQueryChange={(event) => {
+          setMessageSearchQuery(event.target.value);
+          setMessageSearchError(null);
+          setMessageSearchResults([]);
+          setHasMessageSearchRun(false);
+        }}
+        onSelectResult={(message) => {
+          void handleMessageSearchResult(message);
+        }}
+      />
     </section>
   );
 }

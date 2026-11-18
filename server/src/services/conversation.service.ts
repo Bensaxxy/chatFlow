@@ -96,7 +96,8 @@ export const createDirectConversation = async (
 };
 
 const lastMessageFields =
-  "content type sender createdAt editedAt deletedForEveryoneAt";
+  "content type attachment sender createdAt editedAt deletedFor " +
+  "deletedForEveryoneAt isForwarded";
 
 export const getUserConversations = async (currentUserId: string) => {
   const conversations = await Conversation.find({

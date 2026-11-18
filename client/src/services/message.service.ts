@@ -1,3 +1,5 @@
+import type { AxiosProgressEvent } from "axios";
+
 import { apiClient } from "@/lib/api/client";
 import type { ApiSuccessResponse } from "@/types/api";
 import type {
@@ -30,6 +32,10 @@ type MessageResponse = ApiSuccessResponse<MessageData>;
 type DeleteMessageResponse = ApiSuccessResponse<MessageDeletedPayload>;
 
 type ForwardMessageResponse = ApiSuccessResponse<ForwardMessageData>;
+
+export type AttachmentUploadProgressHandler = (
+  progressPercentage: number,
+) => void;
 
 export const getConversationMessages = async (
   conversationId: string,
@@ -92,6 +98,52 @@ export const sendConversationMessage = async (
     {
       content,
       replyToMessageId: replyToMessageId ?? null,
+    },
+  );
+
+  return data.data.message;
+};
+
+export const sendConversationAttachment = async (
+  conversationId: string,
+  file: File,
+  content = "",
+  replyToMessageId?: string | null,
+  onUploadProgress?: AttachmentUploadProgressHandler,
+): Promise<ChatMessage> => {
+  const formData = new FormData();
+
+  formData.append("attachment", file);
+  formData.append("content", content);
+
+  if (replyToMessageId) {
+    formData.append("replyToMessageId", replyToMessageId);
+  }
+
+  const { data } = await apiClient.post<MessageResponse>(
+    `/conversations/${conversationId}/messages/attachment`,
+    formData,
+    {
+      // Attachments are allowed to be 15 MB and can take longer than ordinary
+      // API calls on slower connections or while Cloudinary processes a file.
+      timeout: 120_000,
+      onUploadProgress: (event: AxiosProgressEvent) => {
+        if (!onUploadProgress) {
+          return;
+        }
+
+        if (!event.total) {
+          onUploadProgress(0);
+          return;
+        }
+
+        const percentage = Math.min(
+          100,
+          Math.round((event.loaded / event.total) * 100),
+        );
+
+        onUploadProgress(percentage);
+      },
     },
   );
 
