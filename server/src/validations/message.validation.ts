@@ -49,6 +49,13 @@ export const listMessagesQuerySchema = z.object({
   cursor: objectIdSchema("Message cursor is invalid").optional(),
 
   limit: z.coerce.number().int().min(1).max(50).default(30),
+
+  q: z
+    .string()
+    .trim()
+    .min(1, "Search query cannot be empty")
+    .max(100, "Search query cannot exceed 100 characters")
+    .optional(),
 });
 
 export const messageReactionEmojis = [

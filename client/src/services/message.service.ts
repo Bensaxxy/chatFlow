@@ -10,6 +10,12 @@ import type {
 
 type MessagesResponse = ApiSuccessResponse<MessagesPage>;
 
+interface MessageContextData {
+  messages: ChatMessage[];
+}
+
+type MessageContextResponse = ApiSuccessResponse<MessageContextData>;
+
 interface MessageData {
   message: ChatMessage;
 }
@@ -44,6 +50,36 @@ export const getConversationMessages = async (
   );
 
   return data.data;
+};
+
+export const searchConversationMessages = async (
+  conversationId: string,
+  query: string,
+  signal?: AbortSignal,
+): Promise<ChatMessage[]> => {
+  const { data } = await apiClient.get<MessagesResponse>(
+    `/conversations/${conversationId}/messages`,
+    {
+      params: {
+        limit: 50,
+        q: query,
+      },
+      signal,
+    },
+  );
+
+  return data.data.messages;
+};
+
+export const getConversationMessageContext = async (
+  conversationId: string,
+  messageId: string,
+): Promise<ChatMessage[]> => {
+  const { data } = await apiClient.get<MessageContextResponse>(
+    `/conversations/${conversationId}/messages/${messageId}/context`,
+  );
+
+  return data.data.messages;
 };
 
 export const sendConversationMessage = async (

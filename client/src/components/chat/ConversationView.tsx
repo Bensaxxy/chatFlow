@@ -11,6 +11,7 @@ import {
   MoreVertical,
   Pencil,
   Reply,
+  Search,
   SendHorizontal,
   SmilePlus,
   Trash2,
@@ -37,9 +38,11 @@ import { getConversationById } from "@/services/conversation.service";
 import {
   deleteConversationMessage,
   editConversationMessage,
+  getConversationMessageContext,
   getConversationMessages,
   markConversationRead,
   sendConversationMessage,
+  searchConversationMessages,
   updateConversationMessageReaction,
 } from "@/services/message.service";
 import type {
@@ -380,11 +383,33 @@ export default function ConversationView({
 
   const [floatingDate, setFloatingDate] = useState("");
 
+  const [isMessageSearchOpen, setIsMessageSearchOpen] = useState(false);
+
+  const [messageSearchQuery, setMessageSearchQuery] = useState("");
+
+  const [messageSearchResults, setMessageSearchResults] = useState<
+    ChatMessage[]
+  >([]);
+
+  const [isSearchingMessages, setIsSearchingMessages] = useState(false);
+
+  const [hasMessageSearchRun, setHasMessageSearchRun] = useState(false);
+
+  const [messageSearchError, setMessageSearchError] = useState<string | null>(
+    null,
+  );
+
+  const [highlightedMessageId, setHighlightedMessageId] = useState<
+    string | null
+  >(null);
+
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
 
   const messageInputRef = useRef<HTMLInputElement | null>(null);
+
+  const messageSearchInputRef = useRef<HTMLInputElement | null>(null);
 
   const typingTimeoutRef = useRef<number | null>(null);
 
@@ -393,6 +418,8 @@ export default function ConversationView({
   const floatingDateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
+
+  const messageSearchResetTimeoutRef = useRef<number | null>(null);
 
   const editingMessageIdRef = useRef<string | null>(null);
 
@@ -700,6 +727,98 @@ export default function ConversationView({
     }
   }, [isLoading, messages.length]);
 
+  useEffect(() => {
+    if (!highlightedMessageId) {
+      return;
+    }
+
+    document
+      .getElementById(`message-${highlightedMessageId}`)
+      ?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+
+    const timeoutId = window.setTimeout(() => {
+      setHighlightedMessageId(null);
+    }, 2200);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [highlightedMessageId, messages]);
+
+  useEffect(() => {
+    if (!isMessageSearchOpen) {
+      return;
+    }
+
+    const frameId = window.requestAnimationFrame(() => {
+      messageSearchInputRef.current?.focus();
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frameId);
+    };
+  }, [isMessageSearchOpen]);
+
+  useEffect(() => {
+    if (!isMessageSearchOpen) {
+      return;
+    }
+
+    const query = messageSearchQuery.trim();
+
+    if (!query) {
+      return;
+    }
+
+    const controller = new AbortController();
+
+    const timeoutId = window.setTimeout(() => {
+      setIsSearchingMessages(true);
+      setMessageSearchError(null);
+
+      void searchConversationMessages(conversationId, query, controller.signal)
+        .then((results) => {
+          if (controller.signal.aborted) {
+            return;
+          }
+
+          setMessageSearchResults(results.map(normalizeMessage));
+          setHasMessageSearchRun(true);
+        })
+        .catch((error: unknown) => {
+          if (controller.signal.aborted) {
+            return;
+          }
+
+          setMessageSearchResults([]);
+          setMessageSearchError(getApiErrorMessage(error));
+          setHasMessageSearchRun(false);
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) {
+            setIsSearchingMessages(false);
+          }
+        });
+    }, 250);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+      controller.abort();
+    };
+  }, [conversationId, isMessageSearchOpen, messageSearchQuery]);
+
+  useEffect(
+    () => () => {
+      if (messageSearchResetTimeoutRef.current !== null) {
+        window.clearTimeout(messageSearchResetTimeoutRef.current);
+      }
+    },
+    [],
+  );
+
   const handleLoadOlder = async (): Promise<void> => {
     if (!nextCursor || isLoadingOlder) {
       return;
@@ -722,6 +841,76 @@ export default function ConversationView({
       toast.error(getApiErrorMessage(error));
     } finally {
       setIsLoadingOlder(false);
+    }
+  };
+
+  const closeMessageSearch = (): void => {
+    setIsMessageSearchOpen(false);
+    if (messageSearchResetTimeoutRef.current !== null) {
+      window.clearTimeout(messageSearchResetTimeoutRef.current);
+    }
+
+    messageSearchResetTimeoutRef.current = window.setTimeout(() => {
+      setMessageSearchQuery("");
+      setMessageSearchResults([]);
+      setMessageSearchError(null);
+      setHasMessageSearchRun(false);
+      messageSearchResetTimeoutRef.current = null;
+    }, 250);
+  };
+
+  const openMessageSearch = (): void => {
+    if (messageSearchResetTimeoutRef.current !== null) {
+      window.clearTimeout(messageSearchResetTimeoutRef.current);
+      messageSearchResetTimeoutRef.current = null;
+    }
+
+    setIsMessageSearchOpen(true);
+  };
+
+  const handleMessageSearchResult = async (
+    message: ChatMessage,
+  ): Promise<void> => {
+    if (isSearchingMessages) {
+      return;
+    }
+
+    try {
+      setIsSearchingMessages(true);
+      setMessageSearchError(null);
+
+      const context = await getConversationMessageContext(
+        conversationId,
+        message._id,
+      );
+
+      setMessages((currentMessages) => {
+        const messagesById = new Map(
+          currentMessages.map((currentMessage) => [
+            currentMessage._id,
+            currentMessage,
+          ]),
+        );
+
+        for (const contextMessage of context) {
+          const normalizedMessage = normalizeMessage(contextMessage);
+
+          messagesById.set(normalizedMessage._id, normalizedMessage);
+        }
+
+        return [...messagesById.values()].sort(
+          (firstMessage, secondMessage) =>
+            new Date(firstMessage.createdAt).getTime() -
+            new Date(secondMessage.createdAt).getTime(),
+        );
+      });
+
+      setHighlightedMessageId(message._id);
+      closeMessageSearch();
+    } catch (error) {
+      setMessageSearchError(getApiErrorMessage(error));
+    } finally {
+      setIsSearchingMessages(false);
     }
   };
 
@@ -1071,7 +1260,7 @@ export default function ConversationView({
     : null;
 
   return (
-    <section className="flex h-full w-full flex-col bg-white">
+    <section className="relative flex h-full w-full flex-col overflow-hidden bg-white">
       <header className="flex h-20 shrink-0 items-center gap-3 border-b border-slate-200 px-4 sm:px-6">
         <Link
           href="/chats"
@@ -1115,7 +1304,7 @@ export default function ConversationView({
           )}
         </button>
 
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <h1 className="truncate font-semibold text-slate-950">
             {displayName}
           </h1>
@@ -1144,6 +1333,17 @@ export default function ConversationView({
             </p>
           )}
         </div>
+
+        <button
+          type="button"
+          onClick={openMessageSearch}
+          aria-label="Search messages"
+          aria-expanded={isMessageSearchOpen}
+          title="Search messages"
+          className="rounded-full p-2 text-slate-600 transition hover:bg-slate-100 hover:text-slate-950"
+        >
+          <Search className="h-5 w-5" />
+        </button>
       </header>
 
       <div className="relative min-h-0 flex-1">
@@ -1281,8 +1481,9 @@ export default function ConversationView({
                     )}
 
                     <div
+                      id={`message-${message._id}`}
                       data-message-date={message.createdAt}
-                      className={`flex w-full items-end gap-2 ${
+                      className={`scroll-mt-6 flex w-full items-end gap-2 ${
                         isMine ? "justify-end" : "justify-start"
                       }`}
                     >
@@ -1296,10 +1497,14 @@ export default function ConversationView({
                       )}
 
                       <div
-                        className={`relative min-w-0 max-w-[75%] rounded-2xl px-3 py-2 shadow-sm sm:max-w-[60%] lg:max-w-[55%] ${
+                        className={`relative min-w-0 max-w-[75%] rounded-2xl px-3 py-2 shadow-sm transition sm:max-w-[60%] lg:max-w-[55%] ${
                           isMine
                             ? "rounded-br-md bg-cyan-600 text-white"
                             : "rounded-bl-md border border-slate-200 bg-white text-slate-900"
+                        } ${
+                          highlightedMessageId === message._id
+                            ? "ring-2 ring-amber-400 ring-offset-2"
+                            : ""
                         }`}
                       >
                         <button
@@ -1744,6 +1949,151 @@ export default function ConversationView({
           )}
         </div>
       </form>
+
+      <button
+        type="button"
+        onClick={closeMessageSearch}
+        tabIndex={isMessageSearchOpen ? 0 : -1}
+        aria-label="Close message search"
+        className={[
+          "absolute inset-0 z-30 bg-slate-950/25 backdrop-blur-[1px] transition-opacity duration-300",
+          isMessageSearchOpen
+            ? "opacity-100"
+            : "pointer-events-none opacity-0",
+        ].join(" ")}
+      />
+
+      <aside
+        aria-label="Message search"
+        aria-hidden={!isMessageSearchOpen}
+        inert={!isMessageSearchOpen}
+        className={[
+          "absolute inset-y-0 right-0 z-40 flex w-full max-w-md flex-col border-l border-slate-200 bg-white shadow-2xl transition-transform duration-300 ease-out",
+          isMessageSearchOpen ? "translate-x-0" : "translate-x-full",
+        ].join(" ")}
+      >
+        <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+          <div>
+            <p className="font-semibold text-slate-950">Search messages</p>
+            <p className="mt-0.5 text-xs text-slate-500">
+              Results update as you type
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={closeMessageSearch}
+            aria-label="Close message search"
+            title="Close"
+            className="rounded-full p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="border-b border-slate-200 p-5">
+          <label className="sr-only" htmlFor="message-search">
+            Search this conversation
+          </label>
+
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+
+            <input
+              ref={messageSearchInputRef}
+              id="message-search"
+              type="search"
+              value={messageSearchQuery}
+              onChange={(event) => {
+                setMessageSearchQuery(event.target.value);
+                setMessageSearchError(null);
+                setMessageSearchResults([]);
+                setHasMessageSearchRun(false);
+              }}
+              placeholder="Type to search this chat"
+              className="w-full rounded-xl border border-slate-300 bg-white py-3 pl-10 pr-10 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-cyan-500 focus:ring-4 focus:ring-cyan-100"
+            />
+
+            {isSearchingMessages && (
+              <LoaderCircle className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-cyan-600" />
+            )}
+          </div>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto p-3">
+          {messageSearchError && (
+            <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">
+              {messageSearchError}
+            </p>
+          )}
+
+          {!messageSearchQuery.trim() && !messageSearchError && (
+            <div className="flex h-full flex-col items-center justify-center px-8 text-center">
+              <Search className="h-9 w-9 text-slate-300" />
+              <p className="mt-3 text-sm font-medium text-slate-700">
+                Find a message
+              </p>
+              <p className="mt-1 text-sm text-slate-500">
+                Start typing to search this conversation.
+              </p>
+            </div>
+          )}
+
+          {!isSearchingMessages &&
+            !messageSearchError &&
+            hasMessageSearchRun &&
+            messageSearchQuery.trim() &&
+            messageSearchResults.length === 0 && (
+              <div className="flex h-full flex-col items-center justify-center px-8 text-center">
+                <p className="text-sm font-medium text-slate-700">
+                  No messages found
+                </p>
+                <p className="mt-1 text-sm text-slate-500">
+                  Try another word or phrase.
+                </p>
+              </div>
+            )}
+
+          {messageSearchResults.length > 0 && (
+            <div className="space-y-1">
+              <p className="px-2 pb-1 text-xs font-medium text-slate-500">
+                {messageSearchResults.length} result
+                {messageSearchResults.length === 1 ? "" : "s"}
+              </p>
+
+              {messageSearchResults.map((message) => {
+                const isOwnMessage = message.sender._id === user._id;
+                const resultSenderName = isOwnMessage
+                  ? "You"
+                  : (message.sender.name ?? "Unknown user");
+
+                return (
+                  <button
+                    key={message._id}
+                    type="button"
+                    disabled={isSearchingMessages}
+                    onClick={() => {
+                      void handleMessageSearchResult(message);
+                    }}
+                    className="flex w-full flex-col gap-1 rounded-xl px-3 py-3 text-left transition hover:bg-slate-100 disabled:cursor-wait"
+                  >
+                    <span className="text-xs font-semibold text-slate-700">
+                      {resultSenderName}
+                      <span className="ml-2 font-normal text-slate-400">
+                        {formatMessageTime(message.createdAt)}
+                      </span>
+                    </span>
+
+                    <span className="line-clamp-2 text-sm leading-5 text-slate-600">
+                      {message.content}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </aside>
     </section>
   );
 }

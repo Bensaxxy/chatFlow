@@ -33,6 +33,9 @@ const messagePopulateOptions = [
   },
 ];
 
+const escapeRegularExpression = (value: string): string =>
+  value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 const verifyConversationMembership = async (
   conversationId: string,
   userId: string,
@@ -263,11 +266,22 @@ export const getConversationMessages = async (
       }
     : {};
 
+  const searchFilter = input.q
+    ? {
+        content: {
+          $regex: escapeRegularExpression(input.q),
+          $options: "i",
+        },
+        deletedForEveryoneAt: null,
+      }
+    : {};
+
   const messages = await Message.find({
     conversation: conversationId,
     deletedFor: {
       $ne: currentUserId,
     },
+    ...searchFilter,
     ...cursorFilter,
   })
     .populate(messagePopulateOptions)
@@ -294,6 +308,66 @@ export const getConversationMessages = async (
     messages,
     nextCursor,
     hasMore,
+  };
+};
+
+export const getMessageContext = async (
+  conversationId: string,
+  messageId: string,
+  currentUserId: string,
+) => {
+  await verifyConversationMembership(conversationId, currentUserId);
+
+  const visibleMessageFilter = {
+    conversation: conversationId,
+    deletedFor: {
+      $ne: currentUserId,
+    },
+    deletedForEveryoneAt: null,
+  };
+
+  const targetMessage = await Message.findOne({
+    _id: messageId,
+    ...visibleMessageFilter,
+  })
+    .populate(messagePopulateOptions)
+    .lean();
+
+  if (!targetMessage) {
+    throw new AppError("Message was not found", 404, "MESSAGE_NOT_FOUND");
+  }
+
+  const [messagesBefore, messagesAfter] = await Promise.all([
+    Message.find({
+      ...visibleMessageFilter,
+      _id: {
+        $lt: targetMessage._id,
+      },
+    })
+      .populate(messagePopulateOptions)
+      .sort({
+        _id: -1,
+      })
+      .limit(15)
+      .lean(),
+    Message.find({
+      ...visibleMessageFilter,
+      _id: {
+        $gt: targetMessage._id,
+      },
+    })
+      .populate(messagePopulateOptions)
+      .sort({
+        _id: 1,
+      })
+      .limit(15)
+      .lean(),
+  ]);
+
+  messagesBefore.reverse();
+
+  return {
+    messages: [...messagesBefore, targetMessage, ...messagesAfter],
   };
 };
 

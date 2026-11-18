@@ -45,7 +45,6 @@ export const uploadAvatarToCloudinary = ({
 
         if (!result) {
           reject(new Error("Cloudinary did not return an upload result"));
-
           return;
         }
 
@@ -61,6 +60,74 @@ export const deleteAvatarFromCloudinary = async (
 ): Promise<void> => {
   await cloudinary.uploader.destroy(publicId, {
     resource_type: "image",
+    invalidate: true,
+  });
+};
+
+export type MessageAttachmentResourceType = "image" | "raw";
+
+interface UploadMessageAttachmentOptions {
+  buffer: Buffer;
+  publicId: string;
+  resourceType: MessageAttachmentResourceType;
+}
+
+export const uploadMessageAttachmentToCloudinary = ({
+  buffer,
+  publicId,
+  resourceType,
+}: UploadMessageAttachmentOptions): Promise<UploadApiResponse> =>
+  new Promise((resolve, reject) => {
+    const isImage = resourceType === "image";
+
+    const uploadStream = cloudinary.uploader.upload_stream(
+      {
+        folder: isImage ? "chatflow/message-images" : "chatflow/message-files",
+
+        public_id: publicId,
+
+        resource_type: resourceType,
+
+        type: "upload",
+
+        ...(isImage && {
+          transformation: [
+            {
+              width: 1800,
+              height: 1800,
+              crop: "limit",
+            },
+            {
+              quality: "auto",
+              fetch_format: "auto",
+            },
+          ],
+        }),
+      },
+      (error, result) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+
+        if (!result) {
+          reject(new Error("Cloudinary did not return an upload result"));
+          return;
+        }
+
+        resolve(result);
+      },
+    );
+
+    uploadStream.end(buffer);
+  });
+
+export const deleteMessageAttachmentFromCloudinary = async (
+  publicId: string,
+  resourceType: MessageAttachmentResourceType,
+): Promise<void> => {
+  await cloudinary.uploader.destroy(publicId, {
+    resource_type: resourceType,
     invalidate: true,
   });
 };

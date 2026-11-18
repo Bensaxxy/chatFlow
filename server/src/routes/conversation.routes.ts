@@ -8,6 +8,7 @@ import {
 import {
   createMessage,
   forwardExistingMessage,
+  getMessageContext,
   listMessages,
   markMessagesRead,
   reactToMessage,
@@ -45,6 +46,12 @@ conversationRouter.patch(
 );
 
 conversationRouter.get("/:conversationId/messages", authenticate, listMessages);
+
+conversationRouter.get(
+  "/:conversationId/messages/:messageId/context",
+  authenticate,
+  getMessageContext,
+);
 
 conversationRouter.post(
   "/:conversationId/messages",

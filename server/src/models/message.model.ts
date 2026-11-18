@@ -1,5 +1,56 @@
 import { model, Schema } from "mongoose";
 
+const messageAttachmentSchema = new Schema(
+  {
+    url: {
+      type: String,
+      required: true,
+    },
+
+    publicId: {
+      type: String,
+      required: true,
+    },
+
+    resourceType: {
+      type: String,
+      enum: ["image", "raw"],
+      required: true,
+    },
+
+    fileName: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: 255,
+    },
+
+    mimeType: {
+      type: String,
+      required: true,
+    },
+
+    size: {
+      type: Number,
+      required: true,
+      min: 0,
+    },
+
+    width: {
+      type: Number,
+      default: null,
+    },
+
+    height: {
+      type: Number,
+      default: null,
+    },
+  },
+  {
+    _id: false,
+  },
+);
+
 const messageSchema = new Schema(
   {
     conversation: {
@@ -17,15 +68,24 @@ const messageSchema = new Schema(
 
     type: {
       type: String,
-      enum: ["text"],
+      enum: ["text", "image", "file"],
       default: "text",
     },
 
+    /**
+     * Text messages require content through Zod validation.
+     * Image and file messages may have an empty caption.
+     */
     content: {
       type: String,
-      required: [true, "Message content is required"],
       trim: true,
       maxlength: [5000, "Message cannot exceed 5000 characters"],
+      default: "",
+    },
+
+    attachment: {
+      type: messageAttachmentSchema,
+      default: null,
     },
 
     replyTo: {
@@ -116,6 +176,19 @@ messageSchema.set("toJSON", {
 
     delete safeObject.forwardedFrom;
     delete safeObject.__v;
+
+    const attachment = safeObject.attachment as
+      | Record<string, unknown>
+      | null
+      | undefined;
+
+    /**
+     * The Cloudinary public ID is an internal storage detail.
+     * Clients only need the secure URL and file metadata.
+     */
+    if (attachment) {
+      delete attachment.publicId;
+    }
 
     return safeObject;
   },

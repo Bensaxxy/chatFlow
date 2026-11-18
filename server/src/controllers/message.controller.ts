@@ -5,6 +5,7 @@ import {
   editMessage,
   forwardMessage,
   getConversationMessages,
+  getMessageContext as getMessageContextService,
   markConversationAsRead,
   sendMessage,
   updateMessageReaction,
@@ -90,6 +91,27 @@ export const listMessages: RequestHandler = asyncHandler(
     response.status(200).json({
       success: true,
       message: "Messages retrieved successfully",
+      data: result,
+    });
+  },
+);
+
+export const getMessageContext: RequestHandler = asyncHandler(
+  async (request, response) => {
+    const currentUserId = getAuthenticatedUserId(request.auth?.userId);
+    const { conversationId, messageId } = messageParamsSchema.parse(
+      request.params,
+    );
+
+    const result = await getMessageContextService(
+      conversationId,
+      messageId,
+      currentUserId,
+    );
+
+    response.status(200).json({
+      success: true,
+      message: "Message context retrieved successfully",
       data: result,
     });
   },
