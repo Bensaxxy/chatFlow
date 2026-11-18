@@ -11,6 +11,7 @@ import { clearAuthCookies, setAuthCookies } from "../utils/auth-cookies";
 import {
   createAccessToken,
   createRefreshToken,
+  createSocketToken,
   verifyRefreshToken,
 } from "../utils/auth-tokens";
 import { asyncHandler } from "../utils/async-handler";
@@ -79,6 +80,20 @@ export const me: RequestHandler = asyncHandler(async (request, response) => {
     },
   });
 });
+
+export const socketToken: RequestHandler = asyncHandler(
+  async (request, response) => {
+    const userId = getAuthenticatedUserId(request.auth?.userId);
+
+    response.status(200).json({
+      success: true,
+      message: "Socket token created successfully",
+      data: {
+        token: createSocketToken(userId),
+      },
+    });
+  },
+);
 
 export const refresh: RequestHandler = asyncHandler(
   async (request, response) => {

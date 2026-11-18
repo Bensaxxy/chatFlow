@@ -1,6 +1,8 @@
 import { io, type Socket } from "socket.io-client";
 
+import { apiClient } from "@/lib/api/client";
 import type { ChatMessage, MessageDeletedPayload } from "@/types/message";
+import type { ApiSuccessResponse } from "@/types/api";
 import { UserProfileUpdatedPayload } from "@/types/user";
 
 export interface SocketResult {
@@ -74,9 +76,27 @@ if (!socketUrl) {
   throw new Error("NEXT_PUBLIC_SOCKET_URL is missing from .env.local");
 }
 
+interface SocketTokenData {
+  token: string;
+}
+
+const loadSocketAuthentication = (
+  callback: (auth: Record<string, string>) => void,
+): void => {
+  void apiClient
+    .post<ApiSuccessResponse<SocketTokenData>>("/auth/socket-token")
+    .then(({ data }) => {
+      callback({ token: data.data.token });
+    })
+    .catch(() => {
+      callback({});
+    });
+};
+
 export const chatSocket: ChatSocket = io(socketUrl, {
   autoConnect: false,
   withCredentials: true,
+  auth: loadSocketAuthentication,
   reconnection: true,
   reconnectionAttempts: 10,
   reconnectionDelay: 1000,

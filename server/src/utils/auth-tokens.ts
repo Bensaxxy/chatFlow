@@ -28,6 +28,25 @@ export const createRefreshToken = (userId: string): string => {
   );
 };
 
+/*
+ * Socket.IO connects directly to the API host. On browsers that block
+ * third-party cookies, the browser cannot attach the httpOnly session cookie
+ * to that connection. This brief token is requested through the same-origin
+ * API proxy and is used only during the socket handshake.
+ */
+export const createSocketToken = (userId: string): string => {
+  return jwt.sign(
+    {
+      tokenType: "socket",
+    },
+    env.JWT_ACCESS_SECRET,
+    {
+      subject: userId,
+      expiresIn: 2 * 60,
+    },
+  );
+};
+
 export const verifyAccessToken = (token: string): { userId: string } => {
   const decoded = jwt.verify(token, env.JWT_ACCESS_SECRET);
 
@@ -37,6 +56,22 @@ export const verifyAccessToken = (token: string): { userId: string } => {
     typeof decoded.sub !== "string"
   ) {
     throw new Error("Invalid access token payload");
+  }
+
+  return {
+    userId: decoded.sub,
+  };
+};
+
+export const verifySocketToken = (token: string): { userId: string } => {
+  const decoded = jwt.verify(token, env.JWT_ACCESS_SECRET);
+
+  if (
+    typeof decoded === "string" ||
+    decoded.tokenType !== "socket" ||
+    typeof decoded.sub !== "string"
+  ) {
+    throw new Error("Invalid socket token payload");
   }
 
   return {

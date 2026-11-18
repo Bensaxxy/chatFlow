@@ -5,7 +5,7 @@ import { Server } from "socket.io";
 
 import { env } from "../config/env";
 import { Conversation } from "../models/conversation.model";
-import { verifyAccessToken } from "../utils/auth-tokens";
+import { verifyAccessToken, verifySocketToken } from "../utils/auth-tokens";
 import { User } from "../models/user.model";
 
 interface SocketResult {
@@ -130,6 +130,16 @@ export const initializeSocketServer = (
 
   io.use((socket, next) => {
     try {
+      const socketToken = socket.handshake.auth.token;
+
+      if (typeof socketToken === "string" && socketToken) {
+        const payload = verifySocketToken(socketToken);
+
+        socket.data.userId = payload.userId;
+        next();
+        return;
+      }
+
       const rawCookie = socket.handshake.headers.cookie;
 
       if (!rawCookie) {

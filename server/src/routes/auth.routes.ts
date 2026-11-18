@@ -7,6 +7,7 @@ import {
   me,
   refresh,
   register,
+  socketToken,
 } from "../controllers/auth.controller";
 import { authenticate } from "../middleware/auth.middleware";
 import { validateBody } from "../middleware/validate.middleware";
@@ -27,6 +28,8 @@ authRouter.post("/refresh", refresh);
 authRouter.post("/logout", logout);
 
 authRouter.get("/me", authenticate, me);
+
+authRouter.post("/socket-token", authenticate, socketToken);
 
 authRouter.patch(
   "/change-password",

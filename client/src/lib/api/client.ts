@@ -1,13 +1,12 @@
 import axios, { type InternalAxiosRequestConfig } from "axios";
 
-const apiUrl = process.env.NEXT_PUBLIC_API_URL;
-
-if (!apiUrl) {
-  throw new Error("NEXT_PUBLIC_API_URL is missing from .env.local");
-}
-
 export const apiClient = axios.create({
-  baseURL: apiUrl,
+  /*
+   * Keep authentication requests on the ChatFlow site's own origin. The route
+   * handler forwards requests to the API, letting mobile browsers retain the
+   * httpOnly session cookies as first-party cookies.
+   */
+  baseURL: "/api",
   withCredentials: true,
   timeout: 15_000,
 
