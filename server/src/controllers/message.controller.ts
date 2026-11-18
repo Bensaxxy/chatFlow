@@ -3,6 +3,7 @@ import type { RequestHandler } from "express";
 import {
   deleteMessage,
   editMessage,
+  forwardMessage,
   getConversationMessages,
   markConversationAsRead,
   sendMessage,
@@ -11,24 +12,27 @@ import {
 import { asyncHandler } from "../utils/async-handler";
 import {
   conversationParamsSchema,
-  EditMessageInput,
   listMessagesQuerySchema,
   messageParamsSchema,
-  UpdateMessageReactionInput,
   type DeleteMessageInput,
+  type EditMessageInput,
+  type ForwardMessageInput,
   type SendMessageInput,
+  type UpdateMessageReactionInput,
 } from "../validations/message.validation";
+
+const getAuthenticatedUserId = (userId?: string): string => {
+  if (!userId) {
+    throw new Error("Authenticated request is missing its user ID");
+  }
+
+  return userId;
+};
 
 export const createMessage: RequestHandler = asyncHandler(
   async (request, response) => {
-    const currentUserId = request.auth?.userId;
-
-    if (!currentUserId) {
-      throw new Error("Authenticated request is missing its user ID");
-    }
-
+    const currentUserId = getAuthenticatedUserId(request.auth?.userId);
     const { conversationId } = conversationParamsSchema.parse(request.params);
-
     const input = request.body as SendMessageInput;
 
     const message = await sendMessage(conversationId, currentUserId, input);
@@ -43,16 +47,38 @@ export const createMessage: RequestHandler = asyncHandler(
   },
 );
 
+export const forwardExistingMessage: RequestHandler = asyncHandler(
+  async (request, response) => {
+    const currentUserId = getAuthenticatedUserId(request.auth?.userId);
+
+    const { conversationId, messageId } = messageParamsSchema.parse(
+      request.params,
+    );
+
+    const input = request.body as ForwardMessageInput;
+
+    const result = await forwardMessage(
+      conversationId,
+      messageId,
+      currentUserId,
+      input,
+    );
+
+    response.status(201).json({
+      success: true,
+      message:
+        result.forwardedCount === 1
+          ? "Message forwarded successfully"
+          : `Message forwarded to ${result.forwardedCount} conversations`,
+      data: result,
+    });
+  },
+);
+
 export const listMessages: RequestHandler = asyncHandler(
   async (request, response) => {
-    const currentUserId = request.auth?.userId;
-
-    if (!currentUserId) {
-      throw new Error("Authenticated request is missing its user ID");
-    }
-
+    const currentUserId = getAuthenticatedUserId(request.auth?.userId);
     const { conversationId } = conversationParamsSchema.parse(request.params);
-
     const input = listMessagesQuerySchema.parse(request.query);
 
     const result = await getConversationMessages(
@@ -71,12 +97,7 @@ export const listMessages: RequestHandler = asyncHandler(
 
 export const markMessagesRead: RequestHandler = asyncHandler(
   async (request, response) => {
-    const currentUserId = request.auth?.userId;
-
-    if (!currentUserId) {
-      throw new Error("Authenticated request is missing its user ID");
-    }
-
+    const currentUserId = getAuthenticatedUserId(request.auth?.userId);
     const { conversationId } = conversationParamsSchema.parse(request.params);
 
     const result = await markConversationAsRead(conversationId, currentUserId);
@@ -91,11 +112,7 @@ export const markMessagesRead: RequestHandler = asyncHandler(
 
 export const removeMessage: RequestHandler = asyncHandler(
   async (request, response) => {
-    const currentUserId = request.auth?.userId;
-
-    if (!currentUserId) {
-      throw new Error("Authenticated request is missing its user ID");
-    }
+    const currentUserId = getAuthenticatedUserId(request.auth?.userId);
 
     const { conversationId, messageId } = messageParamsSchema.parse(
       request.params,
@@ -123,11 +140,7 @@ export const removeMessage: RequestHandler = asyncHandler(
 
 export const updateMessage: RequestHandler = asyncHandler(
   async (request, response) => {
-    const currentUserId = request.auth?.userId;
-
-    if (!currentUserId) {
-      throw new Error("Authenticated request is missing its user ID");
-    }
+    const currentUserId = getAuthenticatedUserId(request.auth?.userId);
 
     const { conversationId, messageId } = messageParamsSchema.parse(
       request.params,
@@ -154,11 +167,7 @@ export const updateMessage: RequestHandler = asyncHandler(
 
 export const reactToMessage: RequestHandler = asyncHandler(
   async (request, response) => {
-    const currentUserId = request.auth?.userId;
-
-    if (!currentUserId) {
-      throw new Error("Authenticated request is missing its user ID");
-    }
+    const currentUserId = getAuthenticatedUserId(request.auth?.userId);
 
     const { conversationId, messageId } = messageParamsSchema.parse(
       request.params,
@@ -175,11 +184,9 @@ export const reactToMessage: RequestHandler = asyncHandler(
 
     response.status(200).json({
       success: true,
-
       message: input.emoji
         ? "Message reaction updated"
         : "Message reaction removed",
-
       data: {
         message,
       },

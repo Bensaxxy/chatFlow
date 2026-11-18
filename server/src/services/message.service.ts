@@ -1,15 +1,17 @@
+import { Types } from "mongoose";
+
 import { Conversation } from "../models/conversation.model";
 import { Message } from "../models/message.model";
+import { getSocketServer } from "../socket/socket.server";
 import { AppError } from "../utils/app-error";
 import type {
   DeleteMessageInput,
   EditMessageInput,
+  ForwardMessageInput,
   ListMessagesInput,
   SendMessageInput,
   UpdateMessageReactionInput,
 } from "../validations/message.validation";
-import { getSocketServer } from "../socket/socket.server";
-import { Types } from "mongoose";
 
 const senderFields = "name email avatarUrl";
 
@@ -21,11 +23,9 @@ const messagePopulateOptions = [
     path: "sender",
     select: senderFields,
   },
-
   {
     path: "replyTo",
     select: replyMessageFields,
-
     populate: {
       path: "sender",
       select: senderFields,
@@ -53,47 +53,31 @@ const verifyConversationMembership = async (
   return conversation;
 };
 
-export const sendMessage = async (
-  conversationId: string,
-  senderId: string,
-  input: SendMessageInput,
-) => {
-  const conversation = await verifyConversationMembership(
-    conversationId,
-    senderId,
-  );
+interface CreateRealtimeMessageOptions {
+  conversationId: string;
+  participantIds: string[];
+  senderId: string;
+  content: string;
+  replyToMessageId?: string | null;
+  isForwarded?: boolean;
+  forwardedFromMessageId?: string | null;
+}
 
-  if (input.replyToMessageId) {
-    const replyMessageExists = await Message.exists({
-      _id: input.replyToMessageId,
-      conversation: conversationId,
-
-      deletedForEveryoneAt: null,
-
-      deletedFor: {
-        $ne: senderId,
-      },
-    });
-
-    if (!replyMessageExists) {
-      throw new AppError(
-        "The message you are replying to was not found",
-        404,
-        "REPLY_MESSAGE_NOT_FOUND",
-      );
-    }
-  }
-
+const createRealtimeMessage = async ({
+  conversationId,
+  participantIds,
+  senderId,
+  content,
+  replyToMessageId = null,
+  isForwarded = false,
+  forwardedFromMessageId = null,
+}: CreateRealtimeMessageOptions) => {
   const io = getSocketServer();
 
-  const recipientIds = conversation.participants
-    .map((participantId) => participantId.toString())
-    .filter((participantId) => participantId !== senderId);
+  const recipientIds = participantIds.filter(
+    (participantId) => participantId !== senderId,
+  );
 
-  /*
-   * A message is considered delivered when at least one
-   * device belonging to the recipient is connected.
-   */
   const deliveryResults = await Promise.all(
     recipientIds.map(async (recipientId) => {
       const connectedSockets = await io
@@ -112,12 +96,11 @@ export const sendMessage = async (
     conversation: conversationId,
     sender: senderId,
     type: "text",
-    content: input.content,
-
-    replyTo: input.replyToMessageId ?? null,
-
+    content,
+    replyTo: replyToMessageId,
+    isForwarded,
+    forwardedFrom: forwardedFromMessageId,
     deliveredTo: [senderId, ...deliveredRecipientIds],
-
     readBy: [senderId],
   });
 
@@ -135,20 +118,134 @@ export const sendMessage = async (
     message: realtimeMessage,
   });
 
-  for (const participantId of conversation.participants) {
-    const participantIdString = participantId.toString();
-
-    io.to(`user:${participantIdString}`).emit("conversation:updated", {
+  for (const participantId of participantIds) {
+    io.to(`user:${participantId}`).emit("conversation:updated", {
       conversationId,
       message: realtimeMessage,
-
       updatedAt: message.createdAt.toISOString(),
-
-      incrementUnread: participantIdString !== senderId,
+      incrementUnread: participantId !== senderId,
     });
   }
 
   return message;
+};
+
+export const sendMessage = async (
+  conversationId: string,
+  senderId: string,
+  input: SendMessageInput,
+) => {
+  const conversation = await verifyConversationMembership(
+    conversationId,
+    senderId,
+  );
+
+  if (input.replyToMessageId) {
+    const replyMessageExists = await Message.exists({
+      _id: input.replyToMessageId,
+      conversation: conversationId,
+      deletedForEveryoneAt: null,
+      deletedFor: {
+        $ne: senderId,
+      },
+    });
+
+    if (!replyMessageExists) {
+      throw new AppError(
+        "The message you are replying to was not found",
+        404,
+        "REPLY_MESSAGE_NOT_FOUND",
+      );
+    }
+  }
+
+  return createRealtimeMessage({
+    conversationId,
+    participantIds: conversation.participants.map((participantId) =>
+      participantId.toString(),
+    ),
+    senderId,
+    content: input.content,
+    replyToMessageId: input.replyToMessageId,
+  });
+};
+
+export const forwardMessage = async (
+  sourceConversationId: string,
+  messageId: string,
+  currentUserId: string,
+  input: ForwardMessageInput,
+) => {
+  await verifyConversationMembership(sourceConversationId, currentUserId);
+
+  const sourceMessage = await Message.findOne({
+    _id: messageId,
+    conversation: sourceConversationId,
+    deletedForEveryoneAt: null,
+    deletedFor: {
+      $ne: currentUserId,
+    },
+  });
+
+  if (!sourceMessage) {
+    throw new AppError(
+      "The message is unavailable and cannot be forwarded",
+      404,
+      "MESSAGE_NOT_AVAILABLE",
+    );
+  }
+
+  const targetConversationIds = [...new Set(input.targetConversationIds)];
+
+  const targetConversations = await Conversation.find({
+    _id: {
+      $in: targetConversationIds,
+    },
+    participants: currentUserId,
+  });
+
+  if (targetConversations.length !== targetConversationIds.length) {
+    throw new AppError(
+      "One or more selected conversations were not found",
+      404,
+      "TARGET_CONVERSATION_NOT_FOUND",
+    );
+  }
+
+  const conversationsById = new Map(
+    targetConversations.map((conversation) => [
+      conversation._id.toString(),
+      conversation,
+    ]),
+  );
+
+  const forwardedMessages = [];
+
+  for (const targetConversationId of targetConversationIds) {
+    const targetConversation = conversationsById.get(targetConversationId);
+
+    if (!targetConversation) {
+      continue;
+    }
+
+    const forwardedMessage = await createRealtimeMessage({
+      conversationId: targetConversationId,
+      participantIds: targetConversation.participants.map((participantId) =>
+        participantId.toString(),
+      ),
+      senderId: currentUserId,
+      content: sourceMessage.content,
+      isForwarded: true,
+      forwardedFromMessageId: sourceMessage._id.toString(),
+    });
+
+    forwardedMessages.push(forwardedMessage);
+  }
+
+  return {
+    messages: forwardedMessages,
+    forwardedCount: forwardedMessages.length,
+  };
 };
 
 export const getConversationMessages = async (
@@ -191,10 +288,6 @@ export const getConversationMessages = async (
   const nextCursor =
     hasMore && oldestMessage ? oldestMessage._id.toString() : null;
 
-  /*
-   * MongoDB returns newest first for efficient cursor
-   * pagination. The frontend receives chronological order.
-   */
   messages.reverse();
 
   return {
@@ -213,16 +306,13 @@ export const markConversationAsRead = async (
   const result = await Message.updateMany(
     {
       conversation: conversationId,
-
       sender: {
         $ne: currentUserId,
       },
-
       readBy: {
         $ne: currentUserId,
       },
     },
-
     {
       $addToSet: {
         readBy: currentUserId,
@@ -232,13 +322,8 @@ export const markConversationAsRead = async (
   );
 
   const readAt = new Date().toISOString();
-
   const io = getSocketServer();
 
-  /*
-   * Notify the open conversation and every device
-   * belonging to the reader.
-   */
   io.to(`conversation:${conversationId}`)
     .to(`user:${currentUserId}`)
     .emit("conversation:read", {
@@ -296,19 +381,11 @@ export const deleteMessage = async (
       deletedForEveryoneAt: null,
     };
 
-    /**
-     * Delete for me must only affect the current user's
-     * browser tabs and devices.
-     */
     io.to(`user:${currentUserId}`).emit("message:deleted", payload);
 
     return payload;
   }
 
-  /**
-   * Only the original sender can delete a message
-   * for everyone.
-   */
   if (message.sender.toString() !== currentUserId) {
     throw new AppError(
       "Only the sender can delete this message for everyone",
@@ -320,11 +397,6 @@ export const deleteMessage = async (
   const deletedAt = message.deletedForEveryoneAt ?? new Date();
 
   message.deletedForEveryoneAt = deletedAt;
-
-  /**
-   * Remove the original text from the database while
-   * keeping the document for chat-history ordering.
-   */
   message.content = "This message was deleted";
 
   await message.save();
@@ -337,10 +409,6 @@ export const deleteMessage = async (
     deletedForEveryoneAt: deletedAt.toISOString(),
   };
 
-  /**
-   * Notify every participant through their personal
-   * rooms, including users who have not opened the chat.
-   */
   for (const participantId of conversation.participants) {
     io.to(`user:${participantId.toString()}`).emit("message:deleted", payload);
   }
@@ -443,10 +511,6 @@ export const updateMessageReaction = async (
     );
   }
 
-  /*
-   * Each user can have only one reaction
-   * on a message.
-   */
   for (let index = message.reactions.length - 1; index >= 0; index -= 1) {
     const reaction = message.reactions[index];
 
@@ -455,9 +519,6 @@ export const updateMessageReaction = async (
     }
   }
 
-  /*
-   * A null emoji means remove the reaction.
-   */
   if (input.emoji) {
     message.reactions.push({
       emoji: input.emoji,
@@ -467,17 +528,11 @@ export const updateMessageReaction = async (
   }
 
   await message.save();
-
   await message.populate(messagePopulateOptions);
 
   const realtimeMessage = message.toJSON();
-
   const io = getSocketServer();
 
-  /*
-   * Send the updated message to every
-   * participant and all their devices.
-   */
   for (const participantId of conversation.participants) {
     io.to(`user:${participantId.toString()}`).emit("message:updated", {
       conversationId,
@@ -487,3 +542,4 @@ export const updateMessageReaction = async (
 
   return message;
 };
+  

@@ -5,20 +5,22 @@ import {
   getConversation,
   listConversations,
 } from "../controllers/conversation.controller";
-import { authenticate } from "../middleware/auth.middleware";
-import { validateBody } from "../middleware/validate.middleware";
-import { createDirectConversationSchema } from "../validations/conversation.validation";
 import {
   createMessage,
+  forwardExistingMessage,
   listMessages,
   markMessagesRead,
   reactToMessage,
   removeMessage,
   updateMessage,
 } from "../controllers/message.controller";
+import { authenticate } from "../middleware/auth.middleware";
+import { validateBody } from "../middleware/validate.middleware";
+import { createDirectConversationSchema } from "../validations/conversation.validation";
 import {
   deleteMessageSchema,
   editMessageSchema,
+  forwardMessageSchema,
   sendMessageSchema,
   updateMessageReactionSchema,
 } from "../validations/message.validation";
@@ -43,11 +45,19 @@ conversationRouter.patch(
 );
 
 conversationRouter.get("/:conversationId/messages", authenticate, listMessages);
+
 conversationRouter.post(
   "/:conversationId/messages",
   authenticate,
   validateBody(sendMessageSchema),
   createMessage,
+);
+
+conversationRouter.post(
+  "/:conversationId/messages/:messageId/forward",
+  authenticate,
+  validateBody(forwardMessageSchema),
+  forwardExistingMessage,
 );
 
 conversationRouter.patch(

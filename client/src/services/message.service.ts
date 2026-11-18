@@ -1,5 +1,4 @@
 import { apiClient } from "@/lib/api/client";
-
 import type { ApiSuccessResponse } from "@/types/api";
 import type {
   ChatMessage,
@@ -15,9 +14,16 @@ interface MessageData {
   message: ChatMessage;
 }
 
+interface ForwardMessageData {
+  messages: ChatMessage[];
+  forwardedCount: number;
+}
+
 type MessageResponse = ApiSuccessResponse<MessageData>;
 
 type DeleteMessageResponse = ApiSuccessResponse<MessageDeletedPayload>;
+
+type ForwardMessageResponse = ApiSuccessResponse<ForwardMessageData>;
 
 export const getConversationMessages = async (
   conversationId: string,
@@ -49,12 +55,26 @@ export const sendConversationMessage = async (
     `/conversations/${conversationId}/messages`,
     {
       content,
-
       replyToMessageId: replyToMessageId ?? null,
     },
   );
 
   return data.data.message;
+};
+
+export const forwardConversationMessage = async (
+  sourceConversationId: string,
+  messageId: string,
+  targetConversationIds: string[],
+): Promise<ForwardMessageData> => {
+  const { data } = await apiClient.post<ForwardMessageResponse>(
+    `/conversations/${sourceConversationId}/messages/${messageId}/forward`,
+    {
+      targetConversationIds,
+    },
+  );
+
+  return data.data;
 };
 
 export const deleteConversationMessage = async (

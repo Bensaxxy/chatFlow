@@ -44,6 +44,7 @@ export interface ChatMessage {
   type: "text";
   content: string;
   replyTo: RepliedMessage | null;
+  isForwarded: boolean;
   deliveredTo: string[];
   readBy: string[];
   reactions: MessageReaction[];

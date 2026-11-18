@@ -9,6 +9,25 @@ export interface ConversationParticipant {
   lastSeenAt: string | null;
 }
 
+export interface MessageSender {
+  _id: string;
+  name: string;
+  email: string;
+  avatarUrl: string | null;
+}
+
+export interface ConversationLastMessage {
+  _id: string;
+  content: string;
+  type: "text";
+  sender: MessageSender;
+  createdAt: string;
+  editedAt: string | null;
+  deletedFor: string[];
+  deletedForEveryoneAt: string | null;
+  isForwarded?: boolean;
+}
+
 export interface Conversation {
   _id: string;
   type: "direct" | "group";
@@ -17,18 +36,7 @@ export interface Conversation {
   avatarUrl: string | null;
   admins: string[];
   createdBy: string;
-
-  lastMessage: {
-    deletedFor: string[];
-    _id: string;
-    content: string;
-    type: "text";
-    sender: MessageSender;
-    createdAt: string;
-    editedAt: string | null;
-    deletedForEveryoneAt: string | null;
-  } | null;
-
+  lastMessage: ConversationLastMessage | null;
   unreadCount?: number;
   createdAt: string;
   updatedAt: string;
@@ -37,11 +45,4 @@ export interface Conversation {
 export interface CreateDirectConversationData {
   conversation: Conversation;
   created: boolean;
-}
-
-export interface MessageSender {
-  _id: string;
-  name: string;
-  email: string;
-  avatarUrl: string | null;
 }

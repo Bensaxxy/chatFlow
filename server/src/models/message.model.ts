@@ -34,6 +34,18 @@ const messageSchema = new Schema(
       default: null,
     },
 
+    isForwarded: {
+      type: Boolean,
+      default: false,
+    },
+
+    forwardedFrom: {
+      type: Schema.Types.ObjectId,
+      ref: "Message",
+      default: null,
+      select: false,
+    },
+
     deliveredTo: [
       {
         type: Schema.Types.ObjectId,
@@ -102,6 +114,7 @@ messageSchema.set("toJSON", {
   transform: (_document, returnedObject) => {
     const safeObject = returnedObject as Record<string, unknown>;
 
+    delete safeObject.forwardedFrom;
     delete safeObject.__v;
 
     return safeObject;

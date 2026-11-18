@@ -1,20 +1,16 @@
 import { isValidObjectId } from "mongoose";
 import { z } from "zod";
 
+const objectIdSchema = (message: string) =>
+  z.string().refine((value) => isValidObjectId(value), message);
+
 export const conversationParamsSchema = z.object({
-  conversationId: z
-    .string()
-    .refine((value) => isValidObjectId(value), "Conversation ID is invalid"),
+  conversationId: objectIdSchema("Conversation ID is invalid"),
 });
 
 export const messageParamsSchema = z.object({
-  conversationId: z
-    .string()
-    .refine((value) => isValidObjectId(value), "Conversation ID is invalid"),
-
-  messageId: z
-    .string()
-    .refine((value) => isValidObjectId(value), "Message ID is invalid"),
+  conversationId: objectIdSchema("Conversation ID is invalid"),
+  messageId: objectIdSchema("Message ID is invalid"),
 });
 
 export const sendMessageSchema = z.object({
@@ -24,11 +20,17 @@ export const sendMessageSchema = z.object({
     .min(1, "Message cannot be empty")
     .max(5000, "Message cannot exceed 5000 characters"),
 
-  replyToMessageId: z
-    .string()
-    .refine((value) => isValidObjectId(value), "Reply message ID is invalid")
+  replyToMessageId: objectIdSchema("Reply message ID is invalid")
     .nullable()
     .optional(),
+});
+
+export const forwardMessageSchema = z.object({
+  targetConversationIds: z
+    .array(objectIdSchema("A target conversation ID is invalid"))
+    .min(1, "Select at least one conversation")
+    .max(20, "You can forward to a maximum of 20 conversations")
+    .transform((conversationIds) => [...new Set(conversationIds)]),
 });
 
 export const editMessageSchema = z.object({
@@ -44,21 +46,10 @@ export const deleteMessageSchema = z.object({
 });
 
 export const listMessagesQuerySchema = z.object({
-  cursor: z
-    .string()
-    .refine((value) => isValidObjectId(value), "Message cursor is invalid")
-    .optional(),
+  cursor: objectIdSchema("Message cursor is invalid").optional(),
 
   limit: z.coerce.number().int().min(1).max(50).default(30),
 });
-
-export type SendMessageInput = z.infer<typeof sendMessageSchema>;
-
-export type EditMessageInput = z.infer<typeof editMessageSchema>;
-
-export type DeleteMessageInput = z.infer<typeof deleteMessageSchema>;
-
-export type ListMessagesInput = z.infer<typeof listMessagesQuerySchema>;
 
 export const messageReactionEmojis = [
   "👍",
@@ -72,6 +63,16 @@ export const messageReactionEmojis = [
 export const updateMessageReactionSchema = z.object({
   emoji: z.enum(messageReactionEmojis).nullable(),
 });
+
+export type SendMessageInput = z.infer<typeof sendMessageSchema>;
+
+export type ForwardMessageInput = z.infer<typeof forwardMessageSchema>;
+
+export type EditMessageInput = z.infer<typeof editMessageSchema>;
+
+export type DeleteMessageInput = z.infer<typeof deleteMessageSchema>;
+
+export type ListMessagesInput = z.infer<typeof listMessagesQuerySchema>;
 
 export type MessageReactionEmoji = (typeof messageReactionEmojis)[number];
 

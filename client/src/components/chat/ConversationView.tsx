@@ -6,6 +6,7 @@ import {
   Check,
   CheckCheck,
   LoaderCircle,
+  Forward,
   MessageCircleMore,
   MoreVertical,
   Pencil,
@@ -53,6 +54,7 @@ import {
   type MessageReactionEmoji,
   type RepliedMessage,
 } from "@/types/message";
+import ForwardMessageModal from "@/components/chat/ForwardMessageModal";
 
 interface ConversationViewProps {
   conversationId: string;
@@ -158,6 +160,7 @@ const normalizeReplyPreview = (
 const normalizeMessage = (message: ChatMessage): ChatMessage => ({
   ...message,
   replyTo: normalizeReplyPreview(message.replyTo),
+  isForwarded: Boolean(message.isForwarded),
   deliveredTo: Array.isArray(message.deliveredTo) ? message.deliveredTo : [],
   readBy: Array.isArray(message.readBy) ? message.readBy : [],
   deletedFor: Array.isArray(message.deletedFor) ? message.deletedFor : [],
@@ -315,11 +318,10 @@ export default function ConversationView({
     ? `${currentUserId}:${conversationId}`
     : null;
 
-  const [initialCache] = useState<ConversationCacheEntry | null>(
-    () =>
-      conversationCacheKey
-        ? (conversationCache.get(conversationCacheKey) ?? null)
-        : null,
+  const [initialCache] = useState<ConversationCacheEntry | null>(() =>
+    conversationCacheKey
+      ? (conversationCache.get(conversationCacheKey) ?? null)
+      : null,
   );
 
   const [conversation, setConversation] = useState<Conversation | null>(
@@ -369,6 +371,9 @@ export default function ConversationView({
   );
 
   const [replyingToMessage, setReplyingToMessage] =
+    useState<ChatMessage | null>(null);
+
+  const [forwardingMessage, setForwardingMessage] =
     useState<ChatMessage | null>(null);
 
   const [showFloatingDate, setShowFloatingDate] = useState(false);
@@ -499,7 +504,14 @@ export default function ConversationView({
       nextCursor,
       hasMore,
     });
-  }, [conversationCacheKey, conversation, messages, nextCursor, hasMore, isLoading]);
+  }, [
+    conversationCacheKey,
+    conversation,
+    messages,
+    nextCursor,
+    hasMore,
+    isLoading,
+  ]);
 
   const stopTyping = useCallback((): void => {
     if (typingTimeoutRef.current !== null) {
@@ -911,6 +923,40 @@ export default function ConversationView({
     } finally {
       setReactingMessageId(null);
     }
+  };
+
+  const handleStartForwarding = (message: ChatMessage): void => {
+    if (message.deletedForEveryoneAt) {
+      return;
+    }
+
+    setOpenMessageMenuId(null);
+    setReactionPickerMessageId(null);
+    setForwardingMessage(message);
+  };
+
+  const handleMessagesForwarded = (forwardedMessages: ChatMessage[]): void => {
+    const messagesForCurrentConversation = forwardedMessages.filter(
+      (forwardedMessage) => forwardedMessage.conversation === conversationId,
+    );
+
+    if (messagesForCurrentConversation.length === 0) {
+      return;
+    }
+
+    setMessages((currentMessages) =>
+      messagesForCurrentConversation.reduce(
+        (nextMessages, forwardedMessage) =>
+          addMessageIfMissing(nextMessages, forwardedMessage),
+        currentMessages,
+      ),
+    );
+
+    window.requestAnimationFrame(() => {
+      messagesEndRef.current?.scrollIntoView({
+        behavior: "smooth",
+      });
+    });
   };
 
   const handleDeleteMessage = async (
@@ -1380,6 +1426,17 @@ export default function ConversationView({
                                 </button>
                               )}
 
+                              {!isDeletedForEveryone && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleStartForwarding(message)}
+                                  className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left transition hover:bg-slate-50"
+                                >
+                                  <Forward className="h-4 w-4 text-slate-500" />
+                                  Forward
+                                </button>
+                              )}
+
                               {isMine && !isDeletedForEveryone && (
                                 <button
                                   type="button"
@@ -1420,7 +1477,16 @@ export default function ConversationView({
                             </div>
                           </>
                         )}
-
+                        {message.isForwarded && !isDeletedForEveryone && (
+                          <div
+                            className={`mb-1 flex items-center gap-1 text-[11px] font-medium ${
+                              isMine ? "text-cyan-100" : "text-slate-500"
+                            }`}
+                          >
+                            <Forward className="h-3 w-3" />
+                            Forwarded
+                          </div>
+                        )}
                         {message.replyTo && (
                           <div
                             className={`mb-2 rounded-lg border-l-4 px-3 py-2 ${
@@ -1666,6 +1732,16 @@ export default function ConversationView({
               <SendHorizontal className="h-5 w-5" />
             )}
           </button>
+
+          {currentUserId && (
+            <ForwardMessageModal
+              message={forwardingMessage}
+              sourceConversationId={conversationId}
+              currentUserId={currentUserId}
+              onClose={() => setForwardingMessage(null)}
+              onForwarded={handleMessagesForwarded}
+            />
+          )}
         </div>
       </form>
     </section>
