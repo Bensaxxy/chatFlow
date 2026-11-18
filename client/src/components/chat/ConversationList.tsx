@@ -100,7 +100,7 @@ export default function ConversationList() {
     void loadConversations();
 
     return () => controller.abort();
-  }, [pathname, reloadKey]);
+  }, [reloadKey]);
 
   useEffect(() => {
     if (!isConnected || !currentUserId) return;

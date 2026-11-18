@@ -14,6 +14,7 @@ export default async function ConversationPage({
 
   return (
     <ConversationView
+      key={conversationId}
       conversationId={conversationId}
     />
   );

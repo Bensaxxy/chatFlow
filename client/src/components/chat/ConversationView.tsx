@@ -271,6 +271,30 @@ const applyMessageDeletion = (
   });
 };
 
+interface ConversationCacheEntry {
+  conversation: Conversation;
+  messages: ChatMessage[];
+  nextCursor: string | null;
+  hasMore: boolean;
+}
+
+const conversationCache = new Map<string, ConversationCacheEntry>();
+
+const saveConversationCache = (
+  key: string,
+  entry: ConversationCacheEntry,
+): void => {
+  if (!conversationCache.has(key) && conversationCache.size >= 20) {
+    const oldestKey = conversationCache.keys().next().value;
+
+    if (oldestKey) {
+      conversationCache.delete(oldestKey);
+    }
+  }
+
+  conversationCache.set(key, entry);
+};
+
 export default function ConversationView({
   conversationId,
 }: ConversationViewProps) {
@@ -287,17 +311,34 @@ export default function ConversationView({
 
   const currentUserId = user?._id;
 
-  const [conversation, setConversation] = useState<Conversation | null>(null);
+  const conversationCacheKey = currentUserId
+    ? `${currentUserId}:${conversationId}`
+    : null;
 
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [initialCache] = useState<ConversationCacheEntry | null>(
+    () =>
+      conversationCacheKey
+        ? (conversationCache.get(conversationCacheKey) ?? null)
+        : null,
+  );
+
+  const [conversation, setConversation] = useState<Conversation | null>(
+    () => initialCache?.conversation ?? null,
+  );
+
+  const [messages, setMessages] = useState<ChatMessage[]>(
+    () => initialCache?.messages ?? [],
+  );
 
   const [messageText, setMessageText] = useState("");
 
-  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [nextCursor, setNextCursor] = useState<string | null>(
+    () => initialCache?.nextCursor ?? null,
+  );
 
-  const [hasMore, setHasMore] = useState(false);
+  const [hasMore, setHasMore] = useState(() => initialCache?.hasMore ?? false);
 
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(() => initialCache === null);
 
   const [isLoadingOlder, setIsLoadingOlder] = useState(false);
 
@@ -402,17 +443,12 @@ export default function ConversationView({
   useEffect(() => {
     const controller = new AbortController();
 
-    editingMessageIdRef.current = null;
-    setEditingMessageId(null);
-    setMessageText("");
-    setReactionPickerMessageId(null);
-    setReactingMessageId(null);
-    setReplyingToMessage(null);
-
     const loadConversation = async (): Promise<void> => {
       try {
-        setIsLoading(true);
-        setErrorMessage(null);
+        if (!initialCache) {
+          setIsLoading(true);
+          setErrorMessage(null);
+        }
 
         const [conversationResult, messageResult] = await Promise.all([
           getConversationById(conversationId, controller.signal),
@@ -437,11 +473,11 @@ export default function ConversationView({
           console.error("Could not mark conversation as read:", readError);
         }
       } catch (error) {
-        if (!controller.signal.aborted) {
+        if (!controller.signal.aborted && !initialCache) {
           setErrorMessage(getApiErrorMessage(error));
         }
       } finally {
-        if (!controller.signal.aborted) {
+        if (!controller.signal.aborted && !initialCache) {
           setIsLoading(false);
         }
       }
@@ -450,7 +486,20 @@ export default function ConversationView({
     void loadConversation();
 
     return () => controller.abort();
-  }, [conversationId]);
+  }, [conversationId, initialCache]);
+
+  useEffect(() => {
+    if (!conversationCacheKey || !conversation || isLoading) {
+      return;
+    }
+
+    saveConversationCache(conversationCacheKey, {
+      conversation,
+      messages,
+      nextCursor,
+      hasMore,
+    });
+  }, [conversationCacheKey, conversation, messages, nextCursor, hasMore, isLoading]);
 
   const stopTyping = useCallback((): void => {
     if (typingTimeoutRef.current !== null) {
