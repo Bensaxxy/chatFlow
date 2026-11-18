@@ -6,6 +6,7 @@ import {
   FileText,
   ImageIcon,
   Maximize2,
+  Volume2,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -14,7 +15,7 @@ import type { MessageAttachment } from "@/types/message";
 
 interface MessageAttachmentContentProps {
   attachment: MessageAttachment;
-  messageType: "image" | "file";
+  messageType: "image" | "file" | "audio";
   isMine?: boolean;
   compact?: boolean;
 }
@@ -37,6 +38,18 @@ const formatFileSize = (bytes: number): string => {
   const megabytes = kilobytes / 1024;
 
   return megabytes.toFixed(megabytes >= 100 ? 0 : 1) + " MB";
+};
+
+const formatAudioDuration = (seconds: number | null | undefined): string => {
+  if (!Number.isFinite(seconds) || !seconds || seconds < 0) {
+    return "Voice note";
+  }
+
+  const totalSeconds = Math.round(seconds);
+  const minutes = Math.floor(totalSeconds / 60);
+  const remainingSeconds = totalSeconds % 60;
+
+  return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`;
 };
 
 function AttachmentFileIcon({ mimeType }: { mimeType: string }) {
@@ -69,6 +82,9 @@ export default function MessageAttachmentContent({
   compact = false,
 }: MessageAttachmentContentProps) {
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [loadedAudioDuration, setLoadedAudioDuration] = useState<
+    number | null
+  >(null);
 
   if (messageType === "image") {
     return (
@@ -112,6 +128,62 @@ export default function MessageAttachmentContent({
           />
         )}
       </>
+    );
+  }
+
+  if (messageType === "audio") {
+    const duration = attachment.duration ?? loadedAudioDuration;
+
+    return (
+      <div
+        className={joinClasses(
+          "flex min-w-0 items-center gap-3 rounded-xl border p-3",
+          isMine
+            ? "border-cyan-400/70 bg-cyan-700/50"
+            : "border-slate-200 bg-slate-50",
+          compact ? "max-w-64" : "min-w-64 max-w-sm",
+        )}
+      >
+        <span
+          className={joinClasses(
+            "flex h-11 w-11 shrink-0 items-center justify-center rounded-full",
+            isMine ? "bg-cyan-500 text-white" : "bg-cyan-100 text-cyan-700",
+          )}
+        >
+          <Volume2 className="h-5 w-5" />
+        </span>
+
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-semibold">Voice note</span>
+
+          {!compact && (
+            <audio
+              controls
+              preload="metadata"
+              src={attachment.url}
+              onLoadedMetadata={(event) => {
+                const durationFromPlayer = event.currentTarget.duration;
+
+                if (Number.isFinite(durationFromPlayer)) {
+                  setLoadedAudioDuration(durationFromPlayer);
+                }
+              }}
+              className="mt-2 h-9 w-full min-w-0 accent-cyan-600"
+            >
+              Your browser cannot play this voice note.
+            </audio>
+          )}
+
+          <span
+            className={joinClasses(
+              "mt-1 block text-xs",
+              isMine ? "text-cyan-100" : "text-slate-500",
+            )}
+          >
+            {formatAudioDuration(duration)}
+          </span>
+        </span>
+      </div>
     );
   }
 

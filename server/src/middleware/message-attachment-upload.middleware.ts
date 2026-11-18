@@ -13,6 +13,16 @@ const allowedAttachmentTypes = new Set([
   "image/webp",
   "image/gif",
 
+  // Voice notes and audio attachments
+  "audio/aac",
+  "audio/mpeg",
+  "audio/mp4",
+  "audio/ogg",
+  "audio/wav",
+  "audio/webm",
+  "audio/x-m4a",
+  "audio/x-wav",
+
   // Documents
   "application/pdf",
   "text/plain",
@@ -39,6 +49,13 @@ const allowedAttachmentExtensions = new Set([
   ".png",
   ".webp",
   ".gif",
+  ".aac",
+  ".m4a",
+  ".mp3",
+  ".ogg",
+  ".opus",
+  ".wav",
+  ".webm",
   ".pdf",
   ".txt",
   ".csv",
@@ -52,7 +69,9 @@ const allowedAttachmentExtensions = new Set([
 ]);
 
 const isAllowedAttachment = (file: Express.Multer.File): boolean => {
-  if (allowedAttachmentTypes.has(file.mimetype)) {
+  const mimeType = file.mimetype.split(";")[0]?.trim().toLowerCase() ?? "";
+
+  if (allowedAttachmentTypes.has(mimeType)) {
     return true;
   }
 
@@ -62,8 +81,8 @@ const isAllowedAttachment = (file: Express.Multer.File): boolean => {
    * only when their extension is on the same allow-list as the client.
    */
   if (
-    file.mimetype &&
-    file.mimetype !== "application/octet-stream"
+    mimeType &&
+    mimeType !== "application/octet-stream"
   ) {
     return false;
   }

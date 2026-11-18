@@ -81,6 +81,8 @@ export const createAttachmentMessage: RequestHandler = asyncHandler(
       message:
         message.type === "image"
           ? "Image sent successfully"
+          : message.type === "audio"
+            ? "Voice note sent successfully"
           : "File sent successfully",
       data: {
         message,

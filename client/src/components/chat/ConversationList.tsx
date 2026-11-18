@@ -456,6 +456,8 @@ export default function ConversationList() {
           lastMessage?.content ||
           (lastMessage?.type === "image"
             ? "📷 Image"
+            : lastMessage?.type === "audio"
+              ? "🎤 Voice note"
             : lastMessage?.attachment?.fileName || "File");
 
         const messagePreview = lastMessage

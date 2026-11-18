@@ -64,7 +64,11 @@ export const deleteAvatarFromCloudinary = async (
   });
 };
 
-export type MessageAttachmentResourceType = "image" | "raw";
+/*
+ * Cloudinary stores audio under its video resource type. It returns the
+ * media duration there, while raw files are download-only attachments.
+ */
+export type MessageAttachmentResourceType = "image" | "raw" | "video";
 
 interface UploadMessageAttachmentOptions {
   buffer: Buffer;
@@ -79,10 +83,16 @@ export const uploadMessageAttachmentToCloudinary = ({
 }: UploadMessageAttachmentOptions): Promise<UploadApiResponse> =>
   new Promise((resolve, reject) => {
     const isImage = resourceType === "image";
+    const folder =
+      resourceType === "image"
+        ? "chatflow/message-images"
+        : resourceType === "video"
+          ? "chatflow/message-audio"
+          : "chatflow/message-files";
 
     const uploadStream = cloudinary.uploader.upload_stream(
       {
-        folder: isImage ? "chatflow/message-images" : "chatflow/message-files",
+        folder,
 
         public_id: publicId,
 

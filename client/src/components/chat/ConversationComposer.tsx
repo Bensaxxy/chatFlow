@@ -8,6 +8,7 @@ import type {
 } from "react";
 
 import MessageAttachmentUploader from "@/components/chat/MessageAttachmentUploader";
+import VoiceNoteRecorder from "@/components/chat/VoiceNoteRecorder";
 import type { ChatMessage } from "@/types/message";
 
 interface ConversationComposerProps {
@@ -45,6 +46,8 @@ export default function ConversationComposer({
     replyingToMessage?.content ||
     (replyingToMessage?.type === "image"
       ? "📷 Image"
+      : replyingToMessage?.type === "audio"
+        ? "🎤 Voice note"
       : replyingToMessage?.attachment?.fileName || "File");
 
   return (
@@ -108,6 +111,15 @@ export default function ConversationComposer({
           disabled={isSending || isEditingMessage || editingMessageId !== null}
           onMessageSent={onAttachmentSent}
         />
+
+        {!editingMessageId && (
+          <VoiceNoteRecorder
+            conversationId={conversationId}
+            replyToMessageId={replyingToMessage?._id ?? null}
+            disabled={isSending || isEditingMessage}
+            onMessageSent={onAttachmentSent}
+          />
+        )}
 
         <input
           ref={messageInputRef}

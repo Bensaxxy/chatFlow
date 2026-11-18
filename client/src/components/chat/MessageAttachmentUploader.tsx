@@ -29,6 +29,14 @@ const ALLOWED_FILE_TYPES = new Set([
   "image/png",
   "image/webp",
   "image/gif",
+  "audio/aac",
+  "audio/mpeg",
+  "audio/mp4",
+  "audio/ogg",
+  "audio/wav",
+  "audio/webm",
+  "audio/x-m4a",
+  "audio/x-wav",
   "application/pdf",
   "text/plain",
   "text/csv",
@@ -48,6 +56,13 @@ const ALLOWED_FILE_EXTENSIONS = new Set([
   ".png",
   ".webp",
   ".gif",
+  ".aac",
+  ".m4a",
+  ".mp3",
+  ".ogg",
+  ".opus",
+  ".wav",
+  ".webm",
   ".pdf",
   ".txt",
   ".csv",
@@ -63,7 +78,9 @@ const ALLOWED_FILE_EXTENSIONS = new Set([
 const ACCEPTED_FILE_TYPES = [...ALLOWED_FILE_TYPES].join(",");
 
 const isSupportedAttachment = (file: File): boolean => {
-  if (ALLOWED_FILE_TYPES.has(file.type)) {
+  const mimeType = file.type.split(";")[0]?.trim().toLowerCase() ?? "";
+
+  if (ALLOWED_FILE_TYPES.has(mimeType)) {
     return true;
   }
 
@@ -72,7 +89,7 @@ const isSupportedAttachment = (file: File): boolean => {
    * application/octet-stream. Allow those only when their extension is one
    * the server accepts too.
    */
-  if (file.type && file.type !== "application/octet-stream") {
+  if (mimeType && mimeType !== "application/octet-stream") {
     return false;
   }
 
@@ -163,7 +180,7 @@ export default function MessageAttachmentUploader({
 
     if (!isSupportedAttachment(file)) {
       toast.error(
-        "Choose an image, PDF, document, spreadsheet, presentation, text file, or ZIP file",
+        "Choose an image, audio file, PDF, document, spreadsheet, presentation, text file, or ZIP file",
       );
       event.target.value = "";
       return;

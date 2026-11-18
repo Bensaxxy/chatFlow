@@ -283,7 +283,11 @@ export default function ConversationMessageItem({
                     <MessageAttachmentContent
                       attachment={message.replyTo.attachment}
                       messageType={
-                        message.replyTo.type === "image" ? "image" : "file"
+                        message.replyTo.type === "image"
+                          ? "image"
+                          : message.replyTo.type === "audio"
+                            ? "audio"
+                            : "file"
                       }
                       isMine={isMine}
                       compact
@@ -299,6 +303,8 @@ export default function ConversationMessageItem({
                   {message.replyTo.content ||
                     (message.replyTo.type === "image"
                       ? "📷 Image"
+                      : message.replyTo.type === "audio"
+                        ? "🎤 Voice note"
                       : message.replyTo.attachment?.fileName || "File")}
                 </p>
               </>
@@ -310,7 +316,13 @@ export default function ConversationMessageItem({
           <div className={message.content ? "mb-2" : ""}>
             <MessageAttachmentContent
               attachment={message.attachment}
-              messageType={message.type === "image" ? "image" : "file"}
+              messageType={
+                message.type === "image"
+                  ? "image"
+                  : message.type === "audio"
+                    ? "audio"
+                    : "file"
+              }
               isMine={isMine}
             />
           </div>

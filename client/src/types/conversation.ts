@@ -20,7 +20,7 @@ export interface MessageSender {
 export interface ConversationLastMessage {
   _id: string;
   content: string;
-  type: "text" | "image" | "file";
+  type: "text" | "image" | "file" | "audio";
   attachment: MessageAttachment | null;
   sender: MessageSender;
   createdAt: string;

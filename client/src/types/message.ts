@@ -29,18 +29,19 @@ export interface MessageReaction {
 
 export interface MessageAttachment {
   url: string;
-  resourceType: "image" | "raw";
+  resourceType: "image" | "raw" | "video";
   fileName: string;
   mimeType: string;
   size: number;
   width: number | null;
   height: number | null;
+  duration: number | null;
 }
 
 export interface RepliedMessage {
   _id: string;
   content: string;
-  type: "text" | "image" | "file";
+  type: "text" | "image" | "file" | "audio";
   attachment: MessageAttachment | null;
   sender: MessageSender;
   isForwarded: boolean;
@@ -54,7 +55,7 @@ export interface ChatMessage {
   _id: string;
   conversation: string;
   sender: MessageSender;
-  type: "text" | "image" | "file";
+  type: "text" | "image" | "file" | "audio";
   content: string;
   attachment: MessageAttachment | null;
   replyTo: RepliedMessage | null;

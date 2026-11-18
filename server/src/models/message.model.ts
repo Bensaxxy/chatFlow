@@ -14,7 +14,7 @@ const messageAttachmentSchema = new Schema(
 
     resourceType: {
       type: String,
-      enum: ["image", "raw"],
+      enum: ["image", "raw", "video"],
       required: true,
     },
 
@@ -45,6 +45,12 @@ const messageAttachmentSchema = new Schema(
       type: Number,
       default: null,
     },
+
+    duration: {
+      type: Number,
+      min: 0,
+      default: null,
+    },
   },
   {
     _id: false,
@@ -68,7 +74,7 @@ const messageSchema = new Schema(
 
     type: {
       type: String,
-      enum: ["text", "image", "file"],
+      enum: ["text", "image", "file", "audio"],
       default: "text",
     },
 

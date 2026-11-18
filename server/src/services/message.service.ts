@@ -52,6 +52,7 @@ interface StoredMessageAttachment {
   size: number;
   width: number | null;
   height: number | null;
+  duration: number | null;
 }
 
 const escapeRegularExpression = (value: string): string =>
@@ -72,6 +73,13 @@ const mimeTypeByExtension: Record<string, string> = {
   ".png": "image/png",
   ".webp": "image/webp",
   ".gif": "image/gif",
+  ".aac": "audio/aac",
+  ".m4a": "audio/mp4",
+  ".mp3": "audio/mpeg",
+  ".ogg": "audio/ogg",
+  ".opus": "audio/ogg",
+  ".wav": "audio/wav",
+  ".webm": "audio/webm",
   ".pdf": "application/pdf",
   ".txt": "text/plain",
   ".csv": "text/csv",
@@ -91,11 +99,18 @@ const resolveAttachmentMimeType = (
   mimeType: string,
   fileName: string,
 ): string => {
-  if (mimeType && mimeType !== "application/octet-stream") {
-    return mimeType;
+  const normalizedMimeType = mimeType.split(";")[0]?.trim().toLowerCase() ?? "";
+
+  if (
+    normalizedMimeType &&
+    normalizedMimeType !== "application/octet-stream"
+  ) {
+    return normalizedMimeType;
   }
 
-  return mimeTypeByExtension[extname(fileName).toLowerCase()] ?? mimeType;
+  return (
+    mimeTypeByExtension[extname(fileName).toLowerCase()] ?? normalizedMimeType
+  );
 };
 
 const verifyConversationMembership = async (
@@ -150,7 +165,7 @@ interface CreateRealtimeMessageOptions {
   participantIds: string[];
   senderId: string;
   content: string;
-  messageType?: "text" | "image" | "file";
+  messageType?: "text" | "image" | "file" | "audio";
   attachment?: StoredMessageAttachment | null;
   replyToMessageId?: string | null;
   isForwarded?: boolean;
@@ -266,10 +281,19 @@ export const sendMessageAttachment = async (
   const mimeType = resolveAttachmentMimeType(file.mimetype, file.originalname);
 
   const isImage = mimeType.startsWith("image/");
+  const isAudio = mimeType.startsWith("audio/");
 
-  const resourceType: MessageAttachmentResourceType = isImage ? "image" : "raw";
+  const resourceType: MessageAttachmentResourceType = isImage
+    ? "image"
+    : isAudio
+      ? "video"
+      : "raw";
 
-  const messageType: "image" | "file" = isImage ? "image" : "file";
+  const messageType: "image" | "file" | "audio" = isImage
+    ? "image"
+    : isAudio
+      ? "audio"
+      : "file";
 
   const originalExtension = extname(file.originalname)
     .toLowerCase()
@@ -300,6 +324,10 @@ export const sendMessageAttachment = async (
     width: typeof uploadResult.width === "number" ? uploadResult.width : null,
     height:
       typeof uploadResult.height === "number" ? uploadResult.height : null,
+    duration:
+      isAudio && typeof uploadResult.duration === "number"
+        ? uploadResult.duration
+        : null,
   };
 
   try {
@@ -391,6 +419,7 @@ export const forwardMessage = async (
           size: sourceMessage.attachment.size,
           width: sourceMessage.attachment.width ?? null,
           height: sourceMessage.attachment.height ?? null,
+          duration: sourceMessage.attachment.duration ?? null,
         }
       : null;
 
