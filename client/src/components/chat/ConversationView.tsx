@@ -16,6 +16,7 @@ import {
   X,
 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Fragment,
   useCallback,
@@ -27,6 +28,7 @@ import {
 } from "react";
 import { toast } from "react-toastify";
 
+import UserAvatar from "@/components/chat/UserAvatar";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSocket } from "@/contexts/SocketContext";
 import { getApiErrorMessage } from "@/lib/api/errors";
@@ -51,8 +53,6 @@ import {
   type MessageReactionEmoji,
   type RepliedMessage,
 } from "@/types/message";
-import UserAvatar from "./UserAvatar";
-import { useRouter } from "next/navigation";
 
 interface ConversationViewProps {
   conversationId: string;
@@ -111,6 +111,7 @@ const formatLastSeen = (value?: string | null): string => {
 
   const now = new Date();
   const yesterday = new Date(now);
+
   yesterday.setDate(now.getDate() - 1);
 
   const time = lastSeenDate.toLocaleTimeString([], {
@@ -169,15 +170,11 @@ const addMessageIfMissing = (
 ): ChatMessage[] => {
   const normalizedMessage = normalizeMessage(incomingMessage);
 
-  const messageAlreadyExists = currentMessages.some(
+  return currentMessages.some(
     (message) => message._id === normalizedMessage._id,
-  );
-
-  if (messageAlreadyExists) {
-    return currentMessages;
-  }
-
-  return [...currentMessages, normalizedMessage];
+  )
+    ? currentMessages
+    : [...currentMessages, normalizedMessage];
 };
 
 const createReplyPreview = (message: ChatMessage): RepliedMessage => ({
@@ -195,6 +192,7 @@ const replaceMessage = (
   updatedMessage: ChatMessage,
 ): ChatMessage[] => {
   const normalizedMessage = normalizeMessage(updatedMessage);
+
   const replyPreview = createReplyPreview(normalizedMessage);
 
   return currentMessages.map((message) => {
@@ -279,7 +277,13 @@ export default function ConversationView({
   const { user } = useAuth();
   const router = useRouter();
 
-  const { socket, isConnected, onlineUserIds, lastSeenByUser } = useSocket();
+  const {
+    socket,
+    isConnected,
+    onlineUserIds,
+    lastSeenByUser,
+    updatedProfiles,
+  } = useSocket();
 
   const currentUserId = user?._id;
 
@@ -288,10 +292,13 @@ export default function ConversationView({
   const [messages, setMessages] = useState<ChatMessage[]>([]);
 
   const [messageText, setMessageText] = useState("");
+
   const [nextCursor, setNextCursor] = useState<string | null>(null);
 
   const [hasMore, setHasMore] = useState(false);
+
   const [isLoading, setIsLoading] = useState(true);
+
   const [isLoadingOlder, setIsLoadingOlder] = useState(false);
 
   const [isSending, setIsSending] = useState(false);
@@ -364,6 +371,7 @@ export default function ConversationView({
 
       if (rect.bottom >= containerTop + 12) {
         currentDate = element.dataset.messageDate ?? "";
+
         break;
       }
     }
@@ -411,13 +419,16 @@ export default function ConversationView({
           getConversationMessages(conversationId, null, controller.signal),
         ]);
 
-        if (controller.signal.aborted) return;
+        if (controller.signal.aborted) {
+          return;
+        }
 
         setConversation(conversationResult);
 
         setMessages(messageResult.messages.map(normalizeMessage));
 
         setNextCursor(messageResult.nextCursor);
+
         setHasMore(messageResult.hasMore);
 
         try {
@@ -444,6 +455,7 @@ export default function ConversationView({
   const stopTyping = useCallback((): void => {
     if (typingTimeoutRef.current !== null) {
       window.clearTimeout(typingTimeoutRef.current);
+
       typingTimeoutRef.current = null;
     }
 
@@ -456,7 +468,9 @@ export default function ConversationView({
   }, [socket, conversationId]);
 
   useEffect(() => {
-    if (!isConnected || !currentUserId) return;
+    if (!isConnected || !currentUserId) {
+      return;
+    }
 
     let isActive = true;
 
@@ -515,14 +529,12 @@ export default function ConversationView({
         current.map((message) => {
           const readBy = Array.isArray(message.readBy) ? message.readBy : [];
 
-          if (readBy.includes(payload.userId)) {
-            return message;
-          }
-
-          return {
-            ...message,
-            readBy: [...readBy, payload.userId],
-          };
+          return readBy.includes(payload.userId)
+            ? message
+            : {
+                ...message,
+                readBy: [...readBy, payload.userId],
+              };
         }),
       );
     };
@@ -540,11 +552,13 @@ export default function ConversationView({
       }
 
       clearRemoteTypingTimeout();
+
       setIsOtherUserTyping(payload.isTyping);
 
       if (payload.isTyping) {
         remoteTypingTimeoutRef.current = window.setTimeout(() => {
           setIsOtherUserTyping(false);
+
           remoteTypingTimeoutRef.current = null;
         }, 3000);
       }
@@ -561,6 +575,7 @@ export default function ConversationView({
 
       if (editingMessageIdRef.current === payload.messageId) {
         editingMessageIdRef.current = null;
+
         setEditingMessageId(null);
         setMessageText("");
       }
@@ -577,9 +592,13 @@ export default function ConversationView({
     };
 
     socket.on("message:new", handleNewMessage);
+
     socket.on("message:updated", handleMessageUpdated);
+
     socket.on("conversation:read", handleConversationRead);
+
     socket.on("typing:update", handleTypingUpdate);
+
     socket.on("message:deleted", handleMessageDeleted);
 
     socket.emit("conversation:join", conversationId, (result) => {
@@ -595,9 +614,13 @@ export default function ConversationView({
       clearRemoteTypingTimeout();
 
       socket.off("message:new", handleNewMessage);
+
       socket.off("message:updated", handleMessageUpdated);
+
       socket.off("conversation:read", handleConversationRead);
+
       socket.off("typing:update", handleTypingUpdate);
+
       socket.off("message:deleted", handleMessageDeleted);
 
       setIsOtherUserTyping(false);
@@ -617,7 +640,9 @@ export default function ConversationView({
   }, [isLoading, messages.length]);
 
   const handleLoadOlder = async (): Promise<void> => {
-    if (!nextCursor || isLoadingOlder) return;
+    if (!nextCursor || isLoadingOlder) {
+      return;
+    }
 
     try {
       setIsLoadingOlder(true);
@@ -630,6 +655,7 @@ export default function ConversationView({
       ]);
 
       setNextCursor(result.nextCursor);
+
       setHasMore(result.hasMore);
     } catch (error) {
       toast.error(getApiErrorMessage(error));
@@ -659,6 +685,7 @@ export default function ConversationView({
       socket.emit("typing:start", conversationId);
 
       isTypingRef.current = true;
+
       lastTypingEmitAtRef.current = now;
     }
 
@@ -670,7 +697,9 @@ export default function ConversationView({
   };
 
   const handleStartReplying = (message: ChatMessage): void => {
-    if (message.deletedForEveryoneAt) return;
+    if (message.deletedForEveryoneAt) {
+      return;
+    }
 
     editingMessageIdRef.current = null;
 
@@ -839,7 +868,9 @@ export default function ConversationView({
     messageId: string,
     scope: DeleteMessageScope,
   ): Promise<void> => {
-    if (deletingMessageId || !currentUserId) return;
+    if (deletingMessageId || !currentUserId) {
+      return;
+    }
 
     setOpenMessageMenuId(null);
 
@@ -923,10 +954,14 @@ export default function ConversationView({
 
   const otherParticipant = getOtherParticipant(conversation, user._id);
 
+  const updatedOtherProfile = otherParticipant
+    ? updatedProfiles.get(otherParticipant._id)
+    : undefined;
+
   const displayName =
     conversation.type === "group"
       ? (conversation.name ?? "Unnamed group")
-      : (otherParticipant?.name ?? "Unknown user");
+      : (updatedOtherProfile?.name ?? otherParticipant?.name ?? "Unknown user");
 
   const isDirectConversation = conversation.type === "direct";
 
@@ -967,7 +1002,9 @@ export default function ConversationView({
             name={displayName}
             avatarUrl={
               conversation.type === "direct"
-                ? otherParticipant?.avatarUrl
+                ? updatedOtherProfile
+                  ? updatedOtherProfile.avatarUrl
+                  : otherParticipant?.avatarUrl
                 : null
             }
             className="h-11 w-11"
@@ -1055,7 +1092,25 @@ export default function ConversationView({
               {messages.map((message, messageIndex) => {
                 const isMine = message.sender._id === user._id;
 
-                const senderName = message.sender.name || "Unknown user";
+                const updatedSenderProfile = updatedProfiles.get(
+                  message.sender._id,
+                );
+
+                const senderName = isMine
+                  ? user.name
+                  : (updatedSenderProfile?.name ??
+                    message.sender.name ??
+                    "Unknown user");
+
+                const senderAvatarUrl = isMine
+                  ? user.avatarUrl
+                  : updatedSenderProfile
+                    ? updatedSenderProfile.avatarUrl
+                    : message.sender.avatarUrl;
+
+                const updatedReplySenderProfile = message.replyTo
+                  ? updatedProfiles.get(message.replyTo.sender._id)
+                  : undefined;
 
                 const recipientId = otherParticipant?._id;
 
@@ -1111,32 +1166,6 @@ export default function ConversationView({
                   }),
                 ).filter(({ count }) => count > 0);
 
-                const reactionButton = !isDeletedForEveryone ? (
-                  <button
-                    type="button"
-                    disabled={isReacting}
-                    onClick={() => {
-                      setOpenMessageMenuId(null);
-                      setReactionPickerMessageId(
-                        isReactionPickerOpen ? null : message._id,
-                      );
-                    }}
-                    aria-label="React to message"
-                    title="React to message"
-                    className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border shadow-sm transition disabled:cursor-not-allowed disabled:opacity-50 ${
-                      isMine
-                        ? "border-cyan-200 bg-white text-cyan-700 hover:bg-cyan-50"
-                        : "border-slate-200 bg-white text-slate-500 hover:border-cyan-200 hover:bg-cyan-50 hover:text-cyan-700"
-                    }`}
-                  >
-                    {isReacting ? (
-                      <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <SmilePlus className="h-4 w-4" />
-                    )}
-                  </button>
-                ) : null;
-
                 const previousMessage = messages[messageIndex - 1];
 
                 const showDateSeparator =
@@ -1165,13 +1194,11 @@ export default function ConversationView({
                       {!isMine && (
                         <UserAvatar
                           name={senderName}
-                          avatarUrl={message.sender.avatarUrl}
+                          avatarUrl={senderAvatarUrl}
                           className="h-8 w-8 text-xs"
                           fallbackClassName="bg-slate-200 font-semibold text-slate-700"
                         />
                       )}
-
-                      {isMine && reactionButton}
 
                       <div
                         className={`relative min-w-0 max-w-[75%] rounded-2xl px-3 py-2 shadow-sm sm:max-w-[60%] lg:max-w-[55%] ${
@@ -1204,6 +1231,33 @@ export default function ConversationView({
                             <MoreVertical className="h-4 w-4" />
                           )}
                         </button>
+
+                        {!isDeletedForEveryone && (
+                          <button
+                            type="button"
+                            disabled={isReacting}
+                            onClick={() => {
+                              setOpenMessageMenuId(null);
+
+                              setReactionPickerMessageId(
+                                isReactionPickerOpen ? null : message._id,
+                              );
+                            }}
+                            aria-label="React to message"
+                            title="React to message"
+                            className={`absolute right-8 top-1 z-30 flex h-7 w-7 items-center justify-center rounded-full transition disabled:opacity-50 ${
+                              isMine
+                                ? "text-cyan-100 hover:bg-cyan-500 hover:text-white"
+                                : "text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                            }`}
+                          >
+                            {isReacting ? (
+                              <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <SmilePlus className="h-4 w-4" />
+                            )}
+                          </button>
+                        )}
 
                         {isReactionPickerOpen && !isDeletedForEveryone && (
                           <>
@@ -1347,7 +1401,8 @@ export default function ConversationView({
                                 >
                                   {message.replyTo.sender._id === user._id
                                     ? "You"
-                                    : message.replyTo.sender.name}
+                                    : (updatedReplySenderProfile?.name ??
+                                      message.replyTo.sender.name)}
                                 </p>
 
                                 <p
@@ -1363,7 +1418,7 @@ export default function ConversationView({
                         )}
 
                         <p
-                          className={`whitespace-pre-wrap break-words pr-10 text-sm leading-5 ${
+                          className={`whitespace-pre-wrap break-words pr-14 text-sm leading-5 ${
                             isDeletedForEveryone ? "italic opacity-80" : ""
                           }`}
                         >
@@ -1443,14 +1498,10 @@ export default function ConversationView({
                         </div>
                       </div>
 
-                      {!isMine && reactionButton}
-
                       {isMine && (
                         <UserAvatar
                           name={senderName}
-                          avatarUrl={
-                            isMine ? user.avatarUrl : message.sender.avatarUrl
-                          }
+                          avatarUrl={senderAvatarUrl}
                           className="h-8 w-8 text-xs"
                           fallbackClassName="bg-cyan-100 font-semibold text-cyan-800"
                         />
@@ -1485,7 +1536,8 @@ export default function ConversationView({
                 Replying to{" "}
                 {replyingToMessage.sender._id === user._id
                   ? "yourself"
-                  : replyingToMessage.sender.name}
+                  : (updatedProfiles.get(replyingToMessage.sender._id)?.name ??
+                    replyingToMessage.sender.name)}
               </p>
 
               <p className="mt-0.5 truncate text-xs text-slate-500">

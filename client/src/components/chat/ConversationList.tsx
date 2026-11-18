@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
+import UserAvatar from "@/components/chat/UserAvatar";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSocket } from "@/contexts/SocketContext";
 import { getApiErrorMessage } from "@/lib/api/errors";
@@ -14,14 +15,11 @@ import type {
   ConversationParticipant,
 } from "@/types/conversation";
 import type { ChatMessage, MessageDeletedPayload } from "@/types/message";
-import UserAvatar from "./UserAvatar";
 
 const formatConversationTime = (value: string): string => {
   const date = new Date(value);
 
-  if (Number.isNaN(date.getTime())) {
-    return "";
-  }
+  if (Number.isNaN(date.getTime())) return "";
 
   const today = new Date();
 
@@ -48,11 +46,8 @@ const getOtherParticipant = (
 
 const normalizeMessage = (message: ChatMessage): ChatMessage => ({
   ...message,
-
   deliveredTo: Array.isArray(message.deliveredTo) ? message.deliveredTo : [],
-
   readBy: Array.isArray(message.readBy) ? message.readBy : [],
-
   deletedFor: Array.isArray(message.deletedFor) ? message.deletedFor : [],
 });
 
@@ -60,7 +55,7 @@ export default function ConversationList() {
   const pathname = usePathname();
   const { user } = useAuth();
 
-  const { socket, isConnected, onlineUserIds } = useSocket();
+  const { socket, isConnected, onlineUserIds, updatedProfiles } = useSocket();
 
   const currentUserId = user?._id;
 
@@ -78,9 +73,6 @@ export default function ConversationList() {
 
   const typingTimeoutsRef = useRef<Map<string, number>>(new Map());
 
-  /*
-   * Load the conversation list.
-   */
   useEffect(() => {
     const controller = new AbortController();
 
@@ -107,36 +99,24 @@ export default function ConversationList() {
 
     void loadConversations();
 
-    return () => {
-      controller.abort();
-    };
-  }, [reloadKey]);
+    return () => controller.abort();
+  }, [pathname, reloadKey]);
 
-  /*
-   * Handle new messages, edited messages,
-   * read receipts and deleted messages.
-   */
   useEffect(() => {
-    if (!isConnected || !currentUserId) {
-      return;
-    }
+    if (!isConnected || !currentUserId) return;
 
     const clearTypingConversation = (conversationId: string): void => {
       const timeoutId = typingTimeoutsRef.current.get(conversationId);
 
       if (timeoutId !== undefined) {
         window.clearTimeout(timeoutId);
-
         typingTimeoutsRef.current.delete(conversationId);
       }
 
       setTypingConversationIds((current) => {
-        if (!current.has(conversationId)) {
-          return current;
-        }
+        if (!current.has(conversationId)) return current;
 
         const next = new Set(current);
-
         next.delete(conversationId);
 
         return next;
@@ -154,10 +134,6 @@ export default function ConversationList() {
       updatedAt: string;
       incrementUnread: boolean;
     }): void => {
-      /*
-       * Once a message arrives, the sender
-       * should no longer appear as typing.
-       */
       clearTypingConversation(conversationId);
 
       setConversations((current) => {
@@ -165,9 +141,7 @@ export default function ConversationList() {
           (conversation) => conversation._id === conversationId,
         );
 
-        if (!existingConversation) {
-          return current;
-        }
+        if (!existingConversation) return current;
 
         const conversationIsOpen = pathname === `/chats/${conversationId}`;
 
@@ -183,13 +157,8 @@ export default function ConversationList() {
           unreadCount,
         };
 
-        /*
-         * New messages move the conversation
-         * to the top of the list.
-         */
         return [
           updatedConversation,
-
           ...current.filter(
             (conversation) => conversation._id !== conversationId,
           ),
@@ -202,13 +171,7 @@ export default function ConversationList() {
       userId: string;
       readAt: string;
     }): void => {
-      /*
-       * Only clear this browser user's
-       * unread count.
-       */
-      if (payload.userId !== currentUserId) {
-        return;
-      }
+      if (payload.userId !== currentUserId) return;
 
       setConversations((current) =>
         current.map((conversation) =>
@@ -230,11 +193,6 @@ export default function ConversationList() {
         current.map((conversation) => {
           const lastMessage = conversation.lastMessage;
 
-          /*
-           * Only update the preview when the
-           * edited message is currently the
-           * conversation's latest message.
-           */
           if (
             conversation._id !== payload.conversationId ||
             !lastMessage ||
@@ -243,13 +201,8 @@ export default function ConversationList() {
             return conversation;
           }
 
-          /*
-           * Editing does not increase unread
-           * count or reorder the conversation.
-           */
           return {
             ...conversation,
-
             lastMessage: normalizeMessage(payload.message),
           };
         }),
@@ -284,7 +237,6 @@ export default function ConversationList() {
 
             return {
               ...conversation,
-
               lastMessage: {
                 ...lastMessage,
                 deletedFor,
@@ -294,16 +246,12 @@ export default function ConversationList() {
 
           return {
             ...conversation,
-
             lastMessage: {
               ...lastMessage,
-
               content: "This message was deleted",
-
               deletedFor: Array.isArray(lastMessage.deletedFor)
                 ? lastMessage.deletedFor
                 : [],
-
               deletedForEveryoneAt: payload.deletedForEveryoneAt,
             },
           };
@@ -330,14 +278,8 @@ export default function ConversationList() {
     };
   }, [socket, isConnected, pathname, currentUserId]);
 
-  /*
-   * Receive typing events even when the
-   * conversation is not currently open.
-   */
   useEffect(() => {
-    if (!isConnected || !currentUserId) {
-      return;
-    }
+    if (!isConnected || !currentUserId) return;
 
     const typingTimeouts = typingTimeoutsRef.current;
 
@@ -346,17 +288,13 @@ export default function ConversationList() {
 
       if (existingTimeout !== undefined) {
         window.clearTimeout(existingTimeout);
-
         typingTimeouts.delete(conversationId);
       }
 
       setTypingConversationIds((current) => {
-        if (!current.has(conversationId)) {
-          return current;
-        }
+        if (!current.has(conversationId)) return current;
 
         const next = new Set(current);
-
         next.delete(conversationId);
 
         return next;
@@ -368,13 +306,10 @@ export default function ConversationList() {
       userId: string;
       isTyping: boolean;
     }): void => {
-      if (payload.userId === currentUserId) {
-        return;
-      }
+      if (payload.userId === currentUserId) return;
 
       if (!payload.isTyping) {
         removeTypingConversation(payload.conversationId);
-
         return;
       }
 
@@ -386,7 +321,6 @@ export default function ConversationList() {
 
       setTypingConversationIds((current) => {
         const next = new Set(current);
-
         next.add(payload.conversationId);
 
         return next;
@@ -397,7 +331,6 @@ export default function ConversationList() {
 
         setTypingConversationIds((current) => {
           const next = new Set(current);
-
           next.delete(payload.conversationId);
 
           return next;
@@ -413,7 +346,6 @@ export default function ConversationList() {
       }
 
       typingTimeouts.clear();
-
       setTypingConversationIds(new Set());
     };
 
@@ -431,12 +363,11 @@ export default function ConversationList() {
       }
 
       typingTimeouts.clear();
+      setTypingConversationIds(new Set());
     };
   }, [socket, isConnected, currentUserId]);
 
-  if (!user) {
-    return null;
-  }
+  if (!user) return null;
 
   if (isLoading) {
     return (
@@ -490,10 +421,16 @@ export default function ConversationList() {
       {conversations.map((conversation) => {
         const otherParticipant = getOtherParticipant(conversation, user._id);
 
+        const updatedOtherProfile = otherParticipant
+          ? updatedProfiles.get(otherParticipant._id)
+          : undefined;
+
         const displayName =
           conversation.type === "group"
             ? (conversation.name ?? "Unnamed group")
-            : (otherParticipant?.name ?? "Unknown user");
+            : (updatedOtherProfile?.name ??
+              otherParticipant?.name ??
+              "Unknown user");
 
         const isActive = pathname === `/chats/${conversation._id}`;
 
@@ -542,7 +479,9 @@ export default function ConversationList() {
                 name={displayName}
                 avatarUrl={
                   conversation.type === "direct"
-                    ? otherParticipant?.avatarUrl
+                    ? updatedOtherProfile
+                      ? updatedOtherProfile.avatarUrl
+                      : otherParticipant?.avatarUrl
                     : null
                 }
                 className="h-full w-full"
@@ -593,9 +532,7 @@ export default function ConversationList() {
 
                       <span className="inline-flex items-center gap-0.5">
                         <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-cyan-600 [animation-delay:-0.3s]" />
-
                         <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-cyan-600 [animation-delay:-0.15s]" />
-
                         <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-cyan-600" />
                       </span>
                     </span>

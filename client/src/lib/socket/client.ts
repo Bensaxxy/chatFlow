@@ -1,6 +1,7 @@
 import { io, type Socket } from "socket.io-client";
 
 import type { ChatMessage, MessageDeletedPayload } from "@/types/message";
+import { UserProfileUpdatedPayload } from "@/types/user";
 
 export interface SocketResult {
   success: boolean;
@@ -45,6 +46,8 @@ interface ServerToClientEvents {
   }) => void;
 
   "message:deleted": (payload: MessageDeletedPayload) => void;
+
+  "user:profile-updated": (payload: UserProfileUpdatedPayload) => void;
 }
 
 interface ClientToServerEvents {

@@ -7,6 +7,68 @@ import {
 import { User } from "../models/user.model";
 import { AppError } from "../utils/app-error";
 import type { UpdateProfileInput } from "../validations/profile.validation";
+import { getSocketServer } from "../socket/socket.server";
+import { Conversation } from "../models/conversation.model";
+
+interface ProfileUpdatePayload {
+  user: {
+    _id: string;
+    name: string;
+    avatarUrl: string | null;
+    bio: string;
+    updatedAt: string;
+  };
+}
+
+const emitProfileUpdate = async (
+  payload: ProfileUpdatePayload,
+): Promise<void> => {
+  try {
+    const io = getSocketServer();
+
+    const conversations = await Conversation.find({
+      participants: payload.user._id,
+    })
+      .select("participants")
+      .lean();
+
+    const recipientIds = new Set<string>([payload.user._id]);
+
+    for (const conversation of conversations) {
+      for (const participantId of conversation.participants) {
+        recipientIds.add(participantId.toString());
+      }
+    }
+
+    for (const recipientId of recipientIds) {
+      io.to(`user:${recipientId}`).emit("user:profile-updated", payload);
+    }
+  } catch (error) {
+    /*
+     * A socket failure must not cause a successful
+     * database profile update to fail.
+     */
+    console.error("Could not emit profile update:", error);
+  }
+};
+
+const createProfileUpdatePayload = (user: {
+  _id: unknown;
+  name: string;
+  avatarUrl?: string | null;
+  bio?: string;
+  updatedAt?: Date;
+}): ProfileUpdatePayload => ({
+  user: {
+    _id: String(user._id),
+    name: user.name,
+    avatarUrl: user.avatarUrl ?? null,
+    bio: user.bio ?? "",
+    updatedAt: user.updatedAt
+      ? new Date(user.updatedAt).toISOString()
+      : new Date().toISOString(),
+  },
+});
 
 export const getUserProfile = async (userId: string) => {
   const user = await User.findById(userId);
@@ -46,6 +108,8 @@ export const updateUserProfile = async (
   if (!updatedUser) {
     throw new AppError("User profile was not found", 404, "USER_NOT_FOUND");
   }
+
+  await emitProfileUpdate(createProfileUpdatePayload(updatedUser));
 
   return updatedUser;
 };
@@ -91,6 +155,8 @@ export const updateUserAvatar = async (
     );
   }
 
+  await emitProfileUpdate(createProfileUpdatePayload(user));
+
   return user;
 };
 
@@ -113,6 +179,8 @@ export const removeUserAvatar = async (userId: string) => {
       console.error("Could not remove profile picture from Cloudinary:", error);
     });
   }
+
+  await emitProfileUpdate(createProfileUpdatePayload(user));
 
   return user;
 };

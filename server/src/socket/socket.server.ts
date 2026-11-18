@@ -59,6 +59,16 @@ interface ServerToClientEvents {
     conversationId: string;
     message: unknown;
   }) => void;
+
+  "user:profile-updated": (payload: {
+    user: {
+      _id: string;
+      name: string;
+      avatarUrl: string | null;
+      bio: string;
+      updatedAt: string;
+    };
+  }) => void;
 }
 
 interface ClientToServerEvents {

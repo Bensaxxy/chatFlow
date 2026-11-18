@@ -13,46 +13,49 @@ import {
 
 import { useAuth } from "@/contexts/AuthContext";
 import { apiClient } from "@/lib/api/client";
-import {
-  chatSocket,
-  type ChatSocket,
-} from "@/lib/socket/client";
+import { chatSocket, type ChatSocket } from "@/lib/socket/client";
+import type {
+  RealtimeUserProfile,
+  UserProfileUpdatedPayload,
+} from "@/types/user";
 
 interface SocketContextValue {
   socket: ChatSocket;
   isConnected: boolean;
   onlineUserIds: ReadonlySet<string>;
   lastSeenByUser: ReadonlyMap<string, string>;
+  updatedProfiles: ReadonlyMap<string, RealtimeUserProfile>;
+
   connectSocket: () => void;
   disconnectSocket: () => void;
 }
 
-const SocketContext = createContext<
-  SocketContextValue | undefined
->(undefined);
+const SocketContext = createContext<SocketContextValue | undefined>(undefined);
 
 interface SocketProviderProps {
   children: ReactNode;
 }
 
-export function SocketProvider({
-  children,
-}: SocketProviderProps) {
-  const { isAuthenticated, isAuthLoading } = useAuth();
+export function SocketProvider({ children }: SocketProviderProps) {
+  const { user, isAuthenticated, isAuthLoading, refreshUser } = useAuth();
 
-  const [isConnected, setIsConnected] = useState(
-    chatSocket.connected,
+  const [isConnected, setIsConnected] = useState(chatSocket.connected);
+
+  const [onlineUserIds, setOnlineUserIds] = useState<Set<string>>(
+    () => new Set(),
   );
 
-  const [onlineUserIds, setOnlineUserIds] = useState<
-    Set<string>
-  >(() => new Set());
+  const [lastSeenByUser, setLastSeenByUser] = useState<Map<string, string>>(
+    () => new Map(),
+  );
 
-  const [lastSeenByUser, setLastSeenByUser] = useState<
-    Map<string, string>
+  const [updatedProfiles, setUpdatedProfiles] = useState<
+    Map<string, RealtimeUserProfile>
   >(() => new Map());
 
   const refreshInProgress = useRef(false);
+
+  const currentUserId = user?._id;
 
   const connectSocket = useCallback((): void => {
     if (!chatSocket.connected) {
@@ -65,6 +68,8 @@ export function SocketProvider({
 
     setIsConnected(false);
     setOnlineUserIds(new Set());
+    setLastSeenByUser(new Map());
+    setUpdatedProfiles(new Map());
   }, []);
 
   useEffect(() => {
@@ -78,20 +83,14 @@ export function SocketProvider({
       setOnlineUserIds(new Set());
     };
 
-    const handleReady = (payload: {
-      userId: string;
-    }): void => {
-      console.log(
-        `Socket authenticated for user ${payload.userId}`,
-      );
+    const handleReady = (payload: { userId: string }): void => {
+      console.log(`Socket authenticated for user ${payload.userId}`);
     };
 
     const handlePresenceSnapshot = (payload: {
       onlineUserIds: string[];
     }): void => {
-      setOnlineUserIds(
-        new Set(payload.onlineUserIds),
-      );
+      setOnlineUserIds(new Set(payload.onlineUserIds));
     };
 
     const handlePresenceUpdate = (payload: {
@@ -100,9 +99,7 @@ export function SocketProvider({
       lastSeenAt: string | null;
     }): void => {
       setOnlineUserIds((currentOnlineUsers) => {
-        const nextOnlineUsers = new Set(
-          currentOnlineUsers,
-        );
+        const nextOnlineUsers = new Set(currentOnlineUsers);
 
         if (payload.isOnline) {
           nextOnlineUsers.add(payload.userId);
@@ -115,24 +112,36 @@ export function SocketProvider({
 
       if (payload.lastSeenAt) {
         const lastSeenAt = payload.lastSeenAt;
-        setLastSeenByUser((currentLastSeen) => {
-          const nextLastSeen = new Map(
-            currentLastSeen,
-          );
 
-          nextLastSeen.set(
-            payload.userId,
-            lastSeenAt,
-          );
+        setLastSeenByUser((currentLastSeen) => {
+          const nextLastSeen = new Map(currentLastSeen);
+
+          nextLastSeen.set(payload.userId, lastSeenAt);
 
           return nextLastSeen;
         });
       }
     };
 
-    const handleConnectionError = async (
-      error: Error,
-    ): Promise<void> => {
+    const handleProfileUpdated = (payload: UserProfileUpdatedPayload): void => {
+      setUpdatedProfiles((currentProfiles) => {
+        const nextProfiles = new Map(currentProfiles);
+
+        nextProfiles.set(payload.user._id, payload.user);
+
+        return nextProfiles;
+      });
+
+      /*
+       * Keep the authenticated user synchronized
+       * across their other tabs and devices.
+       */
+      if (payload.user._id === currentUserId) {
+        void refreshUser();
+      }
+    };
+
+    const handleConnectionError = async (error: Error): Promise<void> => {
       setIsConnected(false);
       setOnlineUserIds(new Set());
 
@@ -140,10 +149,7 @@ export function SocketProvider({
         error.message === "INVALID_ACCESS_TOKEN" ||
         error.message === "AUTHENTICATION_REQUIRED";
 
-      if (
-        !isAuthenticationError ||
-        refreshInProgress.current
-      ) {
+      if (!isAuthenticationError || refreshInProgress.current) {
         return;
       }
 
@@ -161,23 +167,18 @@ export function SocketProvider({
     };
 
     chatSocket.on("connect", handleConnect);
+
     chatSocket.on("disconnect", handleDisconnect);
+
     chatSocket.on("socket:ready", handleReady);
 
-    chatSocket.on(
-      "presence:snapshot",
-      handlePresenceSnapshot,
-    );
+    chatSocket.on("presence:snapshot", handlePresenceSnapshot);
 
-    chatSocket.on(
-      "presence:update",
-      handlePresenceUpdate,
-    );
+    chatSocket.on("presence:update", handlePresenceUpdate);
 
-    chatSocket.on(
-      "connect_error",
-      handleConnectionError,
-    );
+    chatSocket.on("user:profile-updated", handleProfileUpdated);
+
+    chatSocket.on("connect_error", handleConnectionError);
 
     if (!isAuthLoading && isAuthenticated) {
       connectSocket();
@@ -189,30 +190,24 @@ export function SocketProvider({
 
     return () => {
       chatSocket.off("connect", handleConnect);
-      chatSocket.off(
-        "disconnect",
-        handleDisconnect,
-      );
+
+      chatSocket.off("disconnect", handleDisconnect);
+
       chatSocket.off("socket:ready", handleReady);
 
-      chatSocket.off(
-        "presence:snapshot",
-        handlePresenceSnapshot,
-      );
+      chatSocket.off("presence:snapshot", handlePresenceSnapshot);
 
-      chatSocket.off(
-        "presence:update",
-        handlePresenceUpdate,
-      );
+      chatSocket.off("presence:update", handlePresenceUpdate);
 
-      chatSocket.off(
-        "connect_error",
-        handleConnectionError,
-      );
+      chatSocket.off("user:profile-updated", handleProfileUpdated);
+
+      chatSocket.off("connect_error", handleConnectionError);
     };
   }, [
     isAuthenticated,
     isAuthLoading,
+    currentUserId,
+    refreshUser,
     connectSocket,
     disconnectSocket,
   ]);
@@ -223,6 +218,7 @@ export function SocketProvider({
       isConnected,
       onlineUserIds,
       lastSeenByUser,
+      updatedProfiles,
       connectSocket,
       disconnectSocket,
     }),
@@ -230,15 +226,14 @@ export function SocketProvider({
       isConnected,
       onlineUserIds,
       lastSeenByUser,
+      updatedProfiles,
       connectSocket,
       disconnectSocket,
     ],
   );
 
   return (
-    <SocketContext.Provider value={value}>
-      {children}
-    </SocketContext.Provider>
+    <SocketContext.Provider value={value}>{children}</SocketContext.Provider>
   );
 }
 
@@ -246,9 +241,7 @@ export const useSocket = (): SocketContextValue => {
   const context = useContext(SocketContext);
 
   if (!context) {
-    throw new Error(
-      "useSocket must be used inside SocketProvider",
-    );
+    throw new Error("useSocket must be used inside SocketProvider");
   }
 
   return context;

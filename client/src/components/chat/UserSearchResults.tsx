@@ -11,6 +11,7 @@ import { useEffect, useState } from "react";
 import { toast } from "react-toastify";
 
 import UserAvatar from "@/components/chat/UserAvatar";
+import { useSocket } from "@/contexts/SocketContext";
 import { getApiErrorMessage } from "@/lib/api/errors";
 import { createDirectConversation } from "@/services/conversation.service";
 import { searchUsers } from "@/services/user.service";
@@ -22,13 +23,11 @@ interface UserSearchResultsProps {
 
 export default function UserSearchResults({ query }: UserSearchResultsProps) {
   const router = useRouter();
+  const { updatedProfiles } = useSocket();
 
   const [users, setUsers] = useState<SearchUser[]>([]);
-
   const [isLoading, setIsLoading] = useState(false);
-
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-
   const [startingUserId, setStartingUserId] = useState<string | null>(null);
 
   const handleStartConversation = async (
@@ -139,56 +138,68 @@ export default function UserSearchResults({ query }: UserSearchResultsProps) {
       </p>
 
       <div className="divide-y divide-slate-100">
-        {users.map((searchUser) => (
-          <div
-            key={searchUser._id}
-            className="flex items-center gap-2 px-4 py-3 transition hover:bg-slate-50"
-          >
-            <button
-              type="button"
-              onClick={() => router.push(`/users/${searchUser._id}`)}
-              className="flex min-w-0 flex-1 items-center gap-3 text-left"
+        {users.map((searchUser) => {
+          const updatedProfile = updatedProfiles.get(searchUser._id);
+
+          const displayName = updatedProfile?.name ?? searchUser.name;
+
+          const avatarUrl = updatedProfile
+            ? updatedProfile.avatarUrl
+            : searchUser.avatarUrl;
+
+          const bio = updatedProfile?.bio ?? searchUser.bio;
+
+          return (
+            <div
+              key={searchUser._id}
+              className="flex items-center gap-2 px-4 py-3 transition hover:bg-slate-50"
             >
-              <UserAvatar
-                name={searchUser.name}
-                avatarUrl={searchUser.avatarUrl}
-                className="h-12 w-12"
-                fallbackClassName="bg-cyan-100 font-semibold text-cyan-800"
-              />
+              <button
+                type="button"
+                onClick={() => router.push(`/users/${searchUser._id}`)}
+                className="flex min-w-0 flex-1 items-center gap-3 text-left"
+              >
+                <UserAvatar
+                  name={displayName}
+                  avatarUrl={avatarUrl}
+                  className="h-12 w-12"
+                  fallbackClassName="bg-cyan-100 font-semibold text-cyan-800"
+                />
 
-              <div className="min-w-0 flex-1">
-                <p className="truncate font-medium text-slate-950">
-                  {searchUser.name}
-                </p>
-
-                <p className="truncate text-sm text-slate-500">
-                  {searchUser.email}
-                </p>
-
-                {searchUser.bio && (
-                  <p className="mt-1 truncate text-xs text-slate-400">
-                    {searchUser.bio}
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-medium text-slate-950">
+                    {displayName}
                   </p>
-                )}
-              </div>
-            </button>
 
-            <button
-              type="button"
-              onClick={() => void handleStartConversation(searchUser._id)}
-              disabled={startingUserId !== null}
-              aria-label={`Message ${searchUser.name}`}
-              title={`Message ${searchUser.name}`}
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-cyan-50 text-cyan-700 transition hover:bg-cyan-100 disabled:cursor-wait disabled:opacity-60"
-            >
-              {startingUserId === searchUser._id ? (
-                <LoaderCircle className="h-5 w-5 animate-spin" />
-              ) : (
-                <MessageCirclePlus className="h-5 w-5" />
-              )}
-            </button>
-          </div>
-        ))}
+                  <p className="truncate text-sm text-slate-500">
+                    {searchUser.email}
+                  </p>
+
+                  {bio && (
+                    <p className="mt-1 truncate text-xs text-slate-400">
+                      {bio}
+                    </p>
+                  )}
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => void handleStartConversation(searchUser._id)}
+                disabled={startingUserId !== null}
+                aria-label={`Message ${displayName}`}
+                title={`Message ${displayName}`}
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-cyan-50 text-cyan-700 transition hover:bg-cyan-100 disabled:cursor-wait disabled:opacity-60"
+              >
+                {startingUserId === searchUser._id ? (
+                  <LoaderCircle className="h-5 w-5 animate-spin" />
+                ) : (
+                  <MessageCirclePlus className="h-5 w-5" />
+                )}
+              </button>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

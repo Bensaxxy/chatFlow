@@ -17,3 +17,15 @@ export interface PublicUserProfile {
   createdAt: string;
   updatedAt: string;
 }
+
+export interface RealtimeUserProfile {
+  _id: string;
+  name: string;
+  avatarUrl: string | null;
+  bio: string;
+  updatedAt: string;
+}
+
+export interface UserProfileUpdatedPayload {
+  user: RealtimeUserProfile;
+}
