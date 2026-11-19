@@ -57,6 +57,49 @@ const messageAttachmentSchema = new Schema(
   },
 );
 
+const messageLinkPreviewSchema = new Schema(
+  {
+    url: {
+      type: String,
+      required: true,
+      maxlength: 2048,
+    },
+
+    domain: {
+      type: String,
+      required: true,
+      maxlength: 255,
+    },
+
+    title: {
+      type: String,
+      default: null,
+      maxlength: 300,
+    },
+
+    description: {
+      type: String,
+      default: null,
+      maxlength: 300,
+    },
+
+    imageUrl: {
+      type: String,
+      default: null,
+      maxlength: 2048,
+    },
+
+    status: {
+      type: String,
+      enum: ["loading", "ready", "failed"],
+      required: true,
+    },
+  },
+  {
+    _id: false,
+  },
+);
+
 const messageSchema = new Schema(
   {
     conversation: {
@@ -91,6 +134,11 @@ const messageSchema = new Schema(
 
     attachment: {
       type: messageAttachmentSchema,
+      default: null,
+    },
+
+    linkPreview: {
+      type: messageLinkPreviewSchema,
       default: null,
     },
 

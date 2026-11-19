@@ -12,6 +12,11 @@ import { Conversation } from "../models/conversation.model";
 import { Message } from "../models/message.model";
 import { getSocketServer } from "../socket/socket.server";
 import { AppError } from "../utils/app-error";
+import {
+  getLinkPreviewPlaceholder,
+  resolveLinkPreview,
+  type StoredLinkPreview,
+} from "./link-preview.service";
 import { assertDirectMessagingAllowed } from "./user.service";
 import type {
   DeleteMessageInput,
@@ -26,7 +31,7 @@ import type {
 const senderFields = "name email avatarUrl";
 
 const replyMessageFields =
-  "content type attachment sender isForwarded deletedFor " +
+  "content type attachment linkPreview sender isForwarded deletedFor " +
   "deletedForEveryoneAt editedAt createdAt";
 
 const messagePopulateOptions = [
@@ -190,10 +195,67 @@ interface CreateRealtimeMessageOptions {
   content: string;
   messageType?: "text" | "image" | "file" | "audio";
   attachment?: StoredMessageAttachment | null;
+  linkPreview?: StoredLinkPreview | null;
   replyToMessageId?: string | null;
   isForwarded?: boolean;
   forwardedFromMessageId?: string | null;
 }
+
+const scheduleLinkPreviewResolution = (
+  messageId: string,
+  conversationId: string,
+  preview: StoredLinkPreview,
+): void => {
+  void resolveLinkPreview(preview)
+    .then(async (resolvedPreview) => {
+      /*
+       * Only update the exact preview that was queued. If the sender edits
+       * their message before the network request returns, the old preview
+       * must not overwrite the new one.
+       */
+      const updatedMessage = await Message.findOneAndUpdate(
+        {
+          _id: messageId,
+          deletedForEveryoneAt: null,
+          "linkPreview.url": preview.url,
+          "linkPreview.status": "loading",
+        },
+        {
+          $set: {
+            linkPreview: resolvedPreview,
+          },
+        },
+        {
+          new: true,
+        },
+      ).populate(messagePopulateOptions);
+
+      if (!updatedMessage) {
+        return;
+      }
+
+      const conversation = await Conversation.findById(conversationId)
+        .select("participants")
+        .lean();
+
+      if (!conversation) {
+        return;
+      }
+
+      const realtimeMessage = updatedMessage.toJSON();
+      const io = getSocketServer();
+
+      for (const participantId of conversation.participants) {
+        io.to(`user:${participantId.toString()}`).emit("message:updated", {
+          conversationId,
+          message: realtimeMessage,
+        });
+      }
+    })
+    .catch((error: unknown) => {
+      console.error("Could not resolve link preview:", error);
+    });
+};
 
 const createRealtimeMessage = async ({
   conversationId,
@@ -202,11 +264,16 @@ const createRealtimeMessage = async ({
   content,
   messageType = "text",
   attachment = null,
+  linkPreview: providedLinkPreview,
   replyToMessageId = null,
   isForwarded = false,
   forwardedFromMessageId = null,
 }: CreateRealtimeMessageOptions) => {
   const io = getSocketServer();
+  const linkPreview =
+    providedLinkPreview === undefined
+      ? getLinkPreviewPlaceholder(content)
+      : providedLinkPreview;
 
   const recipientIds = participantIds.filter(
     (participantId) => participantId !== senderId,
@@ -232,6 +299,7 @@ const createRealtimeMessage = async ({
     type: messageType,
     content,
     attachment,
+    linkPreview,
     replyTo: replyToMessageId,
     isForwarded,
     forwardedFrom: forwardedFromMessageId,
@@ -260,6 +328,14 @@ const createRealtimeMessage = async ({
       updatedAt: message.createdAt.toISOString(),
       incrementUnread: participantId !== senderId,
     });
+  }
+
+  if (linkPreview?.status === "loading") {
+    scheduleLinkPreviewResolution(
+      message._id.toString(),
+      conversationId,
+      linkPreview,
+    );
   }
 
   return message;
@@ -456,6 +532,18 @@ export const forwardMessage = async (
         }
       : null;
 
+  const forwardedLinkPreview: StoredLinkPreview | null =
+    sourceMessage.linkPreview
+      ? {
+          url: sourceMessage.linkPreview.url,
+          domain: sourceMessage.linkPreview.domain,
+          title: sourceMessage.linkPreview.title ?? null,
+          description: sourceMessage.linkPreview.description ?? null,
+          imageUrl: sourceMessage.linkPreview.imageUrl ?? null,
+          status: sourceMessage.linkPreview.status,
+        }
+      : null;
+
   for (const targetConversationId of targetConversationIds) {
     const targetConversation = conversationsById.get(targetConversationId);
 
@@ -472,6 +560,7 @@ export const forwardMessage = async (
       content: sourceMessage.content,
       messageType: sourceMessage.type,
       attachment: forwardedAttachment,
+      linkPreview: forwardedLinkPreview,
       isForwarded: true,
       forwardedFromMessageId: sourceMessage._id.toString(),
     });
@@ -709,6 +798,7 @@ export const deleteMessage = async (
   message.content = "This message was deleted";
   message.type = "text";
   message.attachment = null;
+  message.linkPreview = null;
 
   /**
    * The physical Cloudinary asset is not removed here because
@@ -771,6 +861,7 @@ export const editMessage = async (
 
   message.content = input.content;
   message.editedAt = new Date();
+  message.linkPreview = getLinkPreviewPlaceholder(input.content);
 
   await message.save();
   await message.populate(messagePopulateOptions);
@@ -783,6 +874,21 @@ export const editMessage = async (
       conversationId,
       message: realtimeMessage,
     });
+  }
+
+  if (message.linkPreview?.status === "loading") {
+    scheduleLinkPreviewResolution(
+      message._id.toString(),
+      conversationId,
+      {
+        url: message.linkPreview.url,
+        domain: message.linkPreview.domain,
+        title: message.linkPreview.title ?? null,
+        description: message.linkPreview.description ?? null,
+        imageUrl: message.linkPreview.imageUrl ?? null,
+        status: message.linkPreview.status,
+      },
+    );
   }
 
   return message;

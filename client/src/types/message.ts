@@ -38,11 +38,21 @@ export interface MessageAttachment {
   duration: number | null;
 }
 
+export interface MessageLinkPreview {
+  url: string;
+  domain: string;
+  title: string | null;
+  description: string | null;
+  imageUrl: string | null;
+  status: "loading" | "ready" | "failed";
+}
+
 export interface RepliedMessage {
   _id: string;
   content: string;
   type: "text" | "image" | "file" | "audio";
   attachment: MessageAttachment | null;
+  linkPreview?: MessageLinkPreview | null;
   sender: MessageSender;
   isForwarded: boolean;
   deletedFor: string[];
@@ -58,6 +68,7 @@ export interface ChatMessage {
   type: "text" | "image" | "file" | "audio";
   content: string;
   attachment: MessageAttachment | null;
+  linkPreview?: MessageLinkPreview | null;
   replyTo: RepliedMessage | null;
   isForwarded: boolean;
   deliveredTo: string[];

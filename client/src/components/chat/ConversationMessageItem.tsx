@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 
 import MessageAttachmentContent from "@/components/chat/MessageAttachmentContent";
+import MessageLinkPreview from "@/components/chat/MessageLinkPreview";
 import UserAvatar from "@/components/chat/UserAvatar";
 import { MESSAGE_REACTION_EMOJIS } from "@/types/message";
 import type { AuthUser } from "@/types/auth";
@@ -326,6 +327,13 @@ export default function ConversationMessageItem({
               isMine={isMine}
             />
           </div>
+        )}
+
+        {message.linkPreview && !isDeletedForEveryone && (
+          <MessageLinkPreview
+            preview={message.linkPreview}
+            isMine={isMine}
+          />
         )}
 
         {(isDeletedForEveryone || message.content) && (

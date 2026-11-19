@@ -1,4 +1,4 @@
-import type { MessageAttachment } from "@/types/message";
+import type { MessageAttachment, MessageLinkPreview } from "@/types/message";
 import type { SearchUser } from "@/types/user";
 
 export interface ConversationParticipant {
@@ -22,6 +22,7 @@ export interface ConversationLastMessage {
   content: string;
   type: "text" | "image" | "file" | "audio";
   attachment: MessageAttachment | null;
+  linkPreview?: MessageLinkPreview | null;
   sender: MessageSender;
   createdAt: string;
   editedAt: string | null;
