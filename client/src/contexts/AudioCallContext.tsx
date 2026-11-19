@@ -124,6 +124,23 @@ const toSessionDescriptionPayload = (
   };
 };
 
+const toIceCandidatePayload = (
+  candidate: RTCIceCandidate,
+): WebRtcIceCandidatePayload | null => {
+  const serializedCandidate = candidate.toJSON();
+
+  if (!serializedCandidate.candidate) {
+    return null;
+  }
+
+  return {
+    candidate: serializedCandidate.candidate,
+    sdpMid: serializedCandidate.sdpMid ?? null,
+    sdpMLineIndex: serializedCandidate.sdpMLineIndex ?? null,
+    usernameFragment: serializedCandidate.usernameFragment ?? null,
+  };
+};
+
 const getMicrophoneErrorMessage = (error: unknown): string => {
   if (error instanceof DOMException) {
     if (error.name === "NotAllowedError" || error.name === "SecurityError") {
@@ -208,6 +225,10 @@ export function AudioCallProvider({ children }: { children: ReactNode }) {
     updateActiveCall(null);
   }, [clearAcknowledgementTimeout, updateActiveCall]);
 
+  const hasActiveCall = useCallback((callId: string): boolean => {
+    return activeCallRef.current?.callId === callId;
+  }, []);
+
   const flushLocalCandidates = useCallback((): void => {
     const call = activeCallRef.current;
 
@@ -251,7 +272,11 @@ export function AudioCallProvider({ children }: { children: ReactNode }) {
           return;
         }
 
-        const candidate = event.candidate.toJSON();
+        const candidate = toIceCandidatePayload(event.candidate);
+
+        if (!candidate) {
+          return;
+        }
         const call = activeCallRef.current;
 
         if (
@@ -359,7 +384,7 @@ export function AudioCallProvider({ children }: { children: ReactNode }) {
           video: false,
         });
 
-        if (activeCallRef.current?.callId !== call.callId) {
+        if (!hasActiveCall(call.callId)) {
           stream.getTracks().forEach((track) => track.stop());
           return;
         }
@@ -429,6 +454,7 @@ export function AudioCallProvider({ children }: { children: ReactNode }) {
       cleanupCall,
       createPeerConnection,
       flushLocalCandidates,
+      hasActiveCall,
       isConnected,
       socket,
       updateActiveCall,
