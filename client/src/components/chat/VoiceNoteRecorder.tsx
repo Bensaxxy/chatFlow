@@ -275,7 +275,7 @@ export default function VoiceNoteRecorder({
 
   if (status === "recording") {
     return (
-      <div className="flex min-w-0 flex-1 items-center gap-2 rounded-full border border-red-200 bg-red-50 px-3 py-1.5">
+      <div className="flex min-w-0 flex-1 items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-2.5 py-1.5 sm:gap-2 sm:px-3">
         <span className="relative flex h-3 w-3 shrink-0">
           <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-70" />
           <span className="relative inline-flex h-3 w-3 rounded-full bg-red-500" />
@@ -290,7 +290,7 @@ export default function VoiceNoteRecorder({
           onClick={() => stopRecording("cancel")}
           aria-label="Cancel voice recording"
           title="Cancel recording"
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-red-600 transition hover:bg-red-100"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-red-600 transition hover:bg-red-100"
         >
           <Trash2 className="h-4 w-4" />
         </button>
@@ -300,7 +300,7 @@ export default function VoiceNoteRecorder({
           onClick={() => stopRecording("send")}
           aria-label="Send voice recording"
           title="Send voice note"
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-red-600 text-white transition hover:bg-red-700"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-red-600 text-white transition hover:bg-red-700"
         >
           <SendHorizontal className="h-4 w-4" />
         </button>

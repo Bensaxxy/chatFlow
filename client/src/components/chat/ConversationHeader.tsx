@@ -10,7 +10,6 @@ interface ConversationHeaderProps {
   avatarUrl: string | null;
   canViewProfile: boolean;
   isOtherUserOnline: boolean;
-  isOtherUserTyping: boolean;
   statusText: string;
   isMessageSearchOpen: boolean;
   onViewProfile: () => void;
@@ -22,18 +21,17 @@ export default function ConversationHeader({
   avatarUrl,
   canViewProfile,
   isOtherUserOnline,
-  isOtherUserTyping,
   statusText,
   isMessageSearchOpen,
   onViewProfile,
   onOpenSearch,
 }: ConversationHeaderProps) {
   return (
-    <header className="flex h-20 shrink-0 items-center gap-3 border-b border-slate-200 px-4 sm:px-6">
+    <header className="flex h-16 shrink-0 items-center gap-2 border-b border-slate-200 px-2 sm:h-20 sm:gap-3 sm:px-6">
       <Link
         href="/chats"
         aria-label="Back to conversations"
-        className="rounded-full p-2 text-slate-600 hover:bg-slate-100 md:hidden"
+        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-slate-600 hover:bg-slate-100 md:hidden"
       >
         <ArrowLeft className="h-5 w-5" />
       </Link>
@@ -49,7 +47,7 @@ export default function ConversationHeader({
         <UserAvatar
           name={displayName}
           avatarUrl={avatarUrl}
-          className="h-11 w-11"
+          className="h-10 w-10 sm:h-11 sm:w-11"
           fallbackClassName="bg-cyan-100 font-semibold text-cyan-800"
         />
 
@@ -65,28 +63,16 @@ export default function ConversationHeader({
       <div className="min-w-0 flex-1">
         <h1 className="truncate font-semibold text-slate-950">{displayName}</h1>
 
-        {isOtherUserTyping ? (
-          <div className="mt-0.5 flex items-center gap-1.5 text-xs font-semibold text-cyan-600">
-            <span>Typing</span>
-
-            <span className="flex items-center gap-0.5">
-              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-cyan-600 [animation-delay:-0.3s]" />
-              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-cyan-600 [animation-delay:-0.15s]" />
-              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-cyan-600" />
-            </span>
-          </div>
-        ) : (
-          <p
-            className={[
-              "truncate text-xs",
-              isOtherUserOnline
-                ? "font-medium text-emerald-600"
-                : "text-slate-500",
-            ].join(" ")}
-          >
-            {isOtherUserOnline ? "Online" : statusText}
-          </p>
-        )}
+        <p
+          className={[
+            "truncate text-xs",
+            isOtherUserOnline
+              ? "font-medium text-emerald-600"
+              : "text-slate-500",
+          ].join(" ")}
+        >
+          {isOtherUserOnline ? "Online" : statusText}
+        </p>
       </div>
 
       <button
@@ -95,7 +81,7 @@ export default function ConversationHeader({
         aria-label="Search messages"
         aria-expanded={isMessageSearchOpen}
         title="Search messages"
-        className="rounded-full p-2 text-slate-600 transition hover:bg-slate-100 hover:text-slate-950"
+        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-slate-600 transition hover:bg-slate-100 hover:text-slate-950"
       >
         <Search className="h-5 w-5" />
       </button>

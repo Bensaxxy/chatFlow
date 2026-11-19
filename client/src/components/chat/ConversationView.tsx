@@ -383,7 +383,7 @@ export default function ConversationView({
 
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
 
-  const messageInputRef = useRef<HTMLInputElement | null>(null);
+  const messageInputRef = useRef<HTMLTextAreaElement | null>(null);
 
   const messageSearchInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -907,7 +907,9 @@ export default function ConversationView({
     }
   };
 
-  const handleMessageChange = (event: ChangeEvent<HTMLInputElement>): void => {
+  const handleMessageChange = (
+    event: ChangeEvent<HTMLTextAreaElement>,
+  ): void => {
     const value = event.target.value;
 
     setMessageText(value);
@@ -1286,7 +1288,6 @@ export default function ConversationView({
         }
         canViewProfile={Boolean(otherParticipantId)}
         isOtherUserOnline={isOtherUserOnline}
-        isOtherUserTyping={isOtherUserTyping}
         statusText={
           isDirectConversation
             ? formatLastSeen(otherUserLastSeenAt)
@@ -1307,6 +1308,7 @@ export default function ConversationView({
         otherParticipantId={otherParticipantId}
         updatedProfiles={updatedProfiles}
         displayName={displayName}
+        isOtherUserTyping={isOtherUserTyping}
         hasMore={hasMore}
         isLoadingOlder={isLoadingOlder}
         showFloatingDate={showFloatingDate}

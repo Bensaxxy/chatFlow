@@ -2,6 +2,7 @@
 
 import { Check, LoaderCircle, SendHorizontal, X } from "lucide-react";
 import {
+  useLayoutEffect,
   useState,
   type ChangeEvent,
   type FormEvent,
@@ -16,7 +17,7 @@ import type { ChatMessage } from "@/types/message";
 
 interface ConversationComposerProps {
   conversationId: string;
-  messageInputRef: RefObject<HTMLInputElement | null>;
+  messageInputRef: RefObject<HTMLTextAreaElement | null>;
   messageText: string;
   replyingToMessage: ChatMessage | null;
   replySenderName: string;
@@ -24,7 +25,7 @@ interface ConversationComposerProps {
   isSending: boolean;
   isEditingMessage: boolean;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
-  onMessageChange: (event: ChangeEvent<HTMLInputElement>) => void;
+  onMessageChange: (event: ChangeEvent<HTMLTextAreaElement>) => void;
   onCancelReplying: () => void;
   onCancelEditing: () => void;
   onAttachmentSent: (message: ChatMessage) => void;
@@ -49,6 +50,17 @@ export default function ConversationComposer({
     useState<VoiceNoteStatus>("idle");
   const isRecordingVoiceNote = voiceNoteStatus === "recording";
 
+  useLayoutEffect(() => {
+    const input = messageInputRef.current;
+
+    if (!input || isRecordingVoiceNote) {
+      return;
+    }
+
+    input.style.height = "auto";
+    input.style.height = Math.min(input.scrollHeight, 128) + "px";
+  }, [isRecordingVoiceNote, messageInputRef, messageText]);
+
   const replyPreview =
     replyingToMessage?.content ||
     (replyingToMessage?.type === "image"
@@ -60,7 +72,7 @@ export default function ConversationComposer({
   return (
     <form
       onSubmit={onSubmit}
-      className="shrink-0 border-t border-slate-200 bg-white p-3 sm:p-4"
+      className="shrink-0 border-t border-slate-200 bg-white px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 sm:p-4"
     >
       {replyingToMessage && (
         <div className="mb-3 flex items-center justify-between rounded-xl border-l-4 border-cyan-600 bg-cyan-50 px-4 py-2.5">
@@ -111,7 +123,7 @@ export default function ConversationComposer({
         </div>
       )}
 
-      <div className="flex min-w-0 items-center gap-3">
+      <div className="flex min-w-0 items-end gap-1 sm:gap-2">
         {!editingMessageId && (
           <VoiceNoteRecorder
             conversationId={conversationId}
@@ -132,12 +144,12 @@ export default function ConversationComposer({
         )}
 
         {!isRecordingVoiceNote && (
-          <input
+          <textarea
             ref={messageInputRef}
-            type="text"
             value={messageText}
             onChange={onMessageChange}
             maxLength={5000}
+            rows={1}
             placeholder={
               editingMessageId
                 ? "Edit your message"
@@ -146,7 +158,7 @@ export default function ConversationComposer({
                   : "Type a message"
             }
             aria-label={editingMessageId ? "Edit message" : "Message"}
-            className="min-w-0 flex-1 rounded-full border border-slate-300 bg-slate-100 px-5 py-3 text-base text-slate-900 outline-none transition focus:border-cyan-500 focus:bg-white focus:ring-4 focus:ring-cyan-100 sm:text-sm"
+            className="scrollbar-hidden block min-h-10 max-h-32 min-w-0 flex-1 resize-none overflow-y-auto rounded-2xl border border-slate-300 bg-slate-100 px-3 py-2 text-base leading-5 text-slate-900 outline-none transition focus:border-cyan-500 focus:bg-white focus:ring-4 focus:ring-cyan-100 sm:px-4 sm:text-sm"
           />
         )}
 

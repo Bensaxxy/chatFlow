@@ -18,6 +18,7 @@ interface ConversationMessageListProps {
   otherParticipantId?: string;
   updatedProfiles: ReadonlyMap<string, RealtimeUserProfile>;
   displayName: string;
+  isOtherUserTyping: boolean;
   hasMore: boolean;
   isLoadingOlder: boolean;
   showFloatingDate: boolean;
@@ -88,6 +89,7 @@ export default function ConversationMessageList({
   otherParticipantId,
   updatedProfiles,
   displayName,
+  isOtherUserTyping,
   hasMore,
   isLoadingOlder,
   showFloatingDate,
@@ -208,6 +210,21 @@ export default function ConversationMessageList({
         <div className="pointer-events-none absolute left-0 right-0 top-2 z-30 flex justify-center">
           <span className="rounded-full border border-slate-200 bg-white/95 px-3 py-1 text-[11px] font-semibold text-slate-600 shadow-sm backdrop-blur">
             {floatingDate}
+          </span>
+        </div>
+      )}
+
+      {isOtherUserTyping && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="pointer-events-none absolute bottom-4 left-4 z-20 flex max-w-[calc(100%_-_6rem)] items-center gap-2 rounded-2xl rounded-bl-md border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600 shadow-sm"
+        >
+          <span className="truncate">{displayName} is typing</span>
+          <span aria-hidden="true" className="flex shrink-0 items-center gap-0.5">
+            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-cyan-600 [animation-delay:-0.3s]" />
+            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-cyan-600 [animation-delay:-0.15s]" />
+            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-cyan-600" />
           </span>
         </div>
       )}

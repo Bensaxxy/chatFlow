@@ -27,6 +27,20 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
+.scrollbar-hidden {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hidden::-webkit-scrollbar {
+  display: none;
+}
+
+:where(a, button, input, textarea, select, [role="button"]):focus-visible {
+  outline: 2px solid #0891b2;
+  outline-offset: 2px;
+}
+
 /*
  * iOS Safari zooms the viewport when an editable control uses a font smaller
  * than 16px. Keep controls at 16px on touch-sized screens while preserving
@@ -37,5 +51,16 @@ body {
   textarea,
   select {
     font-size: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
   }
 }

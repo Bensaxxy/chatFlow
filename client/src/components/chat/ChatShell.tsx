@@ -70,7 +70,7 @@ export default function ChatShell({ children }: ChatShellProps) {
           conversationIsOpen ? "hidden" : "flex"
         }`}
       >
-        <header className="relative flex min-h-20 items-center gap-3 border-b border-slate-200 px-4 py-3">
+        <header className="relative flex min-h-16 items-center gap-3 border-b border-slate-200 px-4 py-2 sm:min-h-20 sm:py-3">
           <button
             type="button"
             onClick={handleOpenProfile}
@@ -116,7 +116,7 @@ export default function ChatShell({ children }: ChatShellProps) {
             onClick={() => setIsAccountMenuOpen((current) => !current)}
             aria-label="Account options"
             aria-expanded={isAccountMenuOpen}
-            className="rounded-full p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
           >
             <MoreVertical className="h-5 w-5" />
           </button>
