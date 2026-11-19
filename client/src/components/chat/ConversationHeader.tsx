@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Search } from "lucide-react";
+import { ArrowLeft, PhoneCall, Search } from "lucide-react";
 import Link from "next/link";
 
 import UserAvatar from "@/components/chat/UserAvatar";
@@ -12,8 +12,11 @@ interface ConversationHeaderProps {
   isOtherUserOnline: boolean;
   statusText: string;
   isMessageSearchOpen: boolean;
+  canStartAudioCall?: boolean;
+  isAudioCallActive?: boolean;
   onViewProfile: () => void;
   onOpenSearch: () => void;
+  onStartAudioCall?: () => void;
 }
 
 export default function ConversationHeader({
@@ -23,8 +26,11 @@ export default function ConversationHeader({
   isOtherUserOnline,
   statusText,
   isMessageSearchOpen,
+  canStartAudioCall = false,
+  isAudioCallActive = false,
   onViewProfile,
   onOpenSearch,
+  onStartAudioCall,
 }: ConversationHeaderProps) {
   return (
     <header className="flex h-16 shrink-0 items-center gap-2 border-b border-slate-200 px-2 sm:h-20 sm:gap-3 sm:px-6">
@@ -74,6 +80,23 @@ export default function ConversationHeader({
           {isOtherUserOnline ? "Online" : statusText}
         </p>
       </div>
+
+      {onStartAudioCall && (
+        <button
+          type="button"
+          disabled={!canStartAudioCall || isAudioCallActive}
+          onClick={onStartAudioCall}
+          aria-label="Start audio call"
+          title={
+            isAudioCallActive
+              ? "An audio call is already active"
+              : "Start audio call"
+          }
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-slate-600 transition hover:bg-cyan-50 hover:text-cyan-700 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          <PhoneCall className="h-5 w-5" />
+        </button>
+      )}
 
       <button
         type="button"

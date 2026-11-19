@@ -20,6 +20,65 @@ interface TypingUpdatePayload {
   isTyping: boolean;
 }
 
+type AudioCallEndReason =
+  | "ended"
+  | "cancelled"
+  | "declined"
+  | "missed"
+  | "failed";
+
+interface WebRtcSessionDescriptionPayload {
+  type: "offer" | "answer";
+  sdp: string;
+}
+
+interface WebRtcIceCandidatePayload {
+  candidate: string;
+  sdpMid: string | null;
+  sdpMLineIndex: number | null;
+  usernameFragment?: string | null;
+}
+
+interface ActiveAudioCall {
+  callId: string;
+  conversationId: string;
+  callerId: string;
+  callerSocketId: string;
+  recipientId: string;
+  recipientSocketId: string | null;
+  status: "ringing" | "active";
+  ringTimeout: NodeJS.Timeout;
+}
+
+const isValidCallId = (value: unknown): value is string =>
+  typeof value === "string" && /^[a-zA-Z0-9-]{16,128}$/.test(value);
+
+const isValidSessionDescription = (
+  value: unknown,
+  expectedType: "offer" | "answer",
+): value is WebRtcSessionDescriptionPayload =>
+  typeof value === "object" &&
+  value !== null &&
+  "type" in value &&
+  "sdp" in value &&
+  value.type === expectedType &&
+  typeof value.sdp === "string" &&
+  value.sdp.length > 0 &&
+  value.sdp.length <= 200_000;
+
+const isValidIceCandidate = (
+  value: unknown,
+): value is WebRtcIceCandidatePayload =>
+  typeof value === "object" &&
+  value !== null &&
+  "candidate" in value &&
+  "sdpMid" in value &&
+  "sdpMLineIndex" in value &&
+  typeof value.candidate === "string" &&
+  value.candidate.length <= 8_000 &&
+  (typeof value.sdpMid === "string" || value.sdpMid === null) &&
+  (typeof value.sdpMLineIndex === "number" || value.sdpMLineIndex === null);
+
 interface ServerToClientEvents {
   "socket:ready": (payload: { userId: string }) => void;
 
@@ -70,6 +129,34 @@ interface ServerToClientEvents {
       updatedAt: string;
     };
   }) => void;
+
+  "call:incoming": (payload: {
+    callId: string;
+    conversationId: string;
+    callerId: string;
+    offer: WebRtcSessionDescriptionPayload;
+  }) => void;
+
+  "call:accepted": (payload: {
+    callId: string;
+    conversationId: string;
+    acceptedByUserId: string;
+    acceptedBySocketId: string;
+    answer: WebRtcSessionDescriptionPayload;
+  }) => void;
+
+  "call:ice-candidate": (payload: {
+    callId: string;
+    conversationId: string;
+    candidate: WebRtcIceCandidatePayload;
+  }) => void;
+
+  "call:ended": (payload: {
+    callId: string;
+    conversationId: string;
+    endedByUserId: string | null;
+    reason: AudioCallEndReason;
+  }) => void;
 }
 
 interface ClientToServerEvents {
@@ -86,6 +173,39 @@ interface ClientToServerEvents {
   "typing:start": (conversationId: string) => void;
 
   "typing:stop": (conversationId: string) => void;
+
+  "call:initiate": (
+    payload: {
+      callId: string;
+      conversationId: string;
+      offer: WebRtcSessionDescriptionPayload;
+    },
+    acknowledge: (result: SocketResult) => void,
+  ) => void;
+
+  "call:answer": (
+    payload: {
+      callId: string;
+      conversationId: string;
+      answer: WebRtcSessionDescriptionPayload;
+    },
+    acknowledge: (result: SocketResult) => void,
+  ) => void;
+
+  "call:ice-candidate": (payload: {
+    callId: string;
+    conversationId: string;
+    candidate: WebRtcIceCandidatePayload;
+  }) => void;
+
+  "call:end": (
+    payload: {
+      callId: string;
+      conversationId: string;
+      reason?: AudioCallEndReason;
+    },
+    acknowledge?: (result: SocketResult) => void,
+  ) => void;
 }
 
 interface InterServerEvents {}
@@ -128,6 +248,35 @@ export const initializeSocketServer = (
    * This supports multiple tabs and devices.
    */
   const connectedUserCounts = new Map<string, number>();
+  const activeCalls = new Map<string, ActiveAudioCall>();
+  const activeCallByUserId = new Map<string, string>();
+
+  const endActiveCall = (
+    call: ActiveAudioCall,
+    reason: AudioCallEndReason,
+    endedByUserId: string | null,
+  ): void => {
+    clearTimeout(call.ringTimeout);
+    activeCalls.delete(call.callId);
+
+    if (activeCallByUserId.get(call.callerId) === call.callId) {
+      activeCallByUserId.delete(call.callerId);
+    }
+
+    if (activeCallByUserId.get(call.recipientId) === call.callId) {
+      activeCallByUserId.delete(call.recipientId);
+    }
+
+    const payload = {
+      callId: call.callId,
+      conversationId: call.conversationId,
+      endedByUserId,
+      reason,
+    };
+
+    io.to(`user:${call.callerId}`).emit("call:ended", payload);
+    io.to(`user:${call.recipientId}`).emit("call:ended", payload);
+  };
 
   io.use((socket, next) => {
     try {
@@ -335,11 +484,283 @@ export const initializeSocketServer = (
       });
     });
 
+    socket.on("call:initiate", async (payload, acknowledge) => {
+      try {
+        if (
+          !isValidCallId(payload.callId) ||
+          !isValidObjectId(payload.conversationId) ||
+          !isValidSessionDescription(payload.offer, "offer")
+        ) {
+          acknowledge({
+            success: false,
+            message: "Call details are invalid",
+          });
+          return;
+        }
+
+        if (
+          activeCalls.has(payload.callId) ||
+          activeCallByUserId.has(userId)
+        ) {
+          acknowledge({
+            success: false,
+            message: "You already have an active call",
+          });
+          return;
+        }
+
+        const conversation = await Conversation.findOne({
+          _id: payload.conversationId,
+          type: "direct",
+          participants: userId,
+        })
+          .select("participants type")
+          .lean();
+
+        if (!conversation || conversation.participants.length !== 2) {
+          acknowledge({
+            success: false,
+            message: "Audio calls are only available in direct conversations",
+          });
+          return;
+        }
+
+        const recipientId = conversation.participants
+          .map((participantId) => participantId.toString())
+          .find((participantId) => participantId !== userId);
+
+        if (!recipientId) {
+          acknowledge({
+            success: false,
+            message: "The other participant could not be found",
+          });
+          return;
+        }
+
+        if (activeCallByUserId.has(recipientId)) {
+          acknowledge({
+            success: false,
+            message: "This person is already on a call",
+          });
+          return;
+        }
+
+        const access = await getDirectMessagingAccess(userId, recipientId);
+
+        if (!access.canMessage) {
+          acknowledge({
+            success: false,
+            message: "Audio calling is unavailable in this conversation",
+          });
+          return;
+        }
+
+        const recipientSockets = await io
+          .in(`user:${recipientId}`)
+          .fetchSockets();
+
+        if (recipientSockets.length === 0) {
+          acknowledge({
+            success: false,
+            message: "This person is not available for a call right now",
+          });
+          return;
+        }
+
+        const ringTimeout = setTimeout(() => {
+          const activeCall = activeCalls.get(payload.callId);
+
+          if (activeCall) {
+            endActiveCall(activeCall, "missed", null);
+          }
+        }, 45_000);
+
+        const call: ActiveAudioCall = {
+          callId: payload.callId,
+          conversationId: payload.conversationId,
+          callerId: userId,
+          callerSocketId: socket.id,
+          recipientId,
+          recipientSocketId: null,
+          status: "ringing",
+          ringTimeout,
+        };
+
+        activeCalls.set(call.callId, call);
+        activeCallByUserId.set(call.callerId, call.callId);
+        activeCallByUserId.set(call.recipientId, call.callId);
+
+        io.to(`user:${recipientId}`).emit("call:incoming", {
+          callId: call.callId,
+          conversationId: call.conversationId,
+          callerId: call.callerId,
+          offer: payload.offer,
+        });
+
+        acknowledge({
+          success: true,
+          message: "Call is ringing",
+        });
+      } catch (error) {
+        console.error("Could not initiate call:", error);
+        acknowledge({
+          success: false,
+          message: "Could not start the call",
+        });
+      }
+    });
+
+    socket.on("call:answer", (payload, acknowledge) => {
+      if (
+        !isValidCallId(payload.callId) ||
+        !isValidObjectId(payload.conversationId) ||
+        !isValidSessionDescription(payload.answer, "answer")
+      ) {
+        acknowledge({
+          success: false,
+          message: "Call details are invalid",
+        });
+        return;
+      }
+
+      const call = activeCalls.get(payload.callId);
+
+      if (
+        !call ||
+        call.conversationId !== payload.conversationId ||
+        call.recipientId !== userId
+      ) {
+        acknowledge({
+          success: false,
+          message: "This call is no longer available",
+        });
+        return;
+      }
+
+      if (call.status !== "ringing") {
+        acknowledge({
+          success: false,
+          message: "This call has already been answered",
+        });
+        return;
+      }
+
+      clearTimeout(call.ringTimeout);
+      call.status = "active";
+      call.recipientSocketId = socket.id;
+
+      const acceptedPayload = {
+        callId: call.callId,
+        conversationId: call.conversationId,
+        acceptedByUserId: userId,
+        acceptedBySocketId: socket.id,
+        answer: payload.answer,
+      };
+
+      io.to(`user:${call.callerId}`).emit("call:accepted", acceptedPayload);
+      io.to(`user:${call.recipientId}`).emit("call:accepted", acceptedPayload);
+
+      acknowledge({
+        success: true,
+        message: "Call connected",
+      });
+    });
+
+    socket.on("call:ice-candidate", (payload) => {
+      if (
+        !isValidCallId(payload.callId) ||
+        !isValidObjectId(payload.conversationId) ||
+        !isValidIceCandidate(payload.candidate)
+      ) {
+        return;
+      }
+
+      const call = activeCalls.get(payload.callId);
+
+      if (!call || call.conversationId !== payload.conversationId) {
+        return;
+      }
+
+      const recipientId =
+        call.callerId === userId
+          ? call.recipientId
+          : call.recipientId === userId
+            ? call.callerId
+            : null;
+
+      if (!recipientId) {
+        return;
+      }
+
+      io.to(`user:${recipientId}`).emit("call:ice-candidate", {
+        callId: call.callId,
+        conversationId: call.conversationId,
+        candidate: payload.candidate,
+      });
+    });
+
+    socket.on("call:end", (payload, acknowledge) => {
+      if (
+        !isValidCallId(payload.callId) ||
+        !isValidObjectId(payload.conversationId)
+      ) {
+        acknowledge?.({
+          success: false,
+          message: "Call details are invalid",
+        });
+        return;
+      }
+
+      const call = activeCalls.get(payload.callId);
+
+      if (
+        !call ||
+        call.conversationId !== payload.conversationId ||
+        (call.callerId !== userId && call.recipientId !== userId)
+      ) {
+        acknowledge?.({
+          success: false,
+          message: "This call is no longer available",
+        });
+        return;
+      }
+
+      const reason: AudioCallEndReason =
+        payload.reason === "cancelled" ||
+        payload.reason === "declined" ||
+        payload.reason === "failed"
+          ? payload.reason
+          : "ended";
+
+      endActiveCall(call, reason, userId);
+
+      acknowledge?.({
+        success: true,
+        message: "Call ended",
+      });
+    });
+
     /**
      * Remove typing indicators if the browser closes before
      * it sends typing:stop.
      */
     socket.on("disconnecting", () => {
+      const activeCallId = activeCallByUserId.get(userId);
+      const activeCall = activeCallId
+        ? activeCalls.get(activeCallId)
+        : undefined;
+
+      const socketOwnsActiveCall =
+        activeCall &&
+        ((activeCall.callerId === userId &&
+          activeCall.callerSocketId === socket.id) ||
+          (activeCall.recipientId === userId &&
+            activeCall.recipientSocketId === socket.id));
+
+      if (socketOwnsActiveCall) {
+        endActiveCall(activeCall, "ended", userId);
+      }
+
       for (const conversationId of activeTypingConversations) {
         void emitTypingUpdate(conversationId, false).catch((error) => {
           console.error("Could not clear typing indicator:", error);

@@ -4,6 +4,12 @@ import { apiClient } from "@/lib/api/client";
 import type { ChatMessage, MessageDeletedPayload } from "@/types/message";
 import type { ApiSuccessResponse } from "@/types/api";
 import { UserProfileUpdatedPayload } from "@/types/user";
+import type {
+  AudioCallEndReason,
+  IncomingAudioCallPayload,
+  WebRtcIceCandidatePayload,
+  WebRtcSessionDescriptionPayload,
+} from "@/types/call";
 
 export interface SocketResult {
   success: boolean;
@@ -50,6 +56,29 @@ interface ServerToClientEvents {
   "message:deleted": (payload: MessageDeletedPayload) => void;
 
   "user:profile-updated": (payload: UserProfileUpdatedPayload) => void;
+
+  "call:incoming": (payload: IncomingAudioCallPayload) => void;
+
+  "call:accepted": (payload: {
+    callId: string;
+    conversationId: string;
+    acceptedByUserId: string;
+    acceptedBySocketId: string;
+    answer: WebRtcSessionDescriptionPayload;
+  }) => void;
+
+  "call:ice-candidate": (payload: {
+    callId: string;
+    conversationId: string;
+    candidate: WebRtcIceCandidatePayload;
+  }) => void;
+
+  "call:ended": (payload: {
+    callId: string;
+    conversationId: string;
+    endedByUserId: string | null;
+    reason: AudioCallEndReason;
+  }) => void;
 }
 
 interface ClientToServerEvents {
@@ -66,6 +95,39 @@ interface ClientToServerEvents {
   "typing:start": (conversationId: string) => void;
 
   "typing:stop": (conversationId: string) => void;
+
+  "call:initiate": (
+    payload: {
+      callId: string;
+      conversationId: string;
+      offer: WebRtcSessionDescriptionPayload;
+    },
+    acknowledge: (result: SocketResult) => void,
+  ) => void;
+
+  "call:answer": (
+    payload: {
+      callId: string;
+      conversationId: string;
+      answer: WebRtcSessionDescriptionPayload;
+    },
+    acknowledge: (result: SocketResult) => void,
+  ) => void;
+
+  "call:ice-candidate": (payload: {
+    callId: string;
+    conversationId: string;
+    candidate: WebRtcIceCandidatePayload;
+  }) => void;
+
+  "call:end": (
+    payload: {
+      callId: string;
+      conversationId: string;
+      reason?: AudioCallEndReason;
+    },
+    acknowledge?: (result: SocketResult) => void,
+  ) => void;
 }
 
 export type ChatSocket = Socket<ServerToClientEvents, ClientToServerEvents>;

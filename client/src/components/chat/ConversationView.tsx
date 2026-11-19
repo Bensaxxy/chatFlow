@@ -18,6 +18,7 @@ import ConversationHeader from "@/components/chat/ConversationHeader";
 import ConversationMessageList from "@/components/chat/ConversationMessageList";
 import MessageSearchDrawer from "@/components/chat/MessageSearchDrawer";
 import { useAuth } from "@/contexts/AuthContext";
+import { useAudioCall } from "@/contexts/AudioCallContext";
 import { useSocket } from "@/contexts/SocketContext";
 import { getApiErrorMessage } from "@/lib/api/errors";
 import {
@@ -328,6 +329,7 @@ export default function ConversationView({
   conversationId,
 }: ConversationViewProps) {
   const { user } = useAuth();
+  const { activeCall, startAudioCall } = useAudioCall();
   const router = useRouter();
 
   const {
@@ -1580,6 +1582,13 @@ export default function ConversationView({
     ? (lastSeenByUser.get(otherParticipantId) ?? otherParticipant?.lastSeenAt)
     : null;
 
+  const canStartAudioCall = Boolean(
+    isDirectConversation &&
+      otherParticipantId &&
+      directMessagingAccess?.canMessage !== false &&
+      isConnected,
+  );
+
   return (
     <section className="relative flex h-full min-w-0 w-full flex-col overflow-hidden bg-white">
       <ConversationHeader
@@ -1593,6 +1602,8 @@ export default function ConversationView({
         }
         canViewProfile={Boolean(otherParticipantId)}
         isOtherUserOnline={isOtherUserOnline}
+        canStartAudioCall={canStartAudioCall}
+        isAudioCallActive={Boolean(activeCall)}
         statusText={
           isDirectConversation
             ? formatLastSeen(otherUserLastSeenAt)
@@ -1605,6 +1616,22 @@ export default function ConversationView({
           }
         }}
         onOpenSearch={openMessageSearch}
+        onStartAudioCall={
+          isDirectConversation && otherParticipantId
+            ? () =>
+                void startAudioCall({
+                  conversationId,
+                  participant: {
+                    userId: otherParticipantId,
+                    name: displayName,
+                    avatarUrl:
+                      updatedOtherProfile?.avatarUrl ??
+                      otherParticipant?.avatarUrl ??
+                      null,
+                  },
+                })
+            : undefined
+        }
       />
 
       <ConversationMessageList

@@ -5,6 +5,7 @@ import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
 import { AuthProvider } from "@/contexts/AuthContext";
+import { AudioCallProvider } from "@/contexts/AudioCallContext";
 import { SocketProvider } from "@/contexts/SocketContext";
 
 interface AppProvidersProps {
@@ -15,7 +16,7 @@ export default function AppProviders({ children }: AppProvidersProps) {
   return (
     <AuthProvider>
       <SocketProvider>
-        {children}
+        <AudioCallProvider>{children}</AudioCallProvider>
 
         <ToastContainer
           position="top-right"
