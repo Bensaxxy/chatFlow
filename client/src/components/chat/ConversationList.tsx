@@ -9,6 +9,10 @@ import UserAvatar from "@/components/chat/UserAvatar";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSocket } from "@/contexts/SocketContext";
 import { getApiErrorMessage } from "@/lib/api/errors";
+import {
+  invalidateConversationCache,
+  updateCachedConversationMessage,
+} from "@/lib/chat/conversation-cache";
 import { getConversations } from "@/services/conversation.service";
 import type {
   Conversation,
@@ -135,6 +139,13 @@ export default function ConversationList() {
       incrementUnread: boolean;
     }): void => {
       clearTypingConversation(conversationId);
+      updateCachedConversationMessage(
+        `${currentUserId}:${conversationId}`,
+        normalizeMessage(message),
+        {
+          isLatestMessage: true,
+        },
+      );
 
       setConversations((current) => {
         const existingConversation = current.find(
@@ -189,6 +200,11 @@ export default function ConversationList() {
       conversationId: string;
       message: ChatMessage;
     }): void => {
+      updateCachedConversationMessage(
+        `${currentUserId}:${payload.conversationId}`,
+        normalizeMessage(payload.message),
+      );
+
       setConversations((current) =>
         current.map((conversation) => {
           const lastMessage = conversation.lastMessage;
@@ -210,6 +226,10 @@ export default function ConversationList() {
     };
 
     const handleMessageDeleted = (payload: MessageDeletedPayload): void => {
+      invalidateConversationCache(
+        `${currentUserId}:${payload.conversationId}`,
+      );
+
       setConversations((current) =>
         current.map((conversation) => {
           const lastMessage = conversation.lastMessage;

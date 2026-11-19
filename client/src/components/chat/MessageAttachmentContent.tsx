@@ -6,9 +6,11 @@ import {
   FileText,
   ImageIcon,
   Maximize2,
+  Pause,
+  Play,
   Volume2,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import AttachmentPreviewDialog from "@/components/chat/AttachmentPreviewDialog";
 import type { MessageAttachment } from "@/types/message";
@@ -42,7 +44,7 @@ const formatFileSize = (bytes: number): string => {
 
 const formatAudioDuration = (seconds: number | null | undefined): string => {
   if (!Number.isFinite(seconds) || !seconds || seconds < 0) {
-    return "Voice note";
+    return "0:00";
   }
 
   const totalSeconds = Math.round(seconds);
@@ -75,6 +77,133 @@ const joinClasses = (
   ...classNames: Array<string | false | null | undefined>
 ): string => classNames.filter(Boolean).join(" ");
 
+interface VoiceNotePlayerProps {
+  src: string;
+  initialDuration: number | null | undefined;
+  isMine: boolean;
+}
+
+function VoiceNotePlayer({
+  src,
+  initialDuration,
+  isMine,
+}: VoiceNotePlayerProps) {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [loadedDuration, setLoadedDuration] = useState<number | null>(null);
+  const duration = initialDuration ?? loadedDuration ?? 0;
+  const maximum = Math.max(duration, 1);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+
+    return () => {
+      audio?.pause();
+    };
+  }, []);
+
+  const togglePlayback = async () => {
+    const audio = audioRef.current;
+
+    if (!audio) {
+      return;
+    }
+
+    if (audio.paused) {
+      try {
+        await audio.play();
+        setIsPlaying(true);
+      } catch {
+        setIsPlaying(false);
+      }
+
+      return;
+    }
+
+    audio.pause();
+    setIsPlaying(false);
+  };
+
+  const seek = (value: number) => {
+    const audio = audioRef.current;
+
+    if (!audio) {
+      return;
+    }
+
+    audio.currentTime = value;
+    setCurrentTime(value);
+  };
+
+  return (
+    <div className="mt-2 flex min-w-0 items-center gap-2">
+      <audio
+        ref={audioRef}
+        className="hidden"
+        preload="metadata"
+        src={src}
+        onLoadedMetadata={(event) => {
+          const durationFromPlayer = event.currentTarget.duration;
+
+          if (Number.isFinite(durationFromPlayer)) {
+            setLoadedDuration(durationFromPlayer);
+          }
+        }}
+        onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)}
+        onPause={() => setIsPlaying(false)}
+        onPlay={() => setIsPlaying(true)}
+        onEnded={() => {
+          setCurrentTime(0);
+          setIsPlaying(false);
+        }}
+      />
+
+      <button
+        type="button"
+        onClick={() => void togglePlayback()}
+        aria-label={isPlaying ? "Pause voice note" : "Play voice note"}
+        title={isPlaying ? "Pause voice note" : "Play voice note"}
+        className={joinClasses(
+          "flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2",
+          isMine
+            ? "bg-cyan-500 text-white hover:bg-cyan-400 focus-visible:ring-cyan-200 focus-visible:ring-offset-cyan-700"
+            : "bg-cyan-100 text-cyan-700 hover:bg-cyan-200 focus-visible:ring-cyan-500 focus-visible:ring-offset-slate-50",
+        )}
+      >
+        {isPlaying ? (
+          <Pause className="h-4 w-4 fill-current" />
+        ) : (
+          <Play className="h-4 w-4 fill-current" />
+        )}
+      </button>
+
+      <input
+        type="range"
+        min="0"
+        max={maximum}
+        step="0.1"
+        value={Math.min(currentTime, maximum)}
+        onChange={(event) => seek(Number(event.target.value))}
+        aria-label="Voice note playback position"
+        className={joinClasses(
+          "h-2 min-w-0 flex-1 cursor-pointer accent-cyan-600",
+          isMine && "accent-white",
+        )}
+      />
+
+      <span
+        className={joinClasses(
+          "w-9 shrink-0 text-right text-xs tabular-nums",
+          isMine ? "text-cyan-100" : "text-slate-500",
+        )}
+      >
+        {formatAudioDuration(duration)}
+      </span>
+    </div>
+  );
+}
+
 export default function MessageAttachmentContent({
   attachment,
   messageType,
@@ -82,9 +211,6 @@ export default function MessageAttachmentContent({
   compact = false,
 }: MessageAttachmentContentProps) {
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
-  const [loadedAudioDuration, setLoadedAudioDuration] = useState<
-    number | null
-  >(null);
 
   if (messageType === "image") {
     return (
@@ -132,16 +258,14 @@ export default function MessageAttachmentContent({
   }
 
   if (messageType === "audio") {
-    const duration = attachment.duration ?? loadedAudioDuration;
-
     return (
       <div
         className={joinClasses(
-          "flex min-w-0 items-center gap-3 rounded-xl border p-3",
+          "flex min-w-0 overflow-hidden rounded-xl border p-3",
           isMine
             ? "border-cyan-400/70 bg-cyan-700/50"
             : "border-slate-200 bg-slate-50",
-          compact ? "max-w-64" : "min-w-64 max-w-sm",
+          compact ? "max-w-full" : "w-full max-w-sm",
         )}
       >
         <span
@@ -153,36 +277,30 @@ export default function MessageAttachmentContent({
           <Volume2 className="h-5 w-5" />
         </span>
 
-        <span className="min-w-0 flex-1">
-          <span className="block text-sm font-semibold">Voice note</span>
+        <div className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-semibold">
+            Voice note
+          </span>
 
           {!compact && (
-            <audio
-              controls
-              preload="metadata"
+            <VoiceNotePlayer
               src={attachment.url}
-              onLoadedMetadata={(event) => {
-                const durationFromPlayer = event.currentTarget.duration;
-
-                if (Number.isFinite(durationFromPlayer)) {
-                  setLoadedAudioDuration(durationFromPlayer);
-                }
-              }}
-              className="mt-2 h-9 w-full min-w-0 accent-cyan-600"
-            >
-              Your browser cannot play this voice note.
-            </audio>
+              initialDuration={attachment.duration}
+              isMine={isMine}
+            />
           )}
 
-          <span
-            className={joinClasses(
-              "mt-1 block text-xs",
-              isMine ? "text-cyan-100" : "text-slate-500",
-            )}
-          >
-            {formatAudioDuration(duration)}
-          </span>
-        </span>
+          {compact && (
+            <span
+              className={joinClasses(
+                "mt-1 block text-xs",
+                isMine ? "text-cyan-100" : "text-slate-500",
+              )}
+            >
+              {formatAudioDuration(attachment.duration)}
+            </span>
+          )}
+        </div>
       </div>
     );
   }
@@ -197,7 +315,7 @@ export default function MessageAttachmentContent({
           isMine
             ? "border-cyan-400/70 bg-cyan-700/50 hover:bg-cyan-700/70"
             : "border-slate-200 bg-slate-50 hover:bg-slate-100",
-          compact ? "max-w-64" : "min-w-64 max-w-sm",
+          compact ? "max-w-full" : "w-full max-w-sm",
         )}
         aria-label={"Preview " + attachment.fileName}
       >

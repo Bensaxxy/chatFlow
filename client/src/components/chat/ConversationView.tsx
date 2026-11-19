@@ -20,6 +20,11 @@ import MessageSearchDrawer from "@/components/chat/MessageSearchDrawer";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSocket } from "@/contexts/SocketContext";
 import { getApiErrorMessage } from "@/lib/api/errors";
+import {
+  getCachedConversation,
+  saveConversationCache,
+  type ConversationCacheEntry,
+} from "@/lib/chat/conversation-cache";
 import { getConversationById } from "@/services/conversation.service";
 import {
   deleteConversationMessage,
@@ -254,30 +259,6 @@ const applyMessageDeletion = (
   });
 };
 
-interface ConversationCacheEntry {
-  conversation: Conversation;
-  messages: ChatMessage[];
-  nextCursor: string | null;
-  hasMore: boolean;
-}
-
-const conversationCache = new Map<string, ConversationCacheEntry>();
-
-const saveConversationCache = (
-  key: string,
-  entry: ConversationCacheEntry,
-): void => {
-  if (!conversationCache.has(key) && conversationCache.size >= 20) {
-    const oldestKey = conversationCache.keys().next().value;
-
-    if (oldestKey) {
-      conversationCache.delete(oldestKey);
-    }
-  }
-
-  conversationCache.set(key, entry);
-};
-
 export default function ConversationView({
   conversationId,
 }: ConversationViewProps) {
@@ -299,9 +280,7 @@ export default function ConversationView({
     : null;
 
   const [initialCache] = useState<ConversationCacheEntry | null>(() =>
-    conversationCacheKey
-      ? (conversationCache.get(conversationCacheKey) ?? null)
-      : null,
+    getCachedConversation(conversationCacheKey),
   );
 
   const [conversation, setConversation] = useState<Conversation | null>(
@@ -460,11 +439,17 @@ export default function ConversationView({
     const controller = new AbortController();
 
     const loadConversation = async (): Promise<void> => {
+      if (initialCache) {
+        void markConversationRead(conversationId).catch((readError) => {
+          console.error("Could not mark conversation as read:", readError);
+        });
+
+        return;
+      }
+
       try {
-        if (!initialCache) {
-          setIsLoading(true);
-          setErrorMessage(null);
-        }
+        setIsLoading(true);
+        setErrorMessage(null);
 
         const [conversationResult, messageResult] = await Promise.all([
           getConversationById(conversationId, controller.signal),
@@ -489,11 +474,11 @@ export default function ConversationView({
           console.error("Could not mark conversation as read:", readError);
         }
       } catch (error) {
-        if (!controller.signal.aborted && !initialCache) {
+        if (!controller.signal.aborted) {
           setErrorMessage(getApiErrorMessage(error));
         }
       } finally {
-        if (!controller.signal.aborted && !initialCache) {
+        if (!controller.signal.aborted) {
           setIsLoading(false);
         }
       }
@@ -1264,7 +1249,7 @@ export default function ConversationView({
     : null;
 
   return (
-    <section className="relative flex h-full w-full flex-col overflow-hidden bg-white">
+    <section className="relative flex h-full min-w-0 w-full flex-col overflow-hidden bg-white">
       <ConversationHeader
         displayName={displayName}
         avatarUrl={

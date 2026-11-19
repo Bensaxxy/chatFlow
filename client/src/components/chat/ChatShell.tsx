@@ -64,7 +64,7 @@ export default function ChatShell({ children }: ChatShellProps) {
   };
 
   return (
-    <div className="flex h-dvh overflow-hidden bg-slate-100">
+    <div className="flex h-dvh min-w-0 w-full overflow-hidden bg-slate-100">
       <aside
         className={`w-full shrink-0 flex-col border-r border-slate-200 bg-white md:flex md:w-[380px] ${
           conversationIsOpen ? "hidden" : "flex"

@@ -114,11 +114,11 @@ export default function ConversationMessageList({
   onReaction,
 }: ConversationMessageListProps) {
   return (
-    <div className="relative min-h-0 flex-1">
+    <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
       <div
         ref={messagesContainerRef}
         onScroll={onScroll}
-        className="h-full overflow-y-auto bg-slate-50 px-4 py-5 sm:px-6"
+        className="h-full overflow-x-hidden overflow-y-auto bg-slate-50 px-3 py-5 sm:px-6"
       >
         {hasMore && (
           <div className="mb-5 text-center">
@@ -149,7 +149,7 @@ export default function ConversationMessageList({
             </div>
           </div>
         ) : (
-          <div className="mx-auto flex w-full max-w-7xl flex-col gap-3">
+          <div className="mx-auto flex min-w-0 w-full max-w-7xl flex-col gap-3">
             {messages.map((message, messageIndex) => {
               const previousMessage = messages[messageIndex - 1];
               const showDateSeparator =

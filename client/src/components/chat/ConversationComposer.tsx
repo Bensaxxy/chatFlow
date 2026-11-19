@@ -1,14 +1,17 @@
 "use client";
 
 import { Check, LoaderCircle, SendHorizontal, X } from "lucide-react";
-import type {
-  ChangeEvent,
-  FormEvent,
-  RefObject,
+import {
+  useState,
+  type ChangeEvent,
+  type FormEvent,
+  type RefObject,
 } from "react";
 
 import MessageAttachmentUploader from "@/components/chat/MessageAttachmentUploader";
-import VoiceNoteRecorder from "@/components/chat/VoiceNoteRecorder";
+import VoiceNoteRecorder, {
+  type VoiceNoteStatus,
+} from "@/components/chat/VoiceNoteRecorder";
 import type { ChatMessage } from "@/types/message";
 
 interface ConversationComposerProps {
@@ -42,6 +45,10 @@ export default function ConversationComposer({
   onCancelEditing,
   onAttachmentSent,
 }: ConversationComposerProps) {
+  const [voiceNoteStatus, setVoiceNoteStatus] =
+    useState<VoiceNoteStatus>("idle");
+  const isRecordingVoiceNote = voiceNoteStatus === "recording";
+
   const replyPreview =
     replyingToMessage?.content ||
     (replyingToMessage?.type === "image"
@@ -104,55 +111,64 @@ export default function ConversationComposer({
         </div>
       )}
 
-      <div className="flex items-center gap-3">
-        <MessageAttachmentUploader
-          conversationId={conversationId}
-          replyToMessageId={replyingToMessage?._id ?? null}
-          disabled={isSending || isEditingMessage || editingMessageId !== null}
-          onMessageSent={onAttachmentSent}
-        />
-
+      <div className="flex min-w-0 items-center gap-3">
         {!editingMessageId && (
           <VoiceNoteRecorder
             conversationId={conversationId}
             replyToMessageId={replyingToMessage?._id ?? null}
             disabled={isSending || isEditingMessage}
             onMessageSent={onAttachmentSent}
+            onStatusChange={setVoiceNoteStatus}
           />
         )}
 
-        <input
-          ref={messageInputRef}
-          type="text"
-          value={messageText}
-          onChange={onMessageChange}
-          maxLength={5000}
-          placeholder={
-            editingMessageId
-              ? "Edit your message"
-              : replyingToMessage
-                ? "Write a reply"
-                : "Type a message"
-          }
-          aria-label={editingMessageId ? "Edit message" : "Message"}
-          className="min-w-0 flex-1 rounded-full border border-slate-300 bg-slate-100 px-5 py-3 text-sm text-slate-900 outline-none transition focus:border-cyan-500 focus:bg-white focus:ring-4 focus:ring-cyan-100"
-        />
+        {!isRecordingVoiceNote && (
+          <MessageAttachmentUploader
+            conversationId={conversationId}
+            replyToMessageId={replyingToMessage?._id ?? null}
+            disabled={isSending || isEditingMessage || editingMessageId !== null}
+            onMessageSent={onAttachmentSent}
+          />
+        )}
 
-        <button
-          type="submit"
-          disabled={!messageText.trim() || isSending || isEditingMessage}
-          aria-label={editingMessageId ? "Save edited message" : "Send message"}
-          title={editingMessageId ? "Save changes" : "Send message"}
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-cyan-600 text-white transition hover:bg-cyan-700 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {isSending || isEditingMessage ? (
-            <LoaderCircle className="h-5 w-5 animate-spin" />
-          ) : editingMessageId ? (
-            <Check className="h-5 w-5" />
-          ) : (
-            <SendHorizontal className="h-5 w-5" />
-          )}
-        </button>
+        {!isRecordingVoiceNote && (
+          <input
+            ref={messageInputRef}
+            type="text"
+            value={messageText}
+            onChange={onMessageChange}
+            maxLength={5000}
+            placeholder={
+              editingMessageId
+                ? "Edit your message"
+                : replyingToMessage
+                  ? "Write a reply"
+                  : "Type a message"
+            }
+            aria-label={editingMessageId ? "Edit message" : "Message"}
+            className="min-w-0 flex-1 rounded-full border border-slate-300 bg-slate-100 px-5 py-3 text-base text-slate-900 outline-none transition focus:border-cyan-500 focus:bg-white focus:ring-4 focus:ring-cyan-100 sm:text-sm"
+          />
+        )}
+
+        {!isRecordingVoiceNote && (
+          <button
+            type="submit"
+            disabled={!messageText.trim() || isSending || isEditingMessage}
+            aria-label={
+              editingMessageId ? "Save edited message" : "Send message"
+            }
+            title={editingMessageId ? "Save changes" : "Send message"}
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-cyan-600 text-white transition hover:bg-cyan-700 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {isSending || isEditingMessage ? (
+              <LoaderCircle className="h-5 w-5 animate-spin" />
+            ) : editingMessageId ? (
+              <Check className="h-5 w-5" />
+            ) : (
+              <SendHorizontal className="h-5 w-5" />
+            )}
+          </button>
+        )}
       </div>
     </form>
   );

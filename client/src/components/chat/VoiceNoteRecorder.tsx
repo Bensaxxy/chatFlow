@@ -13,9 +13,10 @@ interface VoiceNoteRecorderProps {
   replyToMessageId?: string | null;
   disabled?: boolean;
   onMessageSent: (message: ChatMessage) => void;
+  onStatusChange?: (status: VoiceNoteStatus) => void;
 }
 
-type RecordingStatus = "idle" | "recording" | "uploading";
+export type VoiceNoteStatus = "idle" | "recording" | "uploading";
 type StopAction = "cancel" | "send" | null;
 
 const MAX_VOICE_NOTE_SIZE = 15 * 1024 * 1024;
@@ -73,8 +74,9 @@ export default function VoiceNoteRecorder({
   replyToMessageId,
   disabled = false,
   onMessageSent,
+  onStatusChange,
 }: VoiceNoteRecorderProps) {
-  const [status, setStatus] = useState<RecordingStatus>("idle");
+  const [status, setStatus] = useState<VoiceNoteStatus>("idle");
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
   const recorderRef = useRef<MediaRecorder | null>(null);
@@ -266,6 +268,10 @@ export default function VoiceNoteRecorder({
       stopMicrophone();
     };
   }, []);
+
+  useEffect(() => {
+    onStatusChange?.(status);
+  }, [onStatusChange, status]);
 
   if (status === "recording") {
     return (
