@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  AlertCircle,
   Check,
   CheckCheck,
   Forward,
@@ -45,6 +46,7 @@ interface ConversationMessageItemProps {
   onEdit: (message: ChatMessage) => void;
   onDelete: (messageId: string, scope: DeleteMessageScope) => void;
   onReaction: (message: ChatMessage, emoji: MessageReactionEmoji) => void;
+  onRetry: (message: ChatMessage) => void;
 }
 
 const formatMessageTime = (value: string): string =>
@@ -78,6 +80,7 @@ export default function ConversationMessageItem({
   onEdit,
   onDelete,
   onReaction,
+  onRetry,
 }: ConversationMessageItemProps) {
   const isMine = message.sender._id === currentUser._id;
   const updatedSenderProfile = updatedProfiles.get(message.sender._id);
@@ -106,6 +109,9 @@ export default function ConversationMessageItem({
       ? "Delivered"
       : "Sent";
   const isDeletedForEveryone = Boolean(message.deletedForEveryoneAt);
+  const isSending = message.deliveryStatus === "sending";
+  const hasFailed = message.deliveryStatus === "failed";
+  const isPendingDelivery = isSending || hasFailed;
   const reactions = Array.isArray(message.reactions) ? message.reactions : [];
   const currentUserReaction = reactions.find(
     (reaction) => reaction.user === currentUser._id,
@@ -144,25 +150,27 @@ export default function ConversationMessageItem({
             "ring-2 ring-amber-400 ring-offset-2",
         )}
       >
-        <button
-          type="button"
-          disabled={isDeleting}
-          onClick={onToggleMenu}
-          aria-label="Message options"
-          title="Message options"
-          className={joinClasses(
-            "absolute right-1 top-1 z-30 flex h-7 w-7 items-center justify-center rounded-full transition disabled:opacity-50",
-            isMine
-              ? "text-cyan-100 hover:bg-cyan-500 hover:text-white"
-              : "text-slate-400 hover:bg-slate-100 hover:text-slate-700",
-          )}
-        >
-          {isDeleting ? (
-            <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
-          ) : (
-            <MoreVertical className="h-4 w-4" />
-          )}
-        </button>
+        {!isPendingDelivery && (
+          <button
+            type="button"
+            disabled={isDeleting}
+            onClick={onToggleMenu}
+            aria-label="Message options"
+            title="Message options"
+            className={joinClasses(
+              "absolute right-1 top-1 z-30 flex h-7 w-7 items-center justify-center rounded-full transition disabled:opacity-50",
+              isMine
+                ? "text-cyan-100 hover:bg-cyan-500 hover:text-white"
+                : "text-slate-400 hover:bg-slate-100 hover:text-slate-700",
+            )}
+          >
+            {isDeleting ? (
+              <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <MoreVertical className="h-4 w-4" />
+            )}
+          </button>
+        )}
 
         {isMenuOpen && (
           <>
@@ -349,7 +357,9 @@ export default function ConversationMessageItem({
           </p>
         )}
 
-        {groupedReactions.length > 0 && !isDeletedForEveryone && (
+        {groupedReactions.length > 0 &&
+          !isDeletedForEveryone &&
+          !isPendingDelivery && (
           <div className="mt-2 flex flex-wrap items-center gap-1">
             {groupedReactions.map(({ emoji, count }) => (
               <button
@@ -382,9 +392,30 @@ export default function ConversationMessageItem({
             <span className="italic">Edited</span>
           )}
 
-          <span>{formatMessageTime(message.createdAt)}</span>
+          {isSending ? (
+            <span className="inline-flex items-center gap-1" role="status">
+              <LoaderCircle className="h-3 w-3 animate-spin" />
+              {message.attachment &&
+              typeof message.uploadProgress === "number" &&
+              message.uploadProgress < 100
+                ? `Uploading ${message.uploadProgress}%`
+                : "Sending…"}
+            </span>
+          ) : hasFailed ? (
+            <button
+              type="button"
+              onClick={() => onRetry(message)}
+              title={message.deliveryError || "Message failed to send. Retry."}
+              className="inline-flex items-center gap-1 rounded-full border border-red-200 bg-red-50 px-2 py-1 font-semibold text-red-700 transition hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-red-200"
+            >
+              <AlertCircle className="h-3.5 w-3.5" />
+              Retry
+            </button>
+          ) : (
+            <span>{formatMessageTime(message.createdAt)}</span>
+          )}
 
-          {isMine && !isDeletedForEveryone && (
+          {isMine && !isDeletedForEveryone && !isPendingDelivery && (
             <span
               title={receiptLabel}
               aria-label={receiptLabel}
@@ -411,7 +442,7 @@ export default function ConversationMessageItem({
         </div>
       </div>
 
-      {!isDeletedForEveryone && (
+      {!isDeletedForEveryone && !isPendingDelivery && (
         <button
           type="button"
           disabled={isReacting}
@@ -431,7 +462,7 @@ export default function ConversationMessageItem({
         </button>
       )}
 
-      {isReactionPickerOpen && !isDeletedForEveryone && (
+      {isReactionPickerOpen && !isDeletedForEveryone && !isPendingDelivery && (
         <>
           <button
             type="button"

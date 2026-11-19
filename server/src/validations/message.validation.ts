@@ -18,6 +18,11 @@ const optionalMultipartObjectId = (message: string) =>
     return value;
   }, objectIdSchema(message).nullable());
 
+const optionalClientMessageId = z.preprocess(
+  (value) => (value === "" || value === null ? undefined : value),
+  z.string().uuid("Client message ID is invalid").optional(),
+);
+
 export const conversationParamsSchema = z.object({
   conversationId: objectIdSchema("Conversation ID is invalid"),
 });
@@ -37,6 +42,11 @@ export const sendMessageSchema = z.object({
   replyToMessageId: objectIdSchema("Reply message ID is invalid")
     .nullable()
     .optional(),
+
+  clientMessageId: z
+    .string()
+    .uuid("Client message ID is invalid")
+    .optional(),
 });
 
 export const sendAttachmentMessageSchema = z.object({
@@ -50,6 +60,8 @@ export const sendAttachmentMessageSchema = z.object({
   replyToMessageId: optionalMultipartObjectId(
     "Reply message ID is invalid",
   ).optional(),
+
+  clientMessageId: optionalClientMessageId,
 });
 
 export const forwardMessageSchema = z.object({

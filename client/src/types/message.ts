@@ -65,6 +65,7 @@ export interface ChatMessage {
   _id: string;
   conversation: string;
   sender: MessageSender;
+  clientMessageId?: string | null;
   type: "text" | "image" | "file" | "audio";
   content: string;
   attachment: MessageAttachment | null;
@@ -79,6 +80,9 @@ export interface ChatMessage {
   deletedForEveryoneAt: string | null;
   createdAt: string;
   updatedAt: string;
+  deliveryStatus?: "sending" | "failed";
+  deliveryError?: string | null;
+  uploadProgress?: number | null;
 }
 
 export interface MessagesPage {

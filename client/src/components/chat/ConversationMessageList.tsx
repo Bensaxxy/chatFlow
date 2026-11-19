@@ -43,6 +43,7 @@ interface ConversationMessageListProps {
   onEdit: (message: ChatMessage) => void;
   onDelete: (messageId: string, scope: DeleteMessageScope) => void;
   onReaction: (message: ChatMessage, emoji: MessageReactionEmoji) => void;
+  onRetry: (message: ChatMessage) => void;
 }
 
 const isSameCalendarDay = (
@@ -114,6 +115,7 @@ export default function ConversationMessageList({
   onEdit,
   onDelete,
   onReaction,
+  onRetry,
 }: ConversationMessageListProps) {
   return (
     <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
@@ -196,6 +198,7 @@ export default function ConversationMessageList({
                     onEdit={onEdit}
                     onDelete={onDelete}
                     onReaction={onReaction}
+                    onRetry={onRetry}
                   />
                 </Fragment>
               );

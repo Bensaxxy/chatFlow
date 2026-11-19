@@ -132,6 +132,18 @@ const messageSchema = new Schema(
       default: "",
     },
 
+    /*
+     * A client-generated UUID makes text and multipart uploads idempotent.
+     * Retries with the same value return the original message instead of
+     * creating another copy.
+     */
+    clientMessageId: {
+      type: String,
+      trim: true,
+      maxlength: 64,
+      default: null,
+    },
+
     attachment: {
       type: messageAttachmentSchema,
       default: null,
@@ -223,6 +235,22 @@ messageSchema.index({
   conversation: 1,
   _id: -1,
 });
+
+messageSchema.index(
+  {
+    conversation: 1,
+    sender: 1,
+    clientMessageId: 1,
+  },
+  {
+    unique: true,
+    partialFilterExpression: {
+      clientMessageId: {
+        $type: "string",
+      },
+    },
+  },
+);
 
 messageSchema.set("toJSON", {
   transform: (_document, returnedObject) => {

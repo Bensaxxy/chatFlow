@@ -16,13 +16,11 @@ import VoiceNoteRecorder, {
 import type { ChatMessage } from "@/types/message";
 
 interface ConversationComposerProps {
-  conversationId: string;
   messageInputRef: RefObject<HTMLTextAreaElement | null>;
   messageText: string;
   replyingToMessage: ChatMessage | null;
   replySenderName: string;
   editingMessageId: string | null;
-  isSending: boolean;
   isEditingMessage: boolean;
   isMessagingDisabled?: boolean;
   messagingDisabledMessage?: string;
@@ -31,17 +29,20 @@ interface ConversationComposerProps {
   onMessageChange: (event: ChangeEvent<HTMLTextAreaElement>) => void;
   onCancelReplying: () => void;
   onCancelEditing: () => void;
-  onAttachmentSent: (message: ChatMessage) => void;
+  onAttachmentQueued: (
+    file: File,
+    content: string,
+    replyToMessageId: string | null,
+  ) => void;
+  onVoiceNoteQueued: (file: File, replyToMessageId: string | null) => void;
 }
 
 export default function ConversationComposer({
-  conversationId,
   messageInputRef,
   messageText,
   replyingToMessage,
   replySenderName,
   editingMessageId,
-  isSending,
   isEditingMessage,
   isMessagingDisabled = false,
   messagingDisabledMessage = "Messaging is unavailable in this conversation.",
@@ -50,7 +51,8 @@ export default function ConversationComposer({
   onMessageChange,
   onCancelReplying,
   onCancelEditing,
-  onAttachmentSent,
+  onAttachmentQueued,
+  onVoiceNoteQueued,
 }: ConversationComposerProps) {
   const [voiceNoteStatus, setVoiceNoteStatus] =
     useState<VoiceNoteStatus>("idle");
@@ -150,22 +152,20 @@ export default function ConversationComposer({
         <div className="flex min-w-0 items-end gap-1 sm:gap-2">
           {!editingMessageId && (
             <VoiceNoteRecorder
-              conversationId={conversationId}
               replyToMessageId={replyingToMessage?._id ?? null}
-              disabled={isSending || isEditingMessage}
-              onMessageSent={onAttachmentSent}
+              disabled={isEditingMessage}
+              onVoiceNoteQueued={onVoiceNoteQueued}
               onStatusChange={setVoiceNoteStatus}
             />
           )}
 
           {!isRecordingVoiceNote && (
             <MessageAttachmentUploader
-              conversationId={conversationId}
               replyToMessageId={replyingToMessage?._id ?? null}
               disabled={
-                isSending || isEditingMessage || editingMessageId !== null
+                isEditingMessage || editingMessageId !== null
               }
-              onMessageSent={onAttachmentSent}
+              onAttachmentQueued={onAttachmentQueued}
             />
           )}
 
@@ -191,14 +191,14 @@ export default function ConversationComposer({
           {!isRecordingVoiceNote && (
             <button
               type="submit"
-              disabled={!messageText.trim() || isSending || isEditingMessage}
+              disabled={!messageText.trim() || isEditingMessage}
               aria-label={
                 editingMessageId ? "Save edited message" : "Send message"
               }
               title={editingMessageId ? "Save changes" : "Send message"}
               className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-cyan-600 text-white transition hover:bg-cyan-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {isSending || isEditingMessage ? (
+              {isEditingMessage ? (
                 <LoaderCircle className="h-5 w-5 animate-spin" />
               ) : editingMessageId ? (
                 <Check className="h-5 w-5" />

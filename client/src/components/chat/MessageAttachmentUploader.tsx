@@ -3,7 +3,6 @@
 import {
   FileText,
   ImageIcon,
-  LoaderCircle,
   Paperclip,
   SendHorizontal,
   X,
@@ -11,15 +10,14 @@ import {
 import { Fragment, useEffect, useRef, useState, type ChangeEvent } from "react";
 import { toast } from "react-toastify";
 
-import { getApiErrorMessage } from "@/lib/api/errors";
-import { sendConversationAttachment } from "@/services/message.service";
-import type { ChatMessage } from "@/types/message";
-
 interface MessageAttachmentUploaderProps {
-  conversationId: string;
   replyToMessageId?: string | null;
   disabled?: boolean;
-  onMessageSent: (message: ChatMessage) => void;
+  onAttachmentQueued: (
+    file: File,
+    content: string,
+    replyToMessageId: string | null,
+  ) => void;
 }
 
 const MAX_FILE_SIZE = 15 * 1024 * 1024;
@@ -127,19 +125,15 @@ const formatFileSize = (bytes: number): string => {
 };
 
 export default function MessageAttachmentUploader({
-  conversationId,
   replyToMessageId,
   disabled = false,
-  onMessageSent,
+  onAttachmentQueued,
 }: MessageAttachmentUploaderProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [caption, setCaption] = useState("");
-  const [uploadProgress, setUploadProgress] = useState(0);
-  const [isUploading, setIsUploading] = useState(false);
-
   const isImage = selectedFile ? isImageAttachment(selectedFile) : false;
 
   useEffect(() => {
@@ -151,8 +145,6 @@ export default function MessageAttachmentUploader({
   }, [previewUrl]);
 
   const clearSelection = (): void => {
-    if (isUploading) return;
-
     if (previewUrl) {
       URL.revokeObjectURL(previewUrl);
     }
@@ -160,7 +152,6 @@ export default function MessageAttachmentUploader({
     setSelectedFile(null);
     setPreviewUrl(null);
     setCaption("");
-    setUploadProgress(0);
 
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
@@ -192,8 +183,6 @@ export default function MessageAttachmentUploader({
 
     setSelectedFile(file);
     setCaption("");
-    setUploadProgress(0);
-
     if (isImageAttachment(file)) {
       setPreviewUrl(URL.createObjectURL(file));
     } else {
@@ -201,46 +190,15 @@ export default function MessageAttachmentUploader({
     }
   };
 
-  const handleUpload = async (): Promise<void> => {
-    if (!selectedFile || isUploading) return;
+  const handleUpload = (): void => {
+    if (!selectedFile) return;
 
-    try {
-      setIsUploading(true);
-      setUploadProgress(0);
-
-      const message = await sendConversationAttachment(
-        conversationId,
-        selectedFile,
-        caption.trim(),
-        replyToMessageId,
-        setUploadProgress,
-      );
-
-      onMessageSent(message);
-
-      toast.success(
-        message.type === "image"
-          ? "Image sent successfully"
-          : "File sent successfully",
-      );
-
-      if (previewUrl) {
-        URL.revokeObjectURL(previewUrl);
-      }
-
-      setSelectedFile(null);
-      setPreviewUrl(null);
-      setCaption("");
-      setUploadProgress(0);
-
-      if (fileInputRef.current) {
-        fileInputRef.current.value = "";
-      }
-    } catch (error) {
-      toast.error(getApiErrorMessage(error));
-    } finally {
-      setIsUploading(false);
-    }
+    onAttachmentQueued(
+      selectedFile,
+      caption.trim(),
+      replyToMessageId ?? null,
+    );
+    clearSelection();
   };
 
   return (
@@ -257,7 +215,7 @@ export default function MessageAttachmentUploader({
 
       <button
         type="button"
-        disabled={disabled || isUploading}
+        disabled={disabled}
         onClick={() => fileInputRef.current?.click()}
         aria-label="Attach an image or file"
         title="Attach image or file"
@@ -270,10 +228,9 @@ export default function MessageAttachmentUploader({
         <div className="fixed inset-0 z-[100] flex items-end justify-center bg-slate-950/50 backdrop-blur-sm sm:items-center sm:p-4">
           <button
             type="button"
-            disabled={isUploading}
             onClick={clearSelection}
             aria-label="Close attachment preview"
-            className="absolute inset-0 cursor-default disabled:cursor-wait"
+            className="absolute inset-0 cursor-default"
           />
 
           <section
@@ -306,10 +263,9 @@ export default function MessageAttachmentUploader({
 
               <button
                 type="button"
-                disabled={isUploading}
                 onClick={clearSelection}
                 aria-label="Cancel attachment"
-                className="rounded-full p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-800 disabled:opacity-50"
+                className="rounded-full p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -354,30 +310,11 @@ export default function MessageAttachmentUploader({
                 id="attachment-caption"
                 value={caption}
                 onChange={(event) => setCaption(event.target.value)}
-                disabled={isUploading}
                 maxLength={5000}
                 rows={3}
                 placeholder="Add a caption"
-                className="mt-2 w-full resize-none rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-cyan-500 focus:ring-4 focus:ring-cyan-100 disabled:opacity-60"
+                className="mt-2 w-full resize-none rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-cyan-500 focus:ring-4 focus:ring-cyan-100"
               />
-
-              {isUploading && (
-                <div className="mt-5">
-                  <div className="mb-2 flex items-center justify-between text-xs text-slate-500">
-                    <span>Uploading attachment</span>
-                    <span>{uploadProgress}%</span>
-                  </div>
-
-                  <div className="h-2 overflow-hidden rounded-full bg-slate-200">
-                    <div
-                      className="h-full rounded-full bg-cyan-600 transition-[width] duration-200"
-                      style={{
-                        width: `${uploadProgress}%`,
-                      }}
-                    />
-                  </div>
-                </div>
-              )}
             </div>
 
             <footer className="flex items-center justify-between gap-4 border-t border-slate-200 bg-white px-5 py-4">
@@ -393,21 +330,11 @@ export default function MessageAttachmentUploader({
 
               <button
                 type="button"
-                disabled={isUploading}
-                onClick={() => void handleUpload()}
-                className="flex min-w-28 items-center justify-center gap-2 rounded-xl bg-cyan-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-cyan-700 disabled:cursor-wait disabled:opacity-60"
+                onClick={handleUpload}
+                className="flex min-w-28 items-center justify-center gap-2 rounded-xl bg-cyan-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-cyan-700"
               >
-                {isUploading ? (
-                  <>
-                    <LoaderCircle className="h-4 w-4 animate-spin" />
-                    Sending
-                  </>
-                ) : (
-                  <>
-                    <SendHorizontal className="h-4 w-4" />
-                    Send
-                  </>
-                )}
+                <SendHorizontal className="h-4 w-4" />
+                Send
               </button>
             </footer>
           </section>

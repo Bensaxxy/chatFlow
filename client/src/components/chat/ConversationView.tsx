@@ -32,6 +32,7 @@ import {
   getConversationMessageContext,
   getConversationMessages,
   markConversationRead,
+  sendConversationAttachment,
   sendConversationMessage,
   searchConversationMessages,
   updateConversationMessageReaction,
@@ -43,6 +44,7 @@ import type {
 import {
   type ChatMessage,
   type DeleteMessageScope,
+  type MessageAttachment,
   type MessageDeletedPayload,
   type MessageReactionEmoji,
   type RepliedMessage,
@@ -53,10 +55,49 @@ import {
   getConversationDraft,
   saveConversationDraft,
 } from "@/lib/chat/draft-storage";
+import { createClientMessageId } from "@/lib/chat/client-message-id";
 
 interface ConversationViewProps {
   conversationId: string;
 }
+
+interface PendingDelivery {
+  send: () => Promise<ChatMessage>;
+  releasePreviewUrl?: () => void;
+  isInFlight?: boolean;
+}
+
+const getAttachmentMessageType = (
+  file: File,
+): "image" | "file" | "audio" => {
+  if (file.type.startsWith("image/")) {
+    return "image";
+  }
+
+  if (file.type.startsWith("audio/")) {
+    return "audio";
+  }
+
+  return "file";
+};
+
+const createLocalAttachment = (
+  file: File,
+  url: string,
+): MessageAttachment => ({
+  url,
+  resourceType: file.type.startsWith("image/")
+    ? "image"
+    : file.type.startsWith("audio/")
+      ? "video"
+      : "raw",
+  fileName: file.name,
+  mimeType: file.type || "application/octet-stream",
+  size: file.size,
+  width: null,
+  height: null,
+  duration: null,
+});
 
 const formatMessageDateLabel = (value: string): string => {
   const messageDate = new Date(value);
@@ -144,6 +185,7 @@ const normalizeReplyPreview = (
 
 const normalizeMessage = (message: ChatMessage): ChatMessage => ({
   ...message,
+  clientMessageId: message.clientMessageId ?? null,
   type: message.type ?? "text",
   attachment: message.attachment ?? null,
   isForwarded: message.isForwarded ?? false,
@@ -160,11 +202,22 @@ const addMessageIfMissing = (
 ): ChatMessage[] => {
   const normalizedMessage = normalizeMessage(incomingMessage);
 
-  return currentMessages.some(
-    (message) => message._id === normalizedMessage._id,
-  )
-    ? currentMessages
-    : [...currentMessages, normalizedMessage];
+  const matchingMessage = currentMessages.find(
+    (message) =>
+      message._id === normalizedMessage._id ||
+      Boolean(
+        normalizedMessage.clientMessageId &&
+          message.clientMessageId === normalizedMessage.clientMessageId,
+      ),
+  );
+
+  if (!matchingMessage) {
+    return [...currentMessages, normalizedMessage];
+  }
+
+  return currentMessages.map((message) =>
+    message._id === matchingMessage._id ? normalizedMessage : message,
+  );
 };
 
 const createReplyPreview = (message: ChatMessage): RepliedMessage => ({
@@ -172,6 +225,7 @@ const createReplyPreview = (message: ChatMessage): RepliedMessage => ({
   content: message.content,
   type: message.type,
   attachment: message.attachment,
+  linkPreview: message.linkPreview ?? null,
   sender: message.sender,
   isForwarded: message.isForwarded,
   deletedFor: Array.isArray(message.deletedFor) ? message.deletedFor : [],
@@ -189,7 +243,13 @@ const replaceMessage = (
   const replyPreview = createReplyPreview(normalizedMessage);
 
   return currentMessages.map((message) => {
-    if (message._id === normalizedMessage._id) {
+    if (
+      message._id === normalizedMessage._id ||
+      Boolean(
+        normalizedMessage.clientMessageId &&
+          message.clientMessageId === normalizedMessage.clientMessageId,
+      )
+    ) {
       return normalizedMessage;
     }
 
@@ -321,8 +381,6 @@ export default function ConversationView({
 
   const [isLoadingOlder, setIsLoadingOlder] = useState(false);
 
-  const [isSending, setIsSending] = useState(false);
-
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const [isOtherUserTyping, setIsOtherUserTyping] = useState(false);
@@ -401,6 +459,7 @@ export default function ConversationView({
 
   const lastTypingEmitAtRef = useRef(0);
   const isTypingRef = useRef(false);
+  const pendingDeliveriesRef = useRef<Map<string, PendingDelivery>>(new Map());
 
   const handleMessagesScroll = useCallback((): void => {
     const container = messagesContainerRef.current;
@@ -572,6 +631,17 @@ export default function ConversationView({
     const handleNewMessage = ({ message }: { message: ChatMessage }): void => {
       if (message.conversation !== conversationId) {
         return;
+      }
+
+      if (message.sender._id === currentUserId && message.clientMessageId) {
+        const pendingDelivery = pendingDeliveriesRef.current.get(
+          message.clientMessageId,
+        );
+
+        if (pendingDelivery) {
+          pendingDeliveriesRef.current.delete(message.clientMessageId);
+          pendingDelivery.releasePreviewUrl?.();
+        }
       }
 
       setMessages((current) => addMessageIfMissing(current, message));
@@ -1024,6 +1094,220 @@ export default function ConversationView({
     });
   };
 
+  const deliverPendingMessage = (clientMessageId: string): void => {
+    const pendingDelivery = pendingDeliveriesRef.current.get(clientMessageId);
+
+    if (!pendingDelivery || pendingDelivery.isInFlight) {
+      return;
+    }
+
+    pendingDelivery.isInFlight = true;
+
+    setMessages((currentMessages) =>
+      currentMessages.map((message) =>
+        message.clientMessageId === clientMessageId
+          ? {
+              ...message,
+              deliveryStatus: "sending",
+              deliveryError: null,
+            }
+          : message,
+      ),
+    );
+
+    void pendingDelivery
+      .send()
+      .then((sentMessage) => {
+        if (
+          pendingDeliveriesRef.current.get(clientMessageId) ===
+          pendingDelivery
+        ) {
+          pendingDeliveriesRef.current.delete(clientMessageId);
+          pendingDelivery.releasePreviewUrl?.();
+        }
+
+        setMessages((currentMessages) =>
+          replaceMessage(currentMessages, sentMessage),
+        );
+      })
+      .catch((error: unknown) => {
+        if (
+          pendingDeliveriesRef.current.get(clientMessageId) !==
+          pendingDelivery
+        ) {
+          return;
+        }
+
+        pendingDelivery.isInFlight = false;
+        const deliveryError = getApiErrorMessage(error);
+
+        setMessages((currentMessages) =>
+          currentMessages.map((message) =>
+            message.clientMessageId === clientMessageId
+              ? {
+                  ...message,
+                  deliveryStatus: "failed",
+                  deliveryError,
+                  uploadProgress: null,
+                }
+              : message,
+          ),
+        );
+      });
+  };
+
+  const queueOptimisticMessage = (
+    message: ChatMessage,
+    pendingDelivery: PendingDelivery,
+  ): void => {
+    const clientMessageId = message.clientMessageId;
+
+    if (!clientMessageId) {
+      return;
+    }
+
+    pendingDeliveriesRef.current.set(clientMessageId, pendingDelivery);
+
+    setMessages((currentMessages) =>
+      addMessageIfMissing(currentMessages, message),
+    );
+
+    window.requestAnimationFrame(() => {
+      messagesEndRef.current?.scrollIntoView({
+        behavior: "smooth",
+      });
+    });
+
+    deliverPendingMessage(clientMessageId);
+  };
+
+  const createOptimisticMessage = ({
+    clientMessageId,
+    content,
+    replyToMessageId,
+    attachment,
+    type = "text",
+    uploadProgress = null,
+  }: {
+    clientMessageId: string;
+    content: string;
+    replyToMessageId: string | null;
+    attachment?: MessageAttachment | null;
+    type?: "text" | "image" | "file" | "audio";
+    uploadProgress?: number | null;
+  }): ChatMessage | null => {
+    if (!user || !currentUserId) {
+      return null;
+    }
+
+    const replyTo =
+      replyingToMessage?._id === replyToMessageId
+        ? createReplyPreview(replyingToMessage)
+        : (messages.find((message) => message._id === replyToMessageId)
+            ? createReplyPreview(
+                messages.find((message) => message._id === replyToMessageId)!,
+              )
+            : null);
+    const now = new Date().toISOString();
+
+    return {
+      _id: "temporary-" + clientMessageId,
+      conversation: conversationId,
+      sender: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        avatarUrl: user.avatarUrl,
+      },
+      clientMessageId,
+      type,
+      content,
+      attachment: attachment ?? null,
+      linkPreview: null,
+      replyTo,
+      isForwarded: false,
+      deliveredTo: [user._id],
+      readBy: [user._id],
+      reactions: [],
+      editedAt: null,
+      deletedFor: [],
+      deletedForEveryoneAt: null,
+      createdAt: now,
+      updatedAt: now,
+      deliveryStatus: "sending",
+      deliveryError: null,
+      uploadProgress,
+    };
+  };
+
+  const handleRetryMessage = (message: ChatMessage): void => {
+    if (!message.clientMessageId || message.deliveryStatus !== "failed") {
+      return;
+    }
+
+    if (!pendingDeliveriesRef.current.has(message.clientMessageId)) {
+      toast.error("This message can no longer be retried. Please send it again.");
+      return;
+    }
+
+    deliverPendingMessage(message.clientMessageId);
+  };
+
+  const handleAttachmentQueued = (
+    file: File,
+    content: string,
+    replyToMessageId: string | null,
+  ): void => {
+    const clientMessageId = createClientMessageId();
+    const previewUrl = URL.createObjectURL(file);
+    const optimisticMessage = createOptimisticMessage({
+      clientMessageId,
+      content,
+      replyToMessageId,
+      attachment: createLocalAttachment(file, previewUrl),
+      type: getAttachmentMessageType(file),
+      uploadProgress: 0,
+    });
+
+    if (!optimisticMessage) {
+      URL.revokeObjectURL(previewUrl);
+      return;
+    }
+
+    queueOptimisticMessage(optimisticMessage, {
+      send: () =>
+        sendConversationAttachment(
+          conversationId,
+          file,
+          content,
+          replyToMessageId,
+          clientMessageId,
+          (progressPercentage) => {
+            setMessages((currentMessages) =>
+              currentMessages.map((message) =>
+                message.clientMessageId === clientMessageId
+                  ? {
+                      ...message,
+                      uploadProgress: progressPercentage,
+                    }
+                  : message,
+              ),
+            );
+          },
+        ),
+      releasePreviewUrl: () => URL.revokeObjectURL(previewUrl),
+    });
+
+    setReplyingToMessage(null);
+  };
+
+  const handleVoiceNoteQueued = (
+    file: File,
+    replyToMessageId: string | null,
+  ): void => {
+    handleAttachmentQueued(file, "", replyToMessageId);
+  };
+
   const handleSendMessage = async (
     event: FormEvent<HTMLFormElement>,
   ): Promise<void> => {
@@ -1039,7 +1323,7 @@ export default function ConversationView({
 
     const content = messageText.trim();
 
-    if (!content || isSending || isEditingMessage) {
+    if (!content || isEditingMessage) {
       return;
     }
 
@@ -1072,28 +1356,34 @@ export default function ConversationView({
       return;
     }
 
-    try {
-      setIsSending(true);
+    const clientMessageId = createClientMessageId();
+    const replyToMessageId = replyingToMessage?._id ?? null;
+    const optimisticMessage = createOptimisticMessage({
+      clientMessageId,
+      content,
+      replyToMessageId,
+    });
 
-      const newMessage = await sendConversationMessage(
-        conversationId,
-        content,
-        replyingToMessage?._id ?? null,
-      );
-
-      setMessages((current) => addMessageIfMissing(current, newMessage));
-
-      if (currentUserId) {
-        clearConversationDraft(currentUserId, conversationId);
-      }
-
-      setMessageText("");
-      setReplyingToMessage(null);
-    } catch (error) {
-      toast.error(getApiErrorMessage(error));
-    } finally {
-      setIsSending(false);
+    if (!optimisticMessage) {
+      return;
     }
+
+    queueOptimisticMessage(optimisticMessage, {
+      send: () =>
+        sendConversationMessage(
+          conversationId,
+          content,
+          replyToMessageId,
+          clientMessageId,
+        ),
+    });
+
+    if (currentUserId) {
+      clearConversationDraft(currentUserId, conversationId);
+    }
+
+    setMessageText("");
+    setReplyingToMessage(null);
   };
 
   const handleMessageReaction = async (
@@ -1162,20 +1452,6 @@ export default function ConversationView({
         currentMessages,
       ),
     );
-
-    window.requestAnimationFrame(() => {
-      messagesEndRef.current?.scrollIntoView({
-        behavior: "smooth",
-      });
-    });
-  };
-
-  const handleAttachmentSent = (attachmentMessage: ChatMessage): void => {
-    setMessages((currentMessages) =>
-      addMessageIfMissing(currentMessages, attachmentMessage),
-    );
-
-    setReplyingToMessage(null);
 
     window.requestAnimationFrame(() => {
       messagesEndRef.current?.scrollIntoView({
@@ -1378,9 +1654,9 @@ export default function ConversationView({
         onReaction={(message, emoji) => {
           void handleMessageReaction(message, emoji);
         }}
+        onRetry={handleRetryMessage}
       />
       <ConversationComposer
-        conversationId={conversationId}
         messageInputRef={messageInputRef}
         messageText={messageText}
         replyingToMessage={replyingToMessage}
@@ -1393,7 +1669,6 @@ export default function ConversationView({
               : ""
         }
         editingMessageId={editingMessageId}
-        isSending={isSending}
         isEditingMessage={isEditingMessage}
         isMessagingDisabled={isMessagingDisabled}
         messagingDisabledMessage={messagingDisabledMessage}
@@ -1406,7 +1681,8 @@ export default function ConversationView({
         onMessageChange={handleMessageChange}
         onCancelReplying={handleCancelReplying}
         onCancelEditing={handleCancelEditing}
-        onAttachmentSent={handleAttachmentSent}
+        onAttachmentQueued={handleAttachmentQueued}
+        onVoiceNoteQueued={handleVoiceNoteQueued}
       />
 
       {currentUserId && (

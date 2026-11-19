@@ -19,6 +19,7 @@ export interface MessageSender {
 
 export interface ConversationLastMessage {
   _id: string;
+  clientMessageId?: string | null;
   content: string;
   type: "text" | "image" | "file" | "audio";
   attachment: MessageAttachment | null;

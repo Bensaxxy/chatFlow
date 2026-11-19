@@ -48,12 +48,23 @@ export const updateCachedConversationMessage = (
     return;
   }
 
-  const hasMessage = cachedConversation.messages.some(
-    (currentMessage) => currentMessage._id === message._id,
+  const matchingMessage = cachedConversation.messages.find(
+    (currentMessage) =>
+      currentMessage._id === message._id ||
+      Boolean(
+        message.clientMessageId &&
+          currentMessage.clientMessageId === message.clientMessageId,
+      ),
   );
+  const hasMessage = Boolean(matchingMessage);
   const shouldUpdateLastMessage =
     options.isLatestMessage ||
-    cachedConversation.conversation.lastMessage?._id === message._id;
+    cachedConversation.conversation.lastMessage?._id === message._id ||
+    Boolean(
+      message.clientMessageId &&
+        cachedConversation.conversation.lastMessage?.clientMessageId ===
+          message.clientMessageId,
+    );
 
   conversationCache.set(key, {
     ...cachedConversation,
@@ -66,7 +77,9 @@ export const updateCachedConversationMessage = (
     },
     messages: hasMessage
       ? cachedConversation.messages.map((currentMessage) =>
-          currentMessage._id === message._id ? message : currentMessage,
+          currentMessage._id === matchingMessage?._id
+            ? message
+            : currentMessage,
         )
       : [...cachedConversation.messages, message],
   });

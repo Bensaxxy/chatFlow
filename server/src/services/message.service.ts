@@ -193,6 +193,7 @@ interface CreateRealtimeMessageOptions {
   participantIds: string[];
   senderId: string;
   content: string;
+  clientMessageId?: string;
   messageType?: "text" | "image" | "file" | "audio";
   attachment?: StoredMessageAttachment | null;
   linkPreview?: StoredLinkPreview | null;
@@ -200,6 +201,25 @@ interface CreateRealtimeMessageOptions {
   isForwarded?: boolean;
   forwardedFromMessageId?: string | null;
 }
+
+const isDuplicateKeyError = (error: unknown): error is { code: number } =>
+  typeof error === "object" && error !== null && "code" in error && error.code === 11000;
+
+const findExistingClientMessage = async (
+  conversationId: string,
+  senderId: string,
+  clientMessageId: string | undefined,
+) => {
+  if (!clientMessageId) {
+    return null;
+  }
+
+  return Message.findOne({
+    conversation: conversationId,
+    sender: senderId,
+    clientMessageId,
+  }).populate(messagePopulateOptions);
+};
 
 const scheduleLinkPreviewResolution = (
   messageId: string,
@@ -262,6 +282,7 @@ const createRealtimeMessage = async ({
   participantIds,
   senderId,
   content,
+  clientMessageId,
   messageType = "text",
   attachment = null,
   linkPreview: providedLinkPreview,
@@ -274,6 +295,19 @@ const createRealtimeMessage = async ({
     providedLinkPreview === undefined
       ? getLinkPreviewPlaceholder(content)
       : providedLinkPreview;
+
+  const existingMessage = await findExistingClientMessage(
+    conversationId,
+    senderId,
+    clientMessageId,
+  );
+
+  if (existingMessage) {
+    return {
+      message: existingMessage,
+      created: false,
+    };
+  }
 
   const recipientIds = participantIds.filter(
     (participantId) => participantId !== senderId,
@@ -293,19 +327,41 @@ const createRealtimeMessage = async ({
     (recipientId): recipientId is string => recipientId !== null,
   );
 
-  const message = await Message.create({
-    conversation: conversationId,
-    sender: senderId,
-    type: messageType,
-    content,
-    attachment,
-    linkPreview,
-    replyTo: replyToMessageId,
-    isForwarded,
-    forwardedFrom: forwardedFromMessageId,
-    deliveredTo: [senderId, ...deliveredRecipientIds],
-    readBy: [senderId],
-  });
+  let message;
+
+  try {
+    message = await Message.create({
+      conversation: conversationId,
+      sender: senderId,
+      type: messageType,
+      content,
+      clientMessageId: clientMessageId ?? null,
+      attachment,
+      linkPreview,
+      replyTo: replyToMessageId,
+      isForwarded,
+      forwardedFrom: forwardedFromMessageId,
+      deliveredTo: [senderId, ...deliveredRecipientIds],
+      readBy: [senderId],
+    });
+  } catch (error) {
+    if (isDuplicateKeyError(error)) {
+      const duplicateMessage = await findExistingClientMessage(
+        conversationId,
+        senderId,
+        clientMessageId,
+      );
+
+      if (duplicateMessage) {
+        return {
+          message: duplicateMessage,
+          created: false,
+        };
+      }
+    }
+
+    throw error;
+  }
 
   await Conversation.findByIdAndUpdate(conversationId, {
     $set: {
@@ -338,7 +394,10 @@ const createRealtimeMessage = async ({
     );
   }
 
-  return message;
+  return {
+    message,
+    created: true,
+  };
 };
 
 export const sendMessage = async (
@@ -355,15 +414,18 @@ export const sendMessage = async (
 
   await verifyReplyMessage(conversationId, input.replyToMessageId, senderId);
 
-  return createRealtimeMessage({
+  const result = await createRealtimeMessage({
     conversationId,
     participantIds: conversation.participants.map((participantId) =>
       participantId.toString(),
     ),
     senderId,
     content: input.content,
+    clientMessageId: input.clientMessageId,
     replyToMessageId: input.replyToMessageId,
   });
+
+  return result.message;
 };
 
 export const sendMessageAttachment = async (
@@ -380,6 +442,16 @@ export const sendMessageAttachment = async (
   await assertConversationMessagingAllowed(conversation, senderId);
 
   await verifyReplyMessage(conversationId, input.replyToMessageId, senderId);
+
+  const existingMessage = await findExistingClientMessage(
+    conversationId,
+    senderId,
+    input.clientMessageId,
+  );
+
+  if (existingMessage) {
+    return existingMessage;
+  }
 
   const mimeType = resolveAttachmentMimeType(file.mimetype, file.originalname);
 
@@ -434,17 +506,32 @@ export const sendMessageAttachment = async (
   };
 
   try {
-    return await createRealtimeMessage({
+    const result = await createRealtimeMessage({
       conversationId,
       participantIds: conversation.participants.map((participantId) =>
         participantId.toString(),
       ),
       senderId,
       content: input.content,
+      clientMessageId: input.clientMessageId,
       messageType,
       attachment,
       replyToMessageId: input.replyToMessageId,
     });
+
+    if (!result.created) {
+      await deleteMessageAttachmentFromCloudinary(
+        attachment.publicId,
+        attachment.resourceType,
+      ).catch((cleanupError: unknown) => {
+        console.error(
+          "Could not clean up duplicate attachment upload:",
+          cleanupError,
+        );
+      });
+    }
+
+    return result.message;
   } catch (error) {
     await deleteMessageAttachmentFromCloudinary(
       attachment.publicId,
@@ -565,7 +652,7 @@ export const forwardMessage = async (
       forwardedFromMessageId: sourceMessage._id.toString(),
     });
 
-    forwardedMessages.push(forwardedMessage);
+    forwardedMessages.push(forwardedMessage.message);
   }
 
   return {

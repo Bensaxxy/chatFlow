@@ -1,22 +1,17 @@
 "use client";
 
-import { LoaderCircle, Mic, SendHorizontal, Trash2 } from "lucide-react";
+import { Mic, SendHorizontal, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "react-toastify";
 
-import { getApiErrorMessage } from "@/lib/api/errors";
-import { sendConversationAttachment } from "@/services/message.service";
-import type { ChatMessage } from "@/types/message";
-
 interface VoiceNoteRecorderProps {
-  conversationId: string;
   replyToMessageId?: string | null;
   disabled?: boolean;
-  onMessageSent: (message: ChatMessage) => void;
+  onVoiceNoteQueued: (file: File, replyToMessageId: string | null) => void;
   onStatusChange?: (status: VoiceNoteStatus) => void;
 }
 
-export type VoiceNoteStatus = "idle" | "recording" | "uploading";
+export type VoiceNoteStatus = "idle" | "recording";
 type StopAction = "cancel" | "send" | null;
 
 const MAX_VOICE_NOTE_SIZE = 15 * 1024 * 1024;
@@ -70,10 +65,9 @@ const getRecordingErrorMessage = (error: unknown): string => {
 };
 
 export default function VoiceNoteRecorder({
-  conversationId,
   replyToMessageId,
   disabled = false,
-  onMessageSent,
+  onVoiceNoteQueued,
   onStatusChange,
 }: VoiceNoteRecorderProps) {
   const [status, setStatus] = useState<VoiceNoteStatus>("idle");
@@ -110,25 +104,11 @@ export default function VoiceNoteRecorder({
     setStatus("idle");
   };
 
-  const uploadRecording = async (file: File): Promise<void> => {
-    try {
-      setStatus("uploading");
+  const queueRecording = (file: File): void => {
+    onVoiceNoteQueued(file, replyToMessageId ?? null);
 
-      const message = await sendConversationAttachment(
-        conversationId,
-        file,
-        "",
-        replyToMessageId,
-      );
-
-      onMessageSent(message);
-      toast.success("Voice note sent successfully");
-    } catch (error) {
-      toast.error(getApiErrorMessage(error));
-    } finally {
-      if (isMountedRef.current) {
-        resetRecording();
-      }
+    if (isMountedRef.current) {
+      resetRecording();
     }
   };
 
@@ -177,7 +157,7 @@ export default function VoiceNoteRecorder({
       },
     );
 
-    void uploadRecording(file);
+    queueRecording(file);
   };
 
   const startRecording = async (): Promise<void> => {
@@ -304,14 +284,6 @@ export default function VoiceNoteRecorder({
         >
           <SendHorizontal className="h-4 w-4" />
         </button>
-      </div>
-    );
-  }
-
-  if (status === "uploading") {
-    return (
-      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-cyan-700">
-        <LoaderCircle className="h-5 w-5 animate-spin" aria-label="Uploading voice note" />
       </div>
     );
   }

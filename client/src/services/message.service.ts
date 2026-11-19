@@ -92,12 +92,16 @@ export const sendConversationMessage = async (
   conversationId: string,
   content: string,
   replyToMessageId?: string | null,
+  clientMessageId?: string,
 ): Promise<ChatMessage> => {
   const { data } = await apiClient.post<MessageResponse>(
     `/conversations/${conversationId}/messages`,
     {
       content,
       replyToMessageId: replyToMessageId ?? null,
+      ...(clientMessageId && {
+        clientMessageId,
+      }),
     },
   );
 
@@ -109,6 +113,7 @@ export const sendConversationAttachment = async (
   file: File,
   content = "",
   replyToMessageId?: string | null,
+  clientMessageId?: string,
   onUploadProgress?: AttachmentUploadProgressHandler,
 ): Promise<ChatMessage> => {
   const formData = new FormData();
@@ -118,6 +123,10 @@ export const sendConversationAttachment = async (
 
   if (replyToMessageId) {
     formData.append("replyToMessageId", replyToMessageId);
+  }
+
+  if (clientMessageId) {
+    formData.append("clientMessageId", clientMessageId);
   }
 
   const { data } = await apiClient.post<MessageResponse>(

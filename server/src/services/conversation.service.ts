@@ -112,7 +112,7 @@ export const createDirectConversation = async (
 };
 
 const lastMessageFields =
-  "content type attachment linkPreview sender createdAt editedAt deletedFor " +
+  "clientMessageId content type attachment linkPreview sender createdAt editedAt deletedFor " +
   "deletedForEveryoneAt isForwarded";
 
 export const getUserConversations = async (currentUserId: string) => {
