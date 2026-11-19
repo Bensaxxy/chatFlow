@@ -19,6 +19,10 @@ import type {
   ConversationParticipant,
 } from "@/types/conversation";
 import type { ChatMessage, MessageDeletedPayload } from "@/types/message";
+import {
+  getAllConversationDrafts,
+  subscribeToConversationDrafts,
+} from "@/lib/chat/draft-storage";
 
 const formatConversationTime = (value: string): string => {
   const date = new Date(value);
@@ -74,8 +78,34 @@ export default function ConversationList() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const [reloadKey, setReloadKey] = useState(0);
+  const [conversationDrafts, setConversationDrafts] = useState<
+    Map<string, string>
+  >(() => new Map());
 
   const typingTimeoutsRef = useRef<Map<string, number>>(new Map());
+
+  useEffect(() => {
+    if (!user) {
+      setConversationDrafts(new Map());
+      return;
+    }
+
+    setConversationDrafts(getAllConversationDrafts(user._id));
+
+    return subscribeToConversationDrafts(user._id, (conversationId, text) => {
+      setConversationDrafts((currentDrafts) => {
+        const nextDrafts = new Map(currentDrafts);
+
+        if (text.trim()) {
+          nextDrafts.set(conversationId, text);
+        } else {
+          nextDrafts.delete(conversationId);
+        }
+
+        return nextDrafts;
+      });
+    });
+  }, [user]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -226,9 +256,7 @@ export default function ConversationList() {
     };
 
     const handleMessageDeleted = (payload: MessageDeletedPayload): void => {
-      invalidateConversationCache(
-        `${currentUserId}:${payload.conversationId}`,
-      );
+      invalidateConversationCache(`${currentUserId}:${payload.conversationId}`);
 
       setConversations((current) =>
         current.map((conversation) => {
@@ -478,15 +506,21 @@ export default function ConversationList() {
             ? "📷 Image"
             : lastMessage?.type === "audio"
               ? "🎤 Voice note"
-            : lastMessage?.attachment?.fileName || "File");
+              : lastMessage?.attachment?.fileName || "File");
 
-        const messagePreview = lastMessage
-          ? deletedFor.includes(user._id)
-            ? "Message deleted for you"
-            : lastMessage.deletedForEveryoneAt
-              ? "This message was deleted"
-              : `${senderId === user._id ? "You: " : ""}${content}`
-          : "Start the conversation";
+        const draftText = conversationDrafts.get(conversation._id) ?? "";
+
+        const hasDraft = Boolean(draftText.trim());
+
+        const messagePreview = hasDraft
+          ? draftText.trim()
+          : lastMessage
+            ? deletedFor.includes(user._id)
+              ? "Message deleted for you"
+              : lastMessage.deletedForEveryoneAt
+                ? "This message was deleted"
+                : `${senderId === user._id ? "You: " : ""}${content}`
+            : "Start the conversation";
 
         return (
           <Link
@@ -562,6 +596,11 @@ export default function ConversationList() {
                         <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-cyan-600" />
                       </span>
                     </span>
+                  ) : hasDraft ? (
+                    <>
+                      <span className="font-semibold text-red-500">Draft:</span>{" "}
+                      <span>{messagePreview}</span>
+                    </>
                   ) : (
                     messagePreview
                   )}

@@ -48,6 +48,11 @@ import {
   type RepliedMessage,
 } from "@/types/message";
 import ForwardMessageModal from "@/components/chat/ForwardMessageModal";
+import {
+  clearConversationDraft,
+  getConversationDraft,
+  saveConversationDraft,
+} from "@/lib/chat/draft-storage";
 
 interface ConversationViewProps {
   conversationId: string;
@@ -292,6 +297,19 @@ export default function ConversationView({
   );
 
   const [messageText, setMessageText] = useState("");
+
+  const restoreCurrentDraft = useCallback((): void => {
+    if (!currentUserId) {
+      setMessageText("");
+      return;
+    }
+
+    setMessageText(getConversationDraft(currentUserId, conversationId));
+  }, [currentUserId, conversationId]);
+
+  useEffect(() => {
+    restoreCurrentDraft();
+  }, [restoreCurrentDraft]);
 
   const [nextCursor, setNextCursor] = useState<string | null>(
     () => initialCache?.nextCursor ?? null,
@@ -899,6 +917,10 @@ export default function ConversationView({
       return;
     }
 
+    if (currentUserId) {
+      saveConversationDraft(currentUserId, conversationId, value);
+    }
+
     if (!socket.connected || !value.trim()) {
       stopTyping();
       return;
@@ -910,7 +932,6 @@ export default function ConversationView({
       socket.emit("typing:start", conversationId);
 
       isTypingRef.current = true;
-
       lastTypingEmitAtRef.current = now;
     }
 
@@ -932,7 +953,7 @@ export default function ConversationView({
     setReplyingToMessage(message);
     setOpenMessageMenuId(null);
     setReactionPickerMessageId(null);
-    setMessageText("");
+    // setMessageText("");
 
     stopTyping();
 
@@ -980,7 +1001,7 @@ export default function ConversationView({
     editingMessageIdRef.current = null;
 
     setEditingMessageId(null);
-    setMessageText("");
+    restoreCurrentDraft();
 
     stopTyping();
 
@@ -1017,7 +1038,7 @@ export default function ConversationView({
         editingMessageIdRef.current = null;
 
         setEditingMessageId(null);
-        setMessageText("");
+        restoreCurrentDraft();
 
         toast.success("Message edited successfully");
       } catch (error) {
@@ -1039,6 +1060,10 @@ export default function ConversationView({
       );
 
       setMessages((current) => addMessageIfMissing(current, newMessage));
+
+      if (currentUserId) {
+        clearConversationDraft(currentUserId, conversationId);
+      }
 
       setMessageText("");
       setReplyingToMessage(null);
@@ -1172,7 +1197,7 @@ export default function ConversationView({
         editingMessageIdRef.current = null;
 
         setEditingMessageId(null);
-        setMessageText("");
+      restoreCurrentDraft();
       }
 
       setReactionPickerMessageId((current) =>
@@ -1331,10 +1356,10 @@ export default function ConversationView({
         replySenderName={
           replyingToMessage?.sender._id === user._id
             ? "yourself"
-            : (replyingToMessage
+            : replyingToMessage
               ? (updatedProfiles.get(replyingToMessage.sender._id)?.name ??
                 replyingToMessage.sender.name)
-              : "")
+              : ""
         }
         editingMessageId={editingMessageId}
         isSending={isSending}
