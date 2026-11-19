@@ -16,6 +16,13 @@ export interface PublicUserProfile {
   lastSeenAt: string | null;
   createdAt: string;
   updatedAt: string;
+  isBlockedByCurrentUser: boolean;
+  canMessage: boolean;
+}
+
+export interface UserMessagingStatus {
+  isBlockedByCurrentUser: boolean;
+  canMessage: boolean;
 }
 
 export interface RealtimeUserProfile {

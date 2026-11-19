@@ -7,6 +7,7 @@ import { env } from "../config/env";
 import { Conversation } from "../models/conversation.model";
 import { verifyAccessToken, verifySocketToken } from "../utils/auth-tokens";
 import { User } from "../models/user.model";
+import { getDirectMessagingAccess } from "../services/user.service";
 
 interface SocketResult {
   success: boolean;
@@ -275,11 +276,30 @@ export const initializeSocketServer = (
         _id: conversationId,
         participants: userId,
       })
-        .select("participants")
+        .select("type participants")
         .lean();
 
       if (!conversation) {
         return;
+      }
+
+      if (conversation.type === "direct") {
+        const otherParticipantId = conversation.participants
+          .map((participantId) => participantId.toString())
+          .find((participantId) => participantId !== userId);
+
+        if (!otherParticipantId) {
+          return;
+        }
+
+        const access = await getDirectMessagingAccess(
+          userId,
+          otherParticipantId,
+        );
+
+        if (!access.canMessage) {
+          return;
+        }
       }
 
       const payload: TypingUpdatePayload = {

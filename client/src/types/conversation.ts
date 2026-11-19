@@ -40,6 +40,10 @@ export interface Conversation {
   createdBy: string;
   lastMessage: ConversationLastMessage | null;
   unreadCount?: number;
+  directMessagingAccess?: {
+    isBlockedByCurrentUser: boolean;
+    canMessage: boolean;
+  } | null;
   createdAt: string;
   updatedAt: string;
 }

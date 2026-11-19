@@ -12,6 +12,7 @@ import { Conversation } from "../models/conversation.model";
 import { Message } from "../models/message.model";
 import { getSocketServer } from "../socket/socket.server";
 import { AppError } from "../utils/app-error";
+import { assertDirectMessagingAllowed } from "./user.service";
 import type {
   DeleteMessageInput,
   EditMessageInput,
@@ -133,6 +134,28 @@ const verifyConversationMembership = async (
   return conversation;
 };
 
+const assertConversationMessagingAllowed = async (
+  conversation: {
+    type: string;
+    participants: Array<{ toString(): string }>;
+  },
+  currentUserId: string,
+): Promise<void> => {
+  if (conversation.type !== "direct") {
+    return;
+  }
+
+  const otherParticipantId = conversation.participants
+    .map((participantId) => participantId.toString())
+    .find((participantId) => participantId !== currentUserId);
+
+  if (!otherParticipantId) {
+    return;
+  }
+
+  await assertDirectMessagingAllowed(currentUserId, otherParticipantId);
+};
+
 const verifyReplyMessage = async (
   conversationId: string,
   replyToMessageId: string | null | undefined,
@@ -252,6 +275,8 @@ export const sendMessage = async (
     senderId,
   );
 
+  await assertConversationMessagingAllowed(conversation, senderId);
+
   await verifyReplyMessage(conversationId, input.replyToMessageId, senderId);
 
   return createRealtimeMessage({
@@ -275,6 +300,8 @@ export const sendMessageAttachment = async (
     conversationId,
     senderId,
   );
+
+  await assertConversationMessagingAllowed(conversation, senderId);
 
   await verifyReplyMessage(conversationId, input.replyToMessageId, senderId);
 
@@ -404,6 +431,12 @@ export const forwardMessage = async (
       conversation._id.toString(),
       conversation,
     ]),
+  );
+
+  await Promise.all(
+    targetConversations.map((conversation) =>
+      assertConversationMessagingAllowed(conversation, currentUserId),
+    ),
   );
 
   const forwardedMessages = [];
@@ -709,6 +742,8 @@ export const editMessage = async (
     currentUserId,
   );
 
+  await assertConversationMessagingAllowed(conversation, currentUserId);
+
   const message = await Message.findOne({
     _id: messageId,
     conversation: conversationId,
@@ -763,6 +798,8 @@ export const updateMessageReaction = async (
     conversationId,
     currentUserId,
   );
+
+  await assertConversationMessagingAllowed(conversation, currentUserId);
 
   const message = await Message.findOne({
     _id: messageId,

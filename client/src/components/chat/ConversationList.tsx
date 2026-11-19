@@ -512,7 +512,19 @@ export default function ConversationList() {
 
         const hasDraft = Boolean(draftText.trim());
 
-        const messagePreview = hasDraft
+        const isBlockedByCurrentUser = Boolean(
+          conversation.directMessagingAccess?.isBlockedByCurrentUser,
+        );
+
+        const isMessagingUnavailable =
+          conversation.type === "direct" &&
+          conversation.directMessagingAccess?.canMessage === false;
+
+        const messagePreview = isBlockedByCurrentUser
+          ? "You blocked this user"
+          : isMessagingUnavailable
+            ? "Messaging unavailable"
+            : hasDraft
           ? draftText.trim()
           : lastMessage
             ? deletedFor.includes(user._id)

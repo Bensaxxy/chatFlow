@@ -47,6 +47,22 @@ const userSchema = new Schema(
       type: Date,
       default: Date.now,
     },
+
+    /*
+     * This is deliberately excluded from normal profile responses. A user can
+     * see their own block state through the dedicated account endpoints, but
+     * must never receive another user's block list.
+     */
+    blockedUsers: {
+      type: [
+        {
+          type: Schema.Types.ObjectId,
+          ref: "User",
+        },
+      ],
+      default: [],
+      select: false,
+    },
   },
   {
     timestamps: true,
@@ -59,6 +75,7 @@ userSchema.set("toJSON", {
 
     delete safeObject.passwordHash;
     delete safeObject.avatarPublicId;
+    delete safeObject.blockedUsers;
     delete safeObject.__v;
 
     return safeObject;

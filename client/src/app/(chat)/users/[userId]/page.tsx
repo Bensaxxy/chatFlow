@@ -2,10 +2,15 @@
 
 import {
   ArrowLeft,
+  Ban,
   CalendarDays,
+  CircleCheck,
+  Clock3,
   LoaderCircle,
+  LockKeyhole,
   MessageCircle,
   Pencil,
+  ShieldCheck,
   UserRound,
 } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
@@ -17,7 +22,11 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useSocket } from "@/contexts/SocketContext";
 import { getApiErrorMessage } from "@/lib/api/errors";
 import { createDirectConversation } from "@/services/conversation.service";
-import { getPublicUserProfile } from "@/services/user.service";
+import {
+  blockUser,
+  getPublicUserProfile,
+  unblockUser,
+} from "@/services/user.service";
 import type { PublicUserProfile } from "@/types/user";
 
 const formatJoinedDate = (value: string): string => {
@@ -89,6 +98,8 @@ export default function PublicProfilePage() {
 
   const [isStartingConversation, setIsStartingConversation] = useState(false);
 
+  const [isUpdatingBlock, setIsUpdatingBlock] = useState(false);
+
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
@@ -125,7 +136,12 @@ export default function PublicProfilePage() {
   }, [userId]);
 
   const handlePrimaryAction = async (): Promise<void> => {
-    if (!profile || !currentUser || isStartingConversation) {
+    if (
+      !profile ||
+      !currentUser ||
+      isStartingConversation ||
+      profile.canMessage === false
+    ) {
       return;
     }
 
@@ -144,6 +160,39 @@ export default function PublicProfilePage() {
       toast.error(getApiErrorMessage(error));
     } finally {
       setIsStartingConversation(false);
+    }
+  };
+
+  const handleBlockToggle = async (): Promise<void> => {
+    if (!profile || !currentUser || isUpdatingBlock) {
+      return;
+    }
+
+    try {
+      setIsUpdatingBlock(true);
+
+      const blockStatus = profile.isBlockedByCurrentUser
+        ? await unblockUser(profile._id)
+        : await blockUser(profile._id);
+
+      setProfile((current) =>
+        current
+          ? {
+              ...current,
+              ...blockStatus,
+            }
+          : current,
+      );
+
+      toast.success(
+        blockStatus.isBlockedByCurrentUser
+          ? "User blocked"
+          : "User unblocked",
+      );
+    } catch (error) {
+      toast.error(getApiErrorMessage(error));
+    } finally {
+      setIsUpdatingBlock(false);
     }
   };
 
@@ -199,37 +248,50 @@ export default function PublicProfilePage() {
 
   const lastSeenAt = lastSeenByUser.get(profile._id) ?? profile.lastSeenAt;
 
+  const isMessagingUnavailable = !isOwnProfile && profile.canMessage === false;
+
   return (
-    <section className="flex h-full w-full flex-col bg-slate-50">
-      <header className="flex h-20 shrink-0 items-center gap-3 border-b border-slate-200 bg-white px-4 sm:px-6">
+    <section className="relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-slate-100">
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute -right-32 -top-36 h-96 w-96 rounded-full bg-cyan-200/40 blur-3xl"
+      />
+
+      <header className="relative z-10 flex h-16 shrink-0 items-center gap-2 border-b border-slate-200/80 bg-white/90 px-2 backdrop-blur sm:h-20 sm:gap-3 sm:px-6">
         <button
           type="button"
           onClick={() => router.back()}
           aria-label="Go back"
-          className="flex h-10 w-10 items-center justify-center rounded-full text-slate-600 transition hover:bg-slate-100"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-slate-600 transition hover:bg-slate-100 hover:text-slate-950"
         >
           <ArrowLeft className="h-5 w-5" />
         </button>
 
-        <div>
-          <h1 className="font-semibold text-slate-950">Public profile</h1>
+        <div className="min-w-0">
+          <h1 className="font-semibold text-slate-950">Profile</h1>
 
-          <p className="text-xs text-slate-500">View profile information</p>
+          <p className="truncate text-xs text-slate-500">
+            View profile information
+          </p>
         </div>
       </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
-        <div className="mx-auto w-full max-w-2xl">
-          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div className="h-32 bg-gradient-to-r from-cyan-600 via-cyan-500 to-sky-500" />
+      <main className="relative z-10 min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-6 sm:py-8 lg:px-8">
+        <div className="mx-auto w-full max-w-4xl">
+          <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-xl shadow-slate-900/5">
+            <div className="relative h-28 overflow-hidden bg-gradient-to-br from-cyan-700 via-cyan-600 to-sky-500 sm:h-40">
+              <div className="absolute -right-10 -top-20 h-56 w-56 rounded-full border-[28px] border-white/10" />
+              <div className="absolute -bottom-24 left-1/3 h-48 w-48 rounded-full bg-cyan-300/20 blur-2xl" />
+              <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-slate-950/10 to-transparent" />
+            </div>
 
-            <div className="px-5 pb-6 sm:px-8">
-              <div className="-mt-16 flex flex-col items-center sm:flex-row sm:items-end">
+            <div className="px-4 pb-5 sm:px-8 sm:pb-8">
+              <div className="-mt-14 flex flex-col items-center sm:-mt-16 sm:items-start">
                 <div className="relative">
                   <UserAvatar
                     name={profile.name}
                     avatarUrl={profile.avatarUrl}
-                    className="h-32 w-32 border-4 border-white text-3xl shadow-lg"
+                    className="h-28 w-28 border-4 border-white text-2xl shadow-xl sm:h-32 sm:w-32 sm:text-3xl"
                     fallbackClassName="bg-cyan-100 font-bold text-cyan-800"
                   />
 
@@ -237,88 +299,172 @@ export default function PublicProfilePage() {
                     <span
                       title="Online"
                       aria-label="Online"
-                      className="absolute bottom-2 right-2 h-5 w-5 rounded-full border-[3px] border-white bg-emerald-500"
+                      className="absolute bottom-1 right-1 h-5 w-5 rounded-full border-[3px] border-white bg-emerald-500 shadow-sm sm:bottom-2 sm:right-2"
                     />
                   )}
                 </div>
 
-                <div className="mt-4 min-w-0 flex-1 text-center sm:mb-2 sm:ml-5 sm:mt-0 sm:text-left">
-                  <h2 className="truncate text-2xl font-bold text-slate-950">
-                    {profile.name}
-                  </h2>
+                <div className="mt-4 w-full text-center sm:mt-5 sm:text-left">
+                  <div className="flex flex-col items-center gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <h2 className="max-w-full truncate text-2xl font-bold tracking-tight text-slate-950 sm:text-3xl">
+                      {profile.name}
+                    </h2>
 
-                  {isOwnProfile ? (
-                    <p className="mt-1 text-sm font-medium text-cyan-700">
-                      This is your profile
-                    </p>
-                  ) : isOnline ? (
-                    <p className="mt-1 text-sm font-medium text-emerald-600">
-                      Online
-                    </p>
-                  ) : (
-                    <p className="mt-1 text-sm text-slate-500">
-                      {formatLastSeen(lastSeenAt)}
-                    </p>
-                  )}
+                    {isOwnProfile ? (
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-cyan-50 px-3 py-1 text-xs font-semibold text-cyan-700">
+                        <CircleCheck className="h-3.5 w-3.5" />
+                        Your profile
+                      </span>
+                    ) : profile.isBlockedByCurrentUser ? (
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-red-50 px-3 py-1 text-xs font-semibold text-red-700">
+                        <Ban className="h-3.5 w-3.5" />
+                        Blocked
+                      </span>
+                    ) : isOnline ? (
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                        Online
+                      </span>
+                    ) : null}
+                  </div>
+
+                  <p className="mt-2 text-sm text-slate-500">
+                    {isOwnProfile
+                      ? "This is your public profile."
+                      : profile.isBlockedByCurrentUser
+                        ? "You have blocked this user. Unblock them when you are ready to message."
+                        : isMessagingUnavailable
+                          ? "Messaging is unavailable for this profile."
+                          : isOnline
+                            ? "Available to chat now"
+                            : formatLastSeen(lastSeenAt)}
+                  </p>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => void handlePrimaryAction()}
-                  disabled={isStartingConversation}
-                  className="mt-5 inline-flex min-w-36 items-center justify-center gap-2 rounded-xl bg-cyan-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-cyan-700 disabled:cursor-not-allowed disabled:opacity-60 sm:mb-2 sm:mt-0"
+                <div className="mt-5 grid w-full gap-2 sm:grid-cols-2 sm:gap-3">
+                  <button
+                    type="button"
+                    onClick={() => void handlePrimaryAction()}
+                    disabled={
+                      isStartingConversation ||
+                      isUpdatingBlock ||
+                      isMessagingUnavailable
+                    }
+                    className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-cyan-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-cyan-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500"
+                  >
+                    {isStartingConversation ? (
+                      <LoaderCircle className="h-4 w-4 animate-spin" />
+                    ) : isOwnProfile ? (
+                      <Pencil className="h-4 w-4" />
+                    ) : (
+                      <MessageCircle className="h-4 w-4" />
+                    )}
+
+                    {isOwnProfile
+                      ? "Edit profile"
+                      : isStartingConversation
+                        ? "Opening chat..."
+                        : isMessagingUnavailable
+                          ? "Messaging unavailable"
+                          : "Message"}
+                  </button>
+
+                  {!isOwnProfile && (
+                    <button
+                      type="button"
+                      onClick={() => void handleBlockToggle()}
+                      disabled={isUpdatingBlock || isStartingConversation}
+                      className={[
+                        "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border px-5 py-2.5 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60",
+                        profile.isBlockedByCurrentUser
+                          ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                          : "border-red-200 bg-white text-red-700 hover:bg-red-50",
+                      ].join(" ")}
+                    >
+                      {isUpdatingBlock ? (
+                        <LoaderCircle className="h-4 w-4 animate-spin" />
+                      ) : profile.isBlockedByCurrentUser ? (
+                        <ShieldCheck className="h-4 w-4" />
+                      ) : (
+                        <Ban className="h-4 w-4" />
+                      )}
+
+                      {isUpdatingBlock
+                        ? "Updating..."
+                        : profile.isBlockedByCurrentUser
+                          ? "Unblock user"
+                          : "Block user"}
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="mt-6 grid gap-4 border-t border-slate-100 pt-5 sm:mt-8 sm:grid-cols-[minmax(0,1fr)_15rem] sm:gap-6 sm:pt-7">
+                <section
+                  aria-labelledby="about-title"
+                  className="rounded-2xl bg-slate-50 p-4 sm:p-5"
                 >
-                  {isStartingConversation ? (
-                    <LoaderCircle className="h-4 w-4 animate-spin" />
-                  ) : isOwnProfile ? (
-                    <Pencil className="h-4 w-4" />
+                  <h3
+                    id="about-title"
+                    className="text-sm font-semibold text-slate-950"
+                  >
+                    About
+                  </h3>
+
+                  {profile.bio ? (
+                    <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-600">
+                      {profile.bio}
+                    </p>
                   ) : (
-                    <MessageCircle className="h-4 w-4" />
+                    <p className="mt-2 text-sm italic leading-6 text-slate-400">
+                      No bio has been added yet.
+                    </p>
                   )}
+                </section>
 
-                  {isOwnProfile
-                    ? "Edit profile"
-                    : isStartingConversation
-                      ? "Opening..."
-                      : "Message"}
-                </button>
-              </div>
+                <aside className="space-y-3">
+                  <div className="flex items-center gap-3 rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-cyan-50 text-cyan-700">
+                      <CalendarDays className="h-5 w-5" />
+                    </span>
 
-              <div className="mt-8 border-t border-slate-200 pt-6">
-                <h3 className="text-sm font-semibold text-slate-950">About</h3>
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium text-slate-500">
+                        Member since
+                      </p>
+                      <p className="truncate text-sm font-semibold text-slate-800">
+                        {formatJoinedDate(profile.createdAt)}
+                      </p>
+                    </div>
+                  </div>
 
-                {profile.bio ? (
-                  <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-600">
-                    {profile.bio}
-                  </p>
-                ) : (
-                  <p className="mt-2 text-sm italic text-slate-400">
-                    No bio has been added yet.
-                  </p>
-                )}
-              </div>
+                  <div className="flex items-center gap-3 rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-600">
+                      <LockKeyhole className="h-4 w-4" />
+                    </span>
 
-              <div className="mt-6 flex items-center gap-3 rounded-xl bg-slate-50 px-4 py-3">
-                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-slate-500 shadow-sm">
-                  <CalendarDays className="h-5 w-5" />
-                </span>
-
-                <div>
-                  <p className="text-xs text-slate-500">Member since</p>
-
-                  <p className="text-sm font-semibold text-slate-700">
-                    {formatJoinedDate(profile.createdAt)}
-                  </p>
-                </div>
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium text-slate-500">
+                        Privacy
+                      </p>
+                      <p className="text-sm font-semibold text-slate-800">
+                        Email kept private
+                      </p>
+                    </div>
+                  </div>
+                </aside>
               </div>
             </div>
-          </div>
+          </section>
 
-          <p className="mt-4 text-center text-xs text-slate-400">
-            Email addresses are kept private.
-          </p>
+          {!isOnline && !isOwnProfile && !isMessagingUnavailable && (
+            <p className="mt-4 flex items-center justify-center gap-1.5 text-center text-xs text-slate-400">
+              <Clock3 className="h-3.5 w-3.5" />
+              Presence updates when this user is active.
+            </p>
+          )}
         </div>
-      </div>
+      </main>
     </section>
   );
 }

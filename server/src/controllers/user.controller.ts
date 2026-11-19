@@ -7,7 +7,11 @@ import {
   updateUserAvatar,
   updateUserProfile,
 } from "../services/profile.service";
-import { searchUsers } from "../services/user.service";
+import {
+  blockUser,
+  searchUsers,
+  unblockUser,
+} from "../services/user.service";
 import { AppError } from "../utils/app-error";
 import { asyncHandler } from "../utils/async-handler";
 import type { UpdateProfileInput } from "../validations/profile.validation";
@@ -116,17 +120,47 @@ export const deleteMyAvatar: RequestHandler = asyncHandler(
 
 export const getPublicProfile: RequestHandler = asyncHandler(
   async (request, response) => {
-    getAuthenticatedUserId(request.auth?.userId);
+    const currentUserId = getAuthenticatedUserId(request.auth?.userId);
 
     const { userId } = publicProfileParamsSchema.parse(request.params);
 
-    const user = await getPublicUserProfile(userId);
+    const user = await getPublicUserProfile(userId, currentUserId);
 
     response.status(200).json({
       success: true,
       message: "Public profile retrieved successfully",
       data: {
         user,
+      },
+    });
+  },
+);
+
+export const block: RequestHandler = asyncHandler(async (request, response) => {
+  const currentUserId = getAuthenticatedUserId(request.auth?.userId);
+  const { userId } = publicProfileParamsSchema.parse(request.params);
+  const blockStatus = await blockUser(currentUserId, userId);
+
+  response.status(200).json({
+    success: true,
+    message: "User blocked successfully",
+    data: {
+      blockStatus,
+    },
+  });
+});
+
+export const unblock: RequestHandler = asyncHandler(
+  async (request, response) => {
+    const currentUserId = getAuthenticatedUserId(request.auth?.userId);
+    const { userId } = publicProfileParamsSchema.parse(request.params);
+    const blockStatus = await unblockUser(currentUserId, userId);
+
+    response.status(200).json({
+      success: true,
+      message: "User unblocked successfully",
+      data: {
+        blockStatus,
       },
     });
   },

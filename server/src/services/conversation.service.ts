@@ -2,6 +2,7 @@ import { Types } from "mongoose";
 import { Conversation } from "../models/conversation.model";
 import { User } from "../models/user.model";
 import { AppError } from "../utils/app-error";
+import { getDirectMessagingAccess } from "./user.service";
 import "../models/message.model";
 import { Message } from "../models/message.model";
 
@@ -41,6 +42,21 @@ export const createDirectConversation = async (
       "The selected user was not found",
       404,
       "PARTICIPANT_NOT_FOUND",
+    );
+  }
+
+  const directMessagingAccess = await getDirectMessagingAccess(
+    currentUserId,
+    participantId,
+  );
+
+  if (!directMessagingAccess.canMessage) {
+    throw new AppError(
+      directMessagingAccess.isBlockedByCurrentUser
+        ? "Unblock this user before starting a conversation"
+        : "You cannot start a conversation with this user",
+      403,
+      "DIRECT_MESSAGING_BLOCKED",
     );
   }
 
@@ -164,12 +180,30 @@ export const getUserConversations = async (currentUserId: string) => {
     unreadResults.map((result) => [result._id.toString(), result.count]),
   );
 
-  return conversations.map((conversation) => ({
-    ...conversation.toJSON(),
+  return Promise.all(
+    conversations.map(async (conversation) => {
+      const otherParticipant =
+        conversation.type === "direct"
+          ? conversation.participants.find(
+              (participant) => participant._id.toString() !== currentUserId,
+            )
+          : undefined;
 
-    unreadCount:
-      unreadCountByConversation.get(conversation._id.toString()) ?? 0,
-  }));
+      const directMessagingAccess = otherParticipant
+        ? await getDirectMessagingAccess(
+            currentUserId,
+            otherParticipant._id.toString(),
+          )
+        : null;
+
+      return {
+        ...conversation.toJSON(),
+        directMessagingAccess,
+        unreadCount:
+          unreadCountByConversation.get(conversation._id.toString()) ?? 0,
+      };
+    }),
+  );
 };
 
 export const getConversationById = async (
@@ -198,5 +232,22 @@ export const getConversationById = async (
     );
   }
 
-  return conversation;
+  const otherParticipant =
+    conversation.type === "direct"
+      ? conversation.participants.find(
+          (participant) => participant._id.toString() !== currentUserId,
+        )
+      : undefined;
+
+  const directMessagingAccess = otherParticipant
+    ? await getDirectMessagingAccess(
+        currentUserId,
+        otherParticipant._id.toString(),
+      )
+    : null;
+
+  return {
+    ...conversation.toJSON(),
+    directMessagingAccess,
+  };
 };

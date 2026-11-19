@@ -24,6 +24,9 @@ interface ConversationComposerProps {
   editingMessageId: string | null;
   isSending: boolean;
   isEditingMessage: boolean;
+  isMessagingDisabled?: boolean;
+  messagingDisabledMessage?: string;
+  onManageMessaging?: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onMessageChange: (event: ChangeEvent<HTMLTextAreaElement>) => void;
   onCancelReplying: () => void;
@@ -40,6 +43,9 @@ export default function ConversationComposer({
   editingMessageId,
   isSending,
   isEditingMessage,
+  isMessagingDisabled = false,
+  messagingDisabledMessage = "Messaging is unavailable in this conversation.",
+  onManageMessaging,
   onSubmit,
   onMessageChange,
   onCancelReplying,
@@ -123,65 +129,86 @@ export default function ConversationComposer({
         </div>
       )}
 
-      <div className="flex min-w-0 items-end gap-1 sm:gap-2">
-        {!editingMessageId && (
-          <VoiceNoteRecorder
-            conversationId={conversationId}
-            replyToMessageId={replyingToMessage?._id ?? null}
-            disabled={isSending || isEditingMessage}
-            onMessageSent={onAttachmentSent}
-            onStatusChange={setVoiceNoteStatus}
-          />
-        )}
+      {isMessagingDisabled ? (
+        <div
+          role="status"
+          className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-600"
+        >
+          <p>{messagingDisabledMessage}</p>
 
-        {!isRecordingVoiceNote && (
-          <MessageAttachmentUploader
-            conversationId={conversationId}
-            replyToMessageId={replyingToMessage?._id ?? null}
-            disabled={isSending || isEditingMessage || editingMessageId !== null}
-            onMessageSent={onAttachmentSent}
-          />
-        )}
+          {onManageMessaging && (
+            <button
+              type="button"
+              onClick={onManageMessaging}
+              className="shrink-0 rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-cyan-700 shadow-sm ring-1 ring-slate-200 transition hover:bg-cyan-50"
+            >
+              Manage
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="flex min-w-0 items-end gap-1 sm:gap-2">
+          {!editingMessageId && (
+            <VoiceNoteRecorder
+              conversationId={conversationId}
+              replyToMessageId={replyingToMessage?._id ?? null}
+              disabled={isSending || isEditingMessage}
+              onMessageSent={onAttachmentSent}
+              onStatusChange={setVoiceNoteStatus}
+            />
+          )}
 
-        {!isRecordingVoiceNote && (
-          <textarea
-            ref={messageInputRef}
-            value={messageText}
-            onChange={onMessageChange}
-            maxLength={5000}
-            rows={1}
-            placeholder={
-              editingMessageId
-                ? "Edit your message"
-                : replyingToMessage
-                  ? "Write a reply"
-                  : "Type a message"
-            }
-            aria-label={editingMessageId ? "Edit message" : "Message"}
-            className="scrollbar-hidden block min-h-10 max-h-32 min-w-0 flex-1 resize-none overflow-y-auto rounded-2xl border border-slate-300 bg-slate-100 px-3 py-2 text-base leading-5 text-slate-900 outline-none transition focus:border-cyan-500 focus:bg-white focus:ring-4 focus:ring-cyan-100 sm:px-4 sm:text-sm"
-          />
-        )}
+          {!isRecordingVoiceNote && (
+            <MessageAttachmentUploader
+              conversationId={conversationId}
+              replyToMessageId={replyingToMessage?._id ?? null}
+              disabled={
+                isSending || isEditingMessage || editingMessageId !== null
+              }
+              onMessageSent={onAttachmentSent}
+            />
+          )}
 
-        {!isRecordingVoiceNote && (
-          <button
-            type="submit"
-            disabled={!messageText.trim() || isSending || isEditingMessage}
-            aria-label={
-              editingMessageId ? "Save edited message" : "Send message"
-            }
-            title={editingMessageId ? "Save changes" : "Send message"}
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-cyan-600 text-white transition hover:bg-cyan-700 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {isSending || isEditingMessage ? (
-              <LoaderCircle className="h-5 w-5 animate-spin" />
-            ) : editingMessageId ? (
-              <Check className="h-5 w-5" />
-            ) : (
-              <SendHorizontal className="h-5 w-5" />
-            )}
-          </button>
-        )}
-      </div>
+          {!isRecordingVoiceNote && (
+            <textarea
+              ref={messageInputRef}
+              value={messageText}
+              onChange={onMessageChange}
+              maxLength={5000}
+              rows={1}
+              placeholder={
+                editingMessageId
+                  ? "Edit your message"
+                  : replyingToMessage
+                    ? "Write a reply"
+                    : "Type a message"
+              }
+              aria-label={editingMessageId ? "Edit message" : "Message"}
+              className="scrollbar-hidden block min-h-10 max-h-32 min-w-0 flex-1 resize-none overflow-y-auto rounded-2xl border border-slate-300 bg-slate-100 px-3 py-2 text-base leading-5 text-slate-900 outline-none transition focus:border-cyan-500 focus:bg-white focus:ring-4 focus:ring-cyan-100 sm:px-4 sm:text-sm"
+            />
+          )}
+
+          {!isRecordingVoiceNote && (
+            <button
+              type="submit"
+              disabled={!messageText.trim() || isSending || isEditingMessage}
+              aria-label={
+                editingMessageId ? "Save edited message" : "Send message"
+              }
+              title={editingMessageId ? "Save changes" : "Send message"}
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-cyan-600 text-white transition hover:bg-cyan-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isSending || isEditingMessage ? (
+                <LoaderCircle className="h-5 w-5 animate-spin" />
+              ) : editingMessageId ? (
+                <Check className="h-5 w-5" />
+              ) : (
+                <SendHorizontal className="h-5 w-5" />
+              )}
+            </button>
+          )}
+        </div>
+      )}
     </form>
   );
 }

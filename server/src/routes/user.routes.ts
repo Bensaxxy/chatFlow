@@ -1,10 +1,12 @@
 import { Router } from "express";
 
 import {
+  block,
   deleteMyAvatar,
   getMyProfile,
   getPublicProfile,
   search,
+  unblock,
   updateMyAvatar,
   updateMyProfile,
 } from "../controllers/user.controller";
@@ -29,6 +31,8 @@ userRouter.patch(
 userRouter.patch("/me/avatar", authenticate, uploadAvatarImage, updateMyAvatar);
 
 userRouter.delete("/me/avatar", authenticate, deleteMyAvatar);
+userRouter.put("/:userId/block", authenticate, block);
+userRouter.delete("/:userId/block", authenticate, unblock);
 userRouter.get("/:userId/profile", authenticate, getPublicProfile);
 
 export default userRouter;

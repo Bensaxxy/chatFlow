@@ -9,6 +9,7 @@ import { AppError } from "../utils/app-error";
 import type { UpdateProfileInput } from "../validations/profile.validation";
 import { getSocketServer } from "../socket/socket.server";
 import { Conversation } from "../models/conversation.model";
+import { getDirectMessagingAccess } from "./user.service";
 
 interface ProfileUpdatePayload {
   user: {
@@ -185,7 +186,10 @@ export const removeUserAvatar = async (userId: string) => {
   return user;
 };
 
-export const getPublicUserProfile = async (userId: string) => {
+export const getPublicUserProfile = async (
+  userId: string,
+  currentUserId: string,
+) => {
   const user = await User.findById(userId).select(
     "name avatarUrl bio lastSeenAt createdAt updatedAt",
   );
@@ -194,5 +198,18 @@ export const getPublicUserProfile = async (userId: string) => {
     throw new AppError("User profile was not found", 404, "USER_NOT_FOUND");
   }
 
-  return user;
+  if (currentUserId === userId) {
+    return {
+      ...user.toJSON(),
+      isBlockedByCurrentUser: false,
+      canMessage: true,
+    };
+  }
+
+  const access = await getDirectMessagingAccess(currentUserId, userId);
+
+  return {
+    ...user.toJSON(),
+    ...access,
+  };
 };

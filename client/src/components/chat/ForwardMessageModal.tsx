@@ -123,6 +123,14 @@ export default function ForwardMessageModal({
   const toggleConversation = (conversationId: string): void => {
     if (isForwarding) return;
 
+    const conversation = conversations.find(
+      (item) => item._id === conversationId,
+    );
+
+    if (conversation?.directMessagingAccess?.canMessage === false) {
+      return;
+    }
+
     setSelectedConversationIds((current) => {
       const next = new Set(current);
 
@@ -278,14 +286,16 @@ export default function ForwardMessageModal({
                 const isSelected = selectedConversationIds.has(
                   conversation._id,
                 );
+                const isMessagingUnavailable =
+                  conversation.directMessagingAccess?.canMessage === false;
 
                 return (
                   <button
                     key={conversation._id}
                     type="button"
-                    disabled={isForwarding}
+                    disabled={isForwarding || isMessagingUnavailable}
                     onClick={() => toggleConversation(conversation._id)}
-                    className={`flex w-full items-center gap-3 px-5 py-3 text-left transition disabled:cursor-wait ${
+                    className={`flex w-full items-center gap-3 px-5 py-3 text-left transition disabled:cursor-not-allowed disabled:opacity-60 ${
                       isSelected ? "bg-cyan-50" : "hover:bg-slate-50"
                     }`}
                   >
@@ -302,7 +312,9 @@ export default function ForwardMessageModal({
                       </p>
 
                       <p className="truncate text-sm text-slate-500">
-                        {details.subtitle}
+                        {isMessagingUnavailable
+                          ? "Messaging unavailable"
+                          : details.subtitle}
                       </p>
                     </div>
 

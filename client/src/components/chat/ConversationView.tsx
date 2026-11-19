@@ -458,6 +458,18 @@ export default function ConversationView({
 
     const loadConversation = async (): Promise<void> => {
       if (initialCache) {
+        void getConversationById(conversationId)
+          .then((latestConversation) => {
+            if (!controller.signal.aborted) {
+              setConversation(latestConversation);
+            }
+          })
+          .catch((loadError) => {
+            if (!controller.signal.aborted) {
+              console.error("Could not refresh conversation details:", loadError);
+            }
+          });
+
         void markConversationRead(conversationId).catch((readError) => {
           console.error("Could not mark conversation as read:", readError);
         });
@@ -1017,6 +1029,14 @@ export default function ConversationView({
   ): Promise<void> => {
     event.preventDefault();
 
+    if (
+      conversation?.type === "direct" &&
+      conversation.directMessagingAccess?.canMessage === false
+    ) {
+      toast.error("Messaging is unavailable in this conversation.");
+      return;
+    }
+
     const content = messageText.trim();
 
     if (!content || isSending || isEditingMessage) {
@@ -1265,6 +1285,15 @@ export default function ConversationView({
 
   const isDirectConversation = conversation.type === "direct";
 
+  const directMessagingAccess = conversation.directMessagingAccess;
+
+  const isMessagingDisabled =
+    isDirectConversation && directMessagingAccess?.canMessage === false;
+
+  const messagingDisabledMessage = directMessagingAccess?.isBlockedByCurrentUser
+    ? "You blocked this user. Unblock them to send a message."
+    : "Messaging is unavailable in this conversation.";
+
   const otherParticipantId = otherParticipant?._id;
 
   const isOtherUserOnline =
@@ -1366,6 +1395,13 @@ export default function ConversationView({
         editingMessageId={editingMessageId}
         isSending={isSending}
         isEditingMessage={isEditingMessage}
+        isMessagingDisabled={isMessagingDisabled}
+        messagingDisabledMessage={messagingDisabledMessage}
+        onManageMessaging={
+          directMessagingAccess?.isBlockedByCurrentUser && otherParticipantId
+            ? () => router.push("/users/" + otherParticipantId)
+            : undefined
+        }
         onSubmit={handleSendMessage}
         onMessageChange={handleMessageChange}
         onCancelReplying={handleCancelReplying}
