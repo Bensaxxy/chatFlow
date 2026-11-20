@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, PhoneCall, Search } from "lucide-react";
+import { ArrowLeft, History, PhoneCall, Search } from "lucide-react";
 import Link from "next/link";
 
 import UserAvatar from "@/components/chat/UserAvatar";
@@ -16,6 +16,7 @@ interface ConversationHeaderProps {
   isAudioCallActive?: boolean;
   onViewProfile: () => void;
   onOpenSearch: () => void;
+  onOpenCallHistory?: () => void;
   onStartAudioCall?: () => void;
 }
 
@@ -30,6 +31,7 @@ export default function ConversationHeader({
   isAudioCallActive = false,
   onViewProfile,
   onOpenSearch,
+  onOpenCallHistory,
   onStartAudioCall,
 }: ConversationHeaderProps) {
   return (
@@ -95,6 +97,18 @@ export default function ConversationHeader({
           className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-slate-600 transition hover:bg-cyan-50 hover:text-cyan-700 disabled:cursor-not-allowed disabled:opacity-40"
         >
           <PhoneCall className="h-5 w-5" />
+        </button>
+      )}
+
+      {onOpenCallHistory && (
+        <button
+          type="button"
+          onClick={onOpenCallHistory}
+          aria-label="Open call history"
+          title="Call history"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-slate-600 transition hover:bg-cyan-50 hover:text-cyan-700"
+        >
+          <History className="h-5 w-5" />
         </button>
       )}
 

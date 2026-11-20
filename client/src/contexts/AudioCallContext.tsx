@@ -38,6 +38,7 @@ export type AudioCallPhase =
   | "ringing"
   | "calling"
   | "connecting"
+  | "reconnecting"
   | "connected";
 
 interface StartAudioCallInput {
@@ -66,6 +67,8 @@ const AudioCallContext = createContext<AudioCallContextValue | undefined>(
 );
 
 const CALL_ACKNOWLEDGEMENT_TIMEOUT_MS = 12_000;
+const CALL_RECONNECTION_GRACE_PERIOD_MS = 20_000;
+const CALL_CONNECTION_TIMEOUT_MS = 35_000;
 
 const createCallId = (): string => {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -182,6 +185,10 @@ export function AudioCallProvider({ children }: { children: ReactNode }) {
   const isCallRegisteredRef = useRef(false);
   const acknowledgementTimeoutRef = useRef<number | null>(null);
   const callOutcomeTimeoutRef = useRef<number | null>(null);
+  const reconnectionTimeoutRef = useRef<number | null>(null);
+  const connectionTimeoutRef = useRef<number | null>(null);
+  const hasSocketDisconnectedRef = useRef(false);
+  const hasAttemptedIceRestartRef = useRef(false);
 
   const updateActiveCall = useCallback((call: ActiveAudioCall | null): void => {
     activeCallRef.current = call;
@@ -192,6 +199,20 @@ export function AudioCallProvider({ children }: { children: ReactNode }) {
     if (acknowledgementTimeoutRef.current !== null) {
       window.clearTimeout(acknowledgementTimeoutRef.current);
       acknowledgementTimeoutRef.current = null;
+    }
+  }, []);
+
+  const clearReconnectionTimeout = useCallback((): void => {
+    if (reconnectionTimeoutRef.current !== null) {
+      window.clearTimeout(reconnectionTimeoutRef.current);
+      reconnectionTimeoutRef.current = null;
+    }
+  }, []);
+
+  const clearConnectionTimeout = useCallback((): void => {
+    if (connectionTimeoutRef.current !== null) {
+      window.clearTimeout(connectionTimeoutRef.current);
+      connectionTimeoutRef.current = null;
     }
   }, []);
 
@@ -222,6 +243,8 @@ export function AudioCallProvider({ children }: { children: ReactNode }) {
 
   const cleanupCall = useCallback((): void => {
     clearAcknowledgementTimeout();
+    clearReconnectionTimeout();
+    clearConnectionTimeout();
 
     const peerConnection = peerConnectionRef.current;
 
@@ -240,16 +263,113 @@ export function AudioCallProvider({ children }: { children: ReactNode }) {
     pendingRemoteCandidatesRef.current = [];
     pendingLocalCandidatesRef.current = [];
     isCallRegisteredRef.current = false;
+    hasSocketDisconnectedRef.current = false;
+    hasAttemptedIceRestartRef.current = false;
 
     setRemoteStream(null);
     setIsMuted(false);
     setPhase("idle");
     updateActiveCall(null);
-  }, [clearAcknowledgementTimeout, updateActiveCall]);
+  }, [
+    clearAcknowledgementTimeout,
+    clearConnectionTimeout,
+    clearReconnectionTimeout,
+    updateActiveCall,
+  ]);
 
   const hasActiveCall = useCallback((callId: string): boolean => {
     return activeCallRef.current?.callId === callId;
   }, []);
+
+  const failActiveCall = useCallback(
+    (message: string): void => {
+      const call = activeCallRef.current;
+
+      if (!call) {
+        return;
+      }
+
+      socket.emit("call:end", {
+        callId: call.callId,
+        conversationId: call.conversationId,
+        reason: "failed",
+      });
+      showCallOutcome(call, "failed");
+      cleanupCall();
+      toast.error(message);
+    },
+    [cleanupCall, showCallOutcome, socket],
+  );
+
+  const armConnectionTimeout = useCallback(
+    (callId: string): void => {
+      clearConnectionTimeout();
+
+      connectionTimeoutRef.current = window.setTimeout(() => {
+        const currentCall = activeCallRef.current;
+        const connectionState = peerConnectionRef.current?.connectionState;
+
+        if (
+          !currentCall ||
+          currentCall.callId !== callId ||
+          connectionState === "connected"
+        ) {
+          return;
+        }
+
+        failActiveCall(
+          "Audio could not connect. Check your network or the TURN relay setup.",
+        );
+      }, CALL_CONNECTION_TIMEOUT_MS);
+    },
+    [clearConnectionTimeout, failActiveCall],
+  );
+
+  const restartIceFromCaller = useCallback(
+    async (callId: string, conversationId: string): Promise<boolean> => {
+      const call = activeCallRef.current;
+      const peerConnection = peerConnectionRef.current;
+
+      if (
+        !call ||
+        call.callId !== callId ||
+        call.conversationId !== conversationId ||
+        call.direction !== "outgoing" ||
+        !peerConnection ||
+        !isCallRegisteredRef.current ||
+        hasAttemptedIceRestartRef.current
+      ) {
+        return false;
+      }
+
+      hasAttemptedIceRestartRef.current = true;
+      setPhase("reconnecting");
+
+      try {
+        peerConnection.restartIce();
+        const offer = await peerConnection.createOffer({ iceRestart: true });
+        await peerConnection.setLocalDescription(offer);
+
+        const offerPayload = toSessionDescriptionPayload(offer);
+
+        if (!offerPayload || !hasActiveCall(callId)) {
+          return false;
+        }
+
+        socket.emit("call:renegotiate-offer", {
+          callId,
+          conversationId,
+          offer: offerPayload,
+        });
+        armConnectionTimeout(callId);
+
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    [armConnectionTimeout, hasActiveCall, socket],
+  );
 
   const flushLocalCandidates = useCallback((): void => {
     const call = activeCallRef.current;
@@ -346,18 +466,33 @@ export function AudioCallProvider({ children }: { children: ReactNode }) {
           };
 
           updateActiveCall(connectedCall);
+          hasAttemptedIceRestartRef.current = false;
+          clearConnectionTimeout();
           setPhase("connected");
           return;
         }
 
+        if (peerConnection.connectionState === "disconnected") {
+          setPhase("reconnecting");
+          return;
+        }
+
         if (peerConnection.connectionState === "failed") {
-          socket.emit("call:end", {
-            callId,
-            conversationId,
-            reason: "failed",
+          if (call.direction !== "outgoing") {
+            setPhase("reconnecting");
+            return;
+          }
+
+          void restartIceFromCaller(callId, conversationId).then((restarted) => {
+            if (
+              !restarted &&
+              activeCallRef.current?.callId === callId
+            ) {
+              failActiveCall(
+                "Audio could not connect. Check your network or the TURN relay setup.",
+              );
+            }
           });
-          cleanupCall();
-          toast.error("The audio call could not be connected.");
         }
       };
 
@@ -365,7 +500,13 @@ export function AudioCallProvider({ children }: { children: ReactNode }) {
 
       return peerConnection;
     },
-    [cleanupCall, socket, updateActiveCall],
+    [
+      clearConnectionTimeout,
+      failActiveCall,
+      restartIceFromCaller,
+      socket,
+      updateActiveCall,
+    ],
   );
 
   const addRemoteCandidate = useCallback(
@@ -568,6 +709,7 @@ export function AudioCallProvider({ children }: { children: ReactNode }) {
 
           isCallRegisteredRef.current = true;
           flushLocalCandidates();
+          armConnectionTimeout(call.callId);
         },
       );
     } catch (error) {
@@ -581,6 +723,7 @@ export function AudioCallProvider({ children }: { children: ReactNode }) {
     }
   }, [
     applyPendingRemoteCandidates,
+    armConnectionTimeout,
     clearAcknowledgementTimeout,
     cleanupCall,
     createPeerConnection,
@@ -731,15 +874,14 @@ export function AudioCallProvider({ children }: { children: ReactNode }) {
       void peerConnection
         .setRemoteDescription(payload.answer)
         .then(() => applyPendingRemoteCandidates())
-        .then(() => setPhase("connecting"))
+        .then(() => {
+          setPhase("connecting");
+          armConnectionTimeout(call.callId);
+        })
         .catch(() => {
-          socket.emit("call:end", {
-            callId: call.callId,
-            conversationId: call.conversationId,
-            reason: "failed",
-          });
-          cleanupCall();
-          toast.error("The audio call could not be connected.");
+          failActiveCall(
+            "Audio could not connect. Check your network or the TURN relay setup.",
+          );
         });
     };
 
@@ -761,6 +903,83 @@ export function AudioCallProvider({ children }: { children: ReactNode }) {
       void addRemoteCandidate(payload.candidate).catch(() => {
         // ICE candidates can arrive after a call has ended. They are safe to ignore.
       });
+    };
+
+    const handleRenegotiateOffer = (payload: {
+      callId: string;
+      conversationId: string;
+      offer: WebRtcSessionDescriptionPayload;
+    }): void => {
+      const call = activeCallRef.current;
+      const peerConnection = peerConnectionRef.current;
+
+      if (
+        !call ||
+        call.callId !== payload.callId ||
+        call.conversationId !== payload.conversationId ||
+        call.direction !== "incoming" ||
+        !peerConnection
+      ) {
+        return;
+      }
+
+      void (async () => {
+        await peerConnection.setRemoteDescription(payload.offer);
+        await applyPendingRemoteCandidates();
+
+        const answer = await peerConnection.createAnswer();
+        await peerConnection.setLocalDescription(answer);
+
+        const answerPayload = toSessionDescriptionPayload(answer);
+
+        if (!answerPayload || !hasActiveCall(payload.callId)) {
+          throw new Error("Could not prepare the ICE restart answer");
+        }
+
+        socket.emit("call:renegotiate-answer", {
+          callId: payload.callId,
+          conversationId: payload.conversationId,
+          answer: answerPayload,
+        });
+        setPhase("connecting");
+        armConnectionTimeout(payload.callId);
+      })().catch(() => {
+        failActiveCall(
+          "Audio could not reconnect. Check your network or the TURN relay setup.",
+        );
+      });
+    };
+
+    const handleRenegotiateAnswer = (payload: {
+      callId: string;
+      conversationId: string;
+      answer: WebRtcSessionDescriptionPayload;
+    }): void => {
+      const call = activeCallRef.current;
+      const peerConnection = peerConnectionRef.current;
+
+      if (
+        !call ||
+        call.callId !== payload.callId ||
+        call.conversationId !== payload.conversationId ||
+        call.direction !== "outgoing" ||
+        !peerConnection
+      ) {
+        return;
+      }
+
+      void peerConnection
+        .setRemoteDescription(payload.answer)
+        .then(() => applyPendingRemoteCandidates())
+        .then(() => {
+          setPhase("connecting");
+          armConnectionTimeout(payload.callId);
+        })
+        .catch(() => {
+          failActiveCall(
+            "Audio could not reconnect. Check your network or the TURN relay setup.",
+          );
+        });
     };
 
     const handleCallEnded = (payload: {
@@ -797,23 +1016,103 @@ export function AudioCallProvider({ children }: { children: ReactNode }) {
     socket.on("call:incoming", handleIncomingCall);
     socket.on("call:accepted", handleCallAccepted);
     socket.on("call:ice-candidate", handleIceCandidate);
+    socket.on("call:renegotiate-offer", handleRenegotiateOffer);
+    socket.on("call:renegotiate-answer", handleRenegotiateAnswer);
     socket.on("call:ended", handleCallEnded);
 
     return () => {
       socket.off("call:incoming", handleIncomingCall);
       socket.off("call:accepted", handleCallAccepted);
       socket.off("call:ice-candidate", handleIceCandidate);
+      socket.off("call:renegotiate-offer", handleRenegotiateOffer);
+      socket.off("call:renegotiate-answer", handleRenegotiateAnswer);
       socket.off("call:ended", handleCallEnded);
     };
   }, [
     addRemoteCandidate,
     applyPendingRemoteCandidates,
+    armConnectionTimeout,
     cleanupCall,
     dismissCallOutcome,
+    failActiveCall,
+    hasActiveCall,
     socket,
     showCallOutcome,
     updateActiveCall,
     user,
+  ]);
+
+  useEffect(() => {
+    const call = activeCallRef.current;
+
+    if (!call) {
+      clearReconnectionTimeout();
+      hasSocketDisconnectedRef.current = false;
+      return;
+    }
+
+    if (!isConnected || !socket.connected) {
+      if (hasSocketDisconnectedRef.current) {
+        return;
+      }
+
+      hasSocketDisconnectedRef.current = true;
+      setPhase("reconnecting");
+      clearReconnectionTimeout();
+
+      reconnectionTimeoutRef.current = window.setTimeout(() => {
+        const currentCall = activeCallRef.current;
+
+        if (!currentCall || !hasSocketDisconnectedRef.current) {
+          return;
+        }
+
+        showCallOutcome(currentCall, "failed");
+        cleanupCall();
+        toast.error("The call ended because the connection could not be restored.");
+      }, CALL_RECONNECTION_GRACE_PERIOD_MS);
+
+      return;
+    }
+
+    if (!hasSocketDisconnectedRef.current) {
+      return;
+    }
+
+    socket.emit(
+      "call:resume",
+      {
+        callId: call.callId,
+        conversationId: call.conversationId,
+      },
+      (result) => {
+        if (activeCallRef.current?.callId !== call.callId) {
+          return;
+        }
+
+        if (!result.success) {
+          showCallOutcome(call, "failed");
+          cleanupCall();
+          toast.error(result.message);
+          return;
+        }
+
+        hasSocketDisconnectedRef.current = false;
+        clearReconnectionTimeout();
+        setPhase(
+          peerConnectionRef.current?.connectionState === "connected"
+            ? "connected"
+            : "connecting",
+        );
+      },
+    );
+  }, [
+    activeCall,
+    cleanupCall,
+    clearReconnectionTimeout,
+    isConnected,
+    showCallOutcome,
+    socket,
   ]);
 
   useEffect(() => {
@@ -831,8 +1130,11 @@ export function AudioCallProvider({ children }: { children: ReactNode }) {
       if (callOutcomeTimeoutRef.current !== null) {
         window.clearTimeout(callOutcomeTimeoutRef.current);
       }
+
+      clearReconnectionTimeout();
+      clearConnectionTimeout();
     };
-  }, []);
+  }, [clearConnectionTimeout, clearReconnectionTimeout]);
 
   const value = useMemo<AudioCallContextValue>(
     () => ({
@@ -959,7 +1261,8 @@ function AudioCallOverlay({
 
   const isIncoming = activeCall.direction === "incoming";
   const isRinging = phase === "ringing";
-  const canToggleMute = phase === "connecting" || phase === "connected";
+  const canToggleMute =
+    phase === "connecting" || phase === "reconnecting" || phase === "connected";
   const status = isRinging
     ? isIncoming
       ? "Incoming audio call"
@@ -968,6 +1271,8 @@ function AudioCallOverlay({
       ? "Calling…"
       : phase === "connecting"
         ? "Connecting securely…"
+      : phase === "reconnecting"
+        ? "Reconnecting…"
         : `Connected · ${formatDuration(duration)}`;
 
   return (

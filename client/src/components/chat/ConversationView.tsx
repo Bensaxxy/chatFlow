@@ -14,6 +14,7 @@ import {
 import { toast } from "react-toastify";
 
 import ConversationComposer from "@/components/chat/ConversationComposer";
+import CallHistoryDrawer from "@/components/chat/CallHistoryDrawer";
 import ConversationHeader from "@/components/chat/ConversationHeader";
 import ConversationMessageList from "@/components/chat/ConversationMessageList";
 import MessageBulkActionBar from "@/components/chat/MessageBulkActionBar";
@@ -428,6 +429,8 @@ export default function ConversationView({
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
 
   const [isMessageSearchOpen, setIsMessageSearchOpen] = useState(false);
+
+  const [isCallHistoryOpen, setIsCallHistoryOpen] = useState(false);
 
   const [messageSearchQuery, setMessageSearchQuery] = useState("");
 
@@ -1747,6 +1750,9 @@ export default function ConversationView({
           }
         }}
         onOpenSearch={openMessageSearch}
+        onOpenCallHistory={
+          isDirectConversation ? () => setIsCallHistoryOpen(true) : undefined
+        }
         onStartAudioCall={
           isDirectConversation && otherParticipantId
             ? () =>
@@ -1891,6 +1897,19 @@ export default function ConversationView({
           void handleMessageSearchResult(message);
         }}
       />
+
+      {isDirectConversation && currentUserId && (
+        <CallHistoryDrawer
+          isOpen={isCallHistoryOpen}
+          conversationId={conversationId}
+          currentUserId={currentUserId}
+          fallbackName={displayName}
+          fallbackAvatarUrl={
+            updatedOtherProfile?.avatarUrl ?? otherParticipant?.avatarUrl ?? null
+          }
+          onClose={() => setIsCallHistoryOpen(false)}
+        />
+      )}
     </section>
   );
 }

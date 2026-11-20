@@ -73,6 +73,18 @@ interface ServerToClientEvents {
     candidate: WebRtcIceCandidatePayload;
   }) => void;
 
+  "call:renegotiate-offer": (payload: {
+    callId: string;
+    conversationId: string;
+    offer: WebRtcSessionDescriptionPayload;
+  }) => void;
+
+  "call:renegotiate-answer": (payload: {
+    callId: string;
+    conversationId: string;
+    answer: WebRtcSessionDescriptionPayload;
+  }) => void;
+
   "call:ended": (payload: {
     callId: string;
     conversationId: string;
@@ -120,6 +132,18 @@ interface ClientToServerEvents {
     candidate: WebRtcIceCandidatePayload;
   }) => void;
 
+  "call:renegotiate-offer": (payload: {
+    callId: string;
+    conversationId: string;
+    offer: WebRtcSessionDescriptionPayload;
+  }) => void;
+
+  "call:renegotiate-answer": (payload: {
+    callId: string;
+    conversationId: string;
+    answer: WebRtcSessionDescriptionPayload;
+  }) => void;
+
   "call:end": (
     payload: {
       callId: string;
@@ -127,6 +151,14 @@ interface ClientToServerEvents {
       reason?: AudioCallEndReason;
     },
     acknowledge?: (result: SocketResult) => void,
+  ) => void;
+
+  "call:resume": (
+    payload: {
+      callId: string;
+      conversationId: string;
+    },
+    acknowledge: (result: SocketResult) => void,
   ) => void;
 }
 

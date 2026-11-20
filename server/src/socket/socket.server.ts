@@ -5,6 +5,12 @@ import { Server } from "socket.io";
 
 import { env } from "../config/env";
 import { Conversation } from "../models/conversation.model";
+import {
+  completeCallHistory,
+  createCallHistory,
+  markCallHistoryAnswered,
+  type CallHistoryStatus,
+} from "../services/call-history.service";
 import { verifyAccessToken, verifySocketToken } from "../utils/auth-tokens";
 import { User } from "../models/user.model";
 import { getDirectMessagingAccess } from "../services/user.service";
@@ -46,8 +52,11 @@ interface ActiveAudioCall {
   callerSocketId: string;
   recipientId: string;
   recipientSocketId: string | null;
+  historyId: string;
   status: "ringing" | "active";
   ringTimeout: NodeJS.Timeout;
+  callerDisconnectTimeout: NodeJS.Timeout | null;
+  recipientDisconnectTimeout: NodeJS.Timeout | null;
 }
 
 const isValidCallId = (value: unknown): value is string =>
@@ -151,6 +160,18 @@ interface ServerToClientEvents {
     candidate: WebRtcIceCandidatePayload;
   }) => void;
 
+  "call:renegotiate-offer": (payload: {
+    callId: string;
+    conversationId: string;
+    offer: WebRtcSessionDescriptionPayload;
+  }) => void;
+
+  "call:renegotiate-answer": (payload: {
+    callId: string;
+    conversationId: string;
+    answer: WebRtcSessionDescriptionPayload;
+  }) => void;
+
   "call:ended": (payload: {
     callId: string;
     conversationId: string;
@@ -198,6 +219,18 @@ interface ClientToServerEvents {
     candidate: WebRtcIceCandidatePayload;
   }) => void;
 
+  "call:renegotiate-offer": (payload: {
+    callId: string;
+    conversationId: string;
+    offer: WebRtcSessionDescriptionPayload;
+  }) => void;
+
+  "call:renegotiate-answer": (payload: {
+    callId: string;
+    conversationId: string;
+    answer: WebRtcSessionDescriptionPayload;
+  }) => void;
+
   "call:end": (
     payload: {
       callId: string;
@@ -205,6 +238,11 @@ interface ClientToServerEvents {
       reason?: AudioCallEndReason;
     },
     acknowledge?: (result: SocketResult) => void,
+  ) => void;
+
+  "call:resume": (
+    payload: { callId: string; conversationId: string },
+    acknowledge: (result: SocketResult) => void,
   ) => void;
 }
 
@@ -251,13 +289,38 @@ export const initializeSocketServer = (
   const activeCalls = new Map<string, ActiveAudioCall>();
   const activeCallByUserId = new Map<string, string>();
 
+  const getCallHistoryStatus = (
+    call: ActiveAudioCall,
+    reason: AudioCallEndReason,
+  ): CallHistoryStatus => {
+    if (reason === "missed") return "missed";
+    if (reason === "declined") return "declined";
+    if (reason === "failed") return "failed";
+    if (call.status === "active") return "completed";
+    return "cancelled";
+  };
+
   const endActiveCall = (
     call: ActiveAudioCall,
     reason: AudioCallEndReason,
     endedByUserId: string | null,
   ): void => {
     clearTimeout(call.ringTimeout);
+    if (call.callerDisconnectTimeout) {
+      clearTimeout(call.callerDisconnectTimeout);
+    }
+    if (call.recipientDisconnectTimeout) {
+      clearTimeout(call.recipientDisconnectTimeout);
+    }
     activeCalls.delete(call.callId);
+
+    void completeCallHistory(
+      call.historyId,
+      getCallHistoryStatus(call, reason),
+      endedByUserId,
+    ).catch((error) => {
+      console.error("Could not complete call history:", error);
+    });
 
     if (activeCallByUserId.get(call.callerId) === call.callId) {
       activeCallByUserId.delete(call.callerId);
@@ -555,11 +618,18 @@ export const initializeSocketServer = (
           return;
         }
 
+        const historyId = await createCallHistory(
+          payload.conversationId,
+          userId,
+          recipientId,
+        );
+
         const recipientSockets = await io
           .in(`user:${recipientId}`)
           .fetchSockets();
 
         if (recipientSockets.length === 0) {
+          await completeCallHistory(historyId, "missed", null);
           acknowledge({
             success: false,
             message: "This person is not available for a call right now",
@@ -582,8 +652,11 @@ export const initializeSocketServer = (
           callerSocketId: socket.id,
           recipientId,
           recipientSocketId: null,
+          historyId,
           status: "ringing",
           ringTimeout,
+          callerDisconnectTimeout: null,
+          recipientDisconnectTimeout: null,
         };
 
         activeCalls.set(call.callId, call);
@@ -648,6 +721,9 @@ export const initializeSocketServer = (
       clearTimeout(call.ringTimeout);
       call.status = "active";
       call.recipientSocketId = socket.id;
+      void markCallHistoryAnswered(call.historyId).catch((error) => {
+        console.error("Could not mark call history as answered:", error);
+      });
 
       const acceptedPayload = {
         callId: call.callId,
@@ -699,6 +775,60 @@ export const initializeSocketServer = (
       });
     });
 
+    socket.on("call:renegotiate-offer", (payload) => {
+      if (
+        !isValidCallId(payload.callId) ||
+        !isValidObjectId(payload.conversationId) ||
+        !isValidSessionDescription(payload.offer, "offer")
+      ) {
+        return;
+      }
+
+      const call = activeCalls.get(payload.callId);
+
+      if (
+        !call ||
+        call.status !== "active" ||
+        call.conversationId !== payload.conversationId ||
+        call.callerId !== userId
+      ) {
+        return;
+      }
+
+      io.to(`user:${call.recipientId}`).emit("call:renegotiate-offer", {
+        callId: call.callId,
+        conversationId: call.conversationId,
+        offer: payload.offer,
+      });
+    });
+
+    socket.on("call:renegotiate-answer", (payload) => {
+      if (
+        !isValidCallId(payload.callId) ||
+        !isValidObjectId(payload.conversationId) ||
+        !isValidSessionDescription(payload.answer, "answer")
+      ) {
+        return;
+      }
+
+      const call = activeCalls.get(payload.callId);
+
+      if (
+        !call ||
+        call.status !== "active" ||
+        call.conversationId !== payload.conversationId ||
+        call.recipientId !== userId
+      ) {
+        return;
+      }
+
+      io.to(`user:${call.callerId}`).emit("call:renegotiate-answer", {
+        callId: call.callId,
+        conversationId: call.conversationId,
+        answer: payload.answer,
+      });
+    });
+
     socket.on("call:end", (payload, acknowledge) => {
       if (
         !isValidCallId(payload.callId) ||
@@ -740,6 +870,39 @@ export const initializeSocketServer = (
       });
     });
 
+    socket.on("call:resume", (payload, acknowledge) => {
+      const call = activeCalls.get(payload.callId);
+
+      if (
+        !isValidCallId(payload.callId) ||
+        !isValidObjectId(payload.conversationId) ||
+        !call ||
+        call.conversationId !== payload.conversationId
+      ) {
+        acknowledge({ success: false, message: "This call is no longer available" });
+        return;
+      }
+
+      if (call.callerId === userId) {
+        if (call.callerDisconnectTimeout) {
+          clearTimeout(call.callerDisconnectTimeout);
+          call.callerDisconnectTimeout = null;
+        }
+        call.callerSocketId = socket.id;
+      } else if (call.recipientId === userId) {
+        if (call.recipientDisconnectTimeout) {
+          clearTimeout(call.recipientDisconnectTimeout);
+          call.recipientDisconnectTimeout = null;
+        }
+        call.recipientSocketId = socket.id;
+      } else {
+        acknowledge({ success: false, message: "This call is no longer available" });
+        return;
+      }
+
+      acknowledge({ success: true, message: "Call reconnected" });
+    });
+
     /**
      * Remove typing indicators if the browser closes before
      * it sends typing:stop.
@@ -758,7 +921,17 @@ export const initializeSocketServer = (
             activeCall.recipientSocketId === socket.id));
 
       if (socketOwnsActiveCall) {
-        endActiveCall(activeCall, "ended", userId);
+        const timeoutKey = activeCall.callerId === userId
+          ? "callerDisconnectTimeout"
+          : "recipientDisconnectTimeout";
+
+        activeCall[timeoutKey] = setTimeout(() => {
+          const currentCall = activeCalls.get(activeCall.callId);
+
+          if (currentCall === activeCall) {
+            endActiveCall(currentCall, "failed", userId);
+          }
+        }, 20_000);
       }
 
       for (const conversationId of activeTypingConversations) {
