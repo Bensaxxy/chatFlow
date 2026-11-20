@@ -16,6 +16,7 @@ import { toast } from "react-toastify";
 import ConversationComposer from "@/components/chat/ConversationComposer";
 import ConversationHeader from "@/components/chat/ConversationHeader";
 import ConversationMessageList from "@/components/chat/ConversationMessageList";
+import MessageBulkActionBar from "@/components/chat/MessageBulkActionBar";
 import MessageSearchDrawer from "@/components/chat/MessageSearchDrawer";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAudioCall } from "@/contexts/AudioCallContext";
@@ -410,8 +411,15 @@ export default function ConversationView({
   const [replyingToMessage, setReplyingToMessage] =
     useState<ChatMessage | null>(null);
 
-  const [forwardingMessage, setForwardingMessage] =
-    useState<ChatMessage | null>(null);
+  const [forwardingMessages, setForwardingMessages] = useState<ChatMessage[]>(
+    [],
+  );
+
+  const [selectedMessageIds, setSelectedMessageIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+
+  const [isBulkActionWorking, setIsBulkActionWorking] = useState(false);
 
   const [showFloatingDate, setShowFloatingDate] = useState(false);
 
@@ -1435,7 +1443,120 @@ export default function ConversationView({
 
     setOpenMessageMenuId(null);
     setReactionPickerMessageId(null);
-    setForwardingMessage(message);
+    setForwardingMessages([message]);
+  };
+
+  const handleSelectMessage = (message: ChatMessage): void => {
+    if (message.deliveryStatus || message.deletedForEveryoneAt) {
+      return;
+    }
+
+    setOpenMessageMenuId(null);
+    setReactionPickerMessageId(null);
+
+    setSelectedMessageIds((currentSelection) => {
+      const nextSelection = new Set(currentSelection);
+
+      if (nextSelection.has(message._id)) {
+        nextSelection.delete(message._id);
+      } else {
+        nextSelection.add(message._id);
+      }
+
+      return nextSelection;
+    });
+  };
+
+  const handleCancelMessageSelection = (): void => {
+    if (isBulkActionWorking) {
+      return;
+    }
+
+    setSelectedMessageIds(new Set());
+  };
+
+  const handleForwardSelectedMessages = (): void => {
+    const selectedMessages = messages.filter((message) =>
+      selectedMessageIds.has(message._id),
+    );
+
+    if (selectedMessages.length === 0) {
+      return;
+    }
+
+    setForwardingMessages(selectedMessages);
+    setSelectedMessageIds(new Set());
+  };
+
+  const handleDeleteSelectedMessages = async (
+    scope: DeleteMessageScope,
+  ): Promise<void> => {
+    if (!currentUserId || isBulkActionWorking) {
+      return;
+    }
+
+    const selectedMessages = messages.filter((message) =>
+      selectedMessageIds.has(message._id),
+    );
+
+    if (selectedMessages.length === 0) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      scope === "everyone"
+        ? `Delete ${selectedMessages.length} selected messages for everyone?`
+        : `Delete ${selectedMessages.length} selected messages for you?`,
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setIsBulkActionWorking(true);
+
+      const results = await Promise.allSettled(
+        selectedMessages.map((message) =>
+          deleteConversationMessage(conversationId, message._id, scope),
+        ),
+      );
+      const deletionPayloads = results.flatMap((result) =>
+        result.status === "fulfilled" ? [result.value] : [],
+      );
+
+      if (deletionPayloads.length === 0) {
+        const firstFailure = results.find(
+          (result): result is PromiseRejectedResult =>
+            result.status === "rejected",
+        );
+
+        throw firstFailure?.reason ?? new Error("Could not delete messages");
+      }
+
+      setMessages((currentMessages) =>
+        deletionPayloads.reduce(
+          (nextMessages, deletionPayload) =>
+            applyMessageDeletion(
+              nextMessages,
+              deletionPayload,
+              currentUserId,
+            ),
+          currentMessages,
+        ),
+      );
+
+      setSelectedMessageIds(new Set());
+      toast.success(
+        deletionPayloads.length === selectedMessages.length
+          ? `${deletionPayloads.length} messages deleted`
+          : `${deletionPayloads.length} messages deleted; some could not be changed`,
+      );
+    } catch (error) {
+      toast.error(getApiErrorMessage(error));
+    } finally {
+      setIsBulkActionWorking(false);
+    }
   };
 
   const handleMessagesForwarded = (forwardedMessages: ChatMessage[]): void => {
@@ -1589,6 +1710,16 @@ export default function ConversationView({
       isConnected,
   );
 
+  const selectedMessages = messages.filter((message) =>
+    selectedMessageIds.has(message._id),
+  );
+  const canDeleteSelectedForEveryone =
+    selectedMessages.length > 0 &&
+    selectedMessages.every(
+      (message) =>
+        message.sender._id === currentUserId && !message.deletedForEveryoneAt,
+    );
+
   return (
     <section className="relative flex h-full min-w-0 w-full flex-col overflow-hidden bg-white">
       <ConversationHeader
@@ -1634,6 +1765,22 @@ export default function ConversationView({
         }
       />
 
+      {selectedMessageIds.size > 0 && (
+        <MessageBulkActionBar
+          selectedCount={selectedMessages.length}
+          canDeleteForEveryone={canDeleteSelectedForEveryone}
+          isWorking={isBulkActionWorking}
+          onCancel={handleCancelMessageSelection}
+          onForward={handleForwardSelectedMessages}
+          onDeleteForMe={() => {
+            void handleDeleteSelectedMessages("me");
+          }}
+          onDeleteForEveryone={() => {
+            void handleDeleteSelectedMessages("everyone");
+          }}
+        />
+      )}
+
       <ConversationMessageList
         messages={messages}
         currentUser={user}
@@ -1651,6 +1798,7 @@ export default function ConversationView({
         reactionPickerMessageId={reactionPickerMessageId}
         deletingMessageId={deletingMessageId}
         reactingMessageId={reactingMessageId}
+        selectedMessageIds={selectedMessageIds}
         messagesContainerRef={messagesContainerRef}
         messagesEndRef={messagesEndRef}
         onScroll={handleMessagesScroll}
@@ -1682,6 +1830,7 @@ export default function ConversationView({
           void handleMessageReaction(message, emoji);
         }}
         onRetry={handleRetryMessage}
+        onSelect={handleSelectMessage}
       />
       <ConversationComposer
         messageInputRef={messageInputRef}
@@ -1714,10 +1863,10 @@ export default function ConversationView({
 
       {currentUserId && (
         <ForwardMessageModal
-          message={forwardingMessage}
+          messages={forwardingMessages}
           sourceConversationId={conversationId}
           currentUserId={currentUserId}
-          onClose={() => setForwardingMessage(null)}
+          onClose={() => setForwardingMessages([])}
           onForwarded={handleMessagesForwarded}
         />
       )}

@@ -9,6 +9,7 @@ import { notFoundHandler } from "./middleware/not-found.middleware";
 import authRouter from "./routes/auth.routes";
 import userRouter from "./routes/user.routes";
 import conversationRouter from "./routes/conversation.routes";
+import callRouter from "./routes/call.routes";
 
 const app = express();
 
@@ -35,6 +36,7 @@ app.get("/api/health", (_request, response) => {
 app.use("/api/auth", authRouter);
 app.use("/api/users", userRouter);
 app.use("/api/conversations", conversationRouter);
+app.use("/api/calls", callRouter);
 
 app.use(notFoundHandler);
 app.use(errorHandler);

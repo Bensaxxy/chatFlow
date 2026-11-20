@@ -12,7 +12,7 @@ import type { Conversation } from "@/types/conversation";
 import type { ChatMessage } from "@/types/message";
 
 interface ForwardMessageModalProps {
-  message: ChatMessage | null;
+  messages: ChatMessage[];
   sourceConversationId: string;
   currentUserId: string;
   onClose: () => void;
@@ -47,7 +47,7 @@ const getConversationDetails = (
 };
 
 export default function ForwardMessageModal({
-  message,
+  messages,
   sourceConversationId,
   currentUserId,
   onClose,
@@ -62,7 +62,7 @@ export default function ForwardMessageModal({
   const [isForwarding, setIsForwarding] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const isOpen = message !== null;
+  const isOpen = messages.length > 0;
 
   useEffect(() => {
     if (!isOpen) {
@@ -151,25 +151,34 @@ export default function ForwardMessageModal({
   };
 
   const handleForward = async (): Promise<void> => {
-    if (!message || selectedConversationIds.size === 0 || isForwarding) {
+    if (messages.length === 0 || selectedConversationIds.size === 0 || isForwarding) {
       return;
     }
 
     try {
       setIsForwarding(true);
 
-      const result = await forwardConversationMessage(
-        sourceConversationId,
-        message._id,
-        [...selectedConversationIds],
+      const results = await Promise.all(
+        messages.map((message) =>
+          forwardConversationMessage(
+            sourceConversationId,
+            message._id,
+            [...selectedConversationIds],
+          ),
+        ),
+      );
+      const forwardedMessages = results.flatMap((result) => result.messages);
+      const forwardedCount = results.reduce(
+        (count, result) => count + result.forwardedCount,
+        0,
       );
 
-      onForwarded?.(result.messages);
+      onForwarded?.(forwardedMessages);
 
       toast.success(
-        result.forwardedCount === 1
+        forwardedCount === 1
           ? "Message forwarded successfully"
-          : `Message forwarded to ${result.forwardedCount} conversations`,
+          : `${messages.length} messages forwarded to ${selectedConversationIds.size} conversations`,
       );
 
       onClose();
@@ -180,7 +189,7 @@ export default function ForwardMessageModal({
     }
   };
 
-  if (!message) {
+  if (messages.length === 0) {
     return null;
   }
 
@@ -209,7 +218,7 @@ export default function ForwardMessageModal({
               id="forward-message-title"
               className="font-semibold text-slate-950"
             >
-              Forward message
+              {messages.length === 1 ? "Forward message" : "Forward messages"}
             </h2>
 
             <p className="text-sm text-slate-500">
@@ -230,12 +239,14 @@ export default function ForwardMessageModal({
 
         <div className="border-b border-slate-200 bg-slate-50 px-5 py-4">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-            Message
+            {messages.length === 1 ? "Message" : `${messages.length} messages`}
           </p>
 
           <div className="mt-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5">
             <p className="line-clamp-3 text-sm text-slate-700">
-              {message.content}
+              {messages.length === 1
+                ? messages[0]?.content || "Attachment"
+                : `${messages.length} selected messages will be forwarded together.`}
             </p>
           </div>
         </div>

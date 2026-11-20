@@ -23,6 +23,7 @@ import { toast } from "react-toastify";
 import UserAvatar from "@/components/chat/UserAvatar";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSocket } from "@/contexts/SocketContext";
+import { getCallIceServers } from "@/services/call.service";
 import { getPublicUserProfile } from "@/services/user.service";
 import type {
   ActiveAudioCall,
@@ -55,6 +56,11 @@ interface AudioCallContextValue {
   toggleMute: () => void;
 }
 
+interface CallOutcome {
+  participant: AudioCallParticipant;
+  reason: AudioCallEndReason;
+}
+
 const AudioCallContext = createContext<AudioCallContextValue | undefined>(
   undefined,
 );
@@ -77,35 +83,24 @@ const createCallId = (): string => {
   );
 };
 
-const getRtcConfiguration = (): RTCConfiguration => {
-  const fallbackIceServers: RTCIceServer[] = [
-    {
-      urls: "stun:stun.l.google.com:19302",
-    },
-  ];
-  const configuredServers = process.env.NEXT_PUBLIC_WEBRTC_ICE_SERVERS;
+const fallbackIceServers: RTCIceServer[] = [
+  {
+    urls: "stun:stun.l.google.com:19302",
+  },
+];
 
-  if (!configuredServers) {
+const getRtcConfiguration = async (): Promise<RTCConfiguration> => {
+  try {
+    const { iceServers } = await getCallIceServers();
+
+    return {
+      iceServers,
+    };
+  } catch {
     return {
       iceServers: fallbackIceServers,
     };
   }
-
-  try {
-    const parsedServers: unknown = JSON.parse(configuredServers);
-
-    if (Array.isArray(parsedServers) && parsedServers.length > 0) {
-      return {
-        iceServers: parsedServers as RTCIceServer[],
-      };
-    }
-  } catch {
-    // Keep a reliable STUN fallback when a deployment value is malformed.
-  }
-
-  return {
-    iceServers: fallbackIceServers,
-  };
 };
 
 const toSessionDescriptionPayload = (
@@ -174,6 +169,7 @@ export function AudioCallProvider({ children }: { children: ReactNode }) {
   const [phase, setPhase] = useState<AudioCallPhase>("idle");
   const [isMuted, setIsMuted] = useState(false);
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
+  const [callOutcome, setCallOutcome] = useState<CallOutcome | null>(null);
 
   const activeCallRef = useRef<ActiveAudioCall | null>(null);
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
@@ -185,6 +181,7 @@ export function AudioCallProvider({ children }: { children: ReactNode }) {
   const pendingLocalCandidatesRef = useRef<WebRtcIceCandidatePayload[]>([]);
   const isCallRegisteredRef = useRef(false);
   const acknowledgementTimeoutRef = useRef<number | null>(null);
+  const callOutcomeTimeoutRef = useRef<number | null>(null);
 
   const updateActiveCall = useCallback((call: ActiveAudioCall | null): void => {
     activeCallRef.current = call;
@@ -197,6 +194,31 @@ export function AudioCallProvider({ children }: { children: ReactNode }) {
       acknowledgementTimeoutRef.current = null;
     }
   }, []);
+
+  const dismissCallOutcome = useCallback((): void => {
+    if (callOutcomeTimeoutRef.current !== null) {
+      window.clearTimeout(callOutcomeTimeoutRef.current);
+      callOutcomeTimeoutRef.current = null;
+    }
+
+    setCallOutcome(null);
+  }, []);
+
+  const showCallOutcome = useCallback(
+    (call: ActiveAudioCall, reason: AudioCallEndReason): void => {
+      dismissCallOutcome();
+      setCallOutcome({
+        participant: call.participant,
+        reason,
+      });
+
+      callOutcomeTimeoutRef.current = window.setTimeout(() => {
+        setCallOutcome(null);
+        callOutcomeTimeoutRef.current = null;
+      }, 4_000);
+    },
+    [dismissCallOutcome],
+  );
 
   const cleanupCall = useCallback((): void => {
     clearAcknowledgementTimeout();
@@ -264,8 +286,13 @@ export function AudioCallProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const createPeerConnection = useCallback(
-    (callId: string, conversationId: string): RTCPeerConnection => {
-      const peerConnection = new RTCPeerConnection(getRtcConfiguration());
+    async (
+      callId: string,
+      conversationId: string,
+    ): Promise<RTCPeerConnection> => {
+      const peerConnection = new RTCPeerConnection(
+        await getRtcConfiguration(),
+      );
 
       peerConnection.onicecandidate = (event) => {
         if (!event.candidate) {
@@ -375,6 +402,7 @@ export function AudioCallProvider({ children }: { children: ReactNode }) {
         connectedAt: null,
       };
 
+      dismissCallOutcome();
       updateActiveCall(call);
       setPhase("connecting");
 
@@ -391,7 +419,7 @@ export function AudioCallProvider({ children }: { children: ReactNode }) {
 
         localStreamRef.current = stream;
 
-        const peerConnection = createPeerConnection(
+        const peerConnection = await createPeerConnection(
           call.callId,
           call.conversationId,
         );
@@ -441,7 +469,7 @@ export function AudioCallProvider({ children }: { children: ReactNode }) {
 
             isCallRegisteredRef.current = true;
             flushLocalCandidates();
-            setPhase("calling");
+            setPhase("ringing");
           },
         );
       } catch (error) {
@@ -453,6 +481,7 @@ export function AudioCallProvider({ children }: { children: ReactNode }) {
       clearAcknowledgementTimeout,
       cleanupCall,
       createPeerConnection,
+      dismissCallOutcome,
       flushLocalCandidates,
       hasActiveCall,
       isConnected,
@@ -486,7 +515,7 @@ export function AudioCallProvider({ children }: { children: ReactNode }) {
 
       localStreamRef.current = stream;
 
-      const peerConnection = createPeerConnection(
+      const peerConnection = await createPeerConnection(
         call.callId,
         call.conversationId,
       );
@@ -572,9 +601,10 @@ export function AudioCallProvider({ children }: { children: ReactNode }) {
         conversationId: call.conversationId,
         reason,
       });
+      showCallOutcome(call, reason);
       cleanupCall();
     },
-    [cleanupCall, socket],
+    [cleanupCall, showCallOutcome, socket],
   );
 
   const declineAudioCall = useCallback((): void => {
@@ -588,7 +618,11 @@ export function AudioCallProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    endCall(call.direction === "outgoing" && phase === "calling" ? "cancelled" : "ended");
+    endCall(
+      call.direction === "outgoing" && phase === "ringing"
+        ? "cancelled"
+        : "ended",
+    );
   }, [endCall, phase]);
 
   const toggleMute = useCallback((): void => {
@@ -639,6 +673,7 @@ export function AudioCallProvider({ children }: { children: ReactNode }) {
         connectedAt: null,
       };
 
+      dismissCallOutcome();
       incomingOfferRef.current = payload.offer;
       updateActiveCall(initialCall);
       setPhase("ringing");
@@ -742,6 +777,8 @@ export function AudioCallProvider({ children }: { children: ReactNode }) {
 
       cleanupCall();
 
+      showCallOutcome(call, payload.reason);
+
       if (payload.endedByUserId === user?._id) {
         return;
       }
@@ -772,7 +809,9 @@ export function AudioCallProvider({ children }: { children: ReactNode }) {
     addRemoteCandidate,
     applyPendingRemoteCandidates,
     cleanupCall,
+    dismissCallOutcome,
     socket,
+    showCallOutcome,
     updateActiveCall,
     user,
   ]);
@@ -786,6 +825,14 @@ export function AudioCallProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     return () => cleanupCall();
   }, [cleanupCall]);
+
+  useEffect(() => {
+    return () => {
+      if (callOutcomeTimeoutRef.current !== null) {
+        window.clearTimeout(callOutcomeTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const value = useMemo<AudioCallContextValue>(
     () => ({
@@ -813,12 +860,24 @@ export function AudioCallProvider({ children }: { children: ReactNode }) {
   return (
     <AudioCallContext.Provider value={value}>
       {children}
-      <AudioCallOverlay remoteStream={remoteStream} />
+      <AudioCallOverlay
+        remoteStream={remoteStream}
+        callOutcome={callOutcome}
+        onDismissOutcome={dismissCallOutcome}
+      />
     </AudioCallContext.Provider>
   );
 }
 
-function AudioCallOverlay({ remoteStream }: { remoteStream: MediaStream | null }) {
+function AudioCallOverlay({
+  remoteStream,
+  callOutcome,
+  onDismissOutcome,
+}: {
+  remoteStream: MediaStream | null;
+  callOutcome: CallOutcome | null;
+  onDismissOutcome: () => void;
+}) {
   const {
     activeCall,
     answerAudioCall,
@@ -853,6 +912,47 @@ function AudioCallOverlay({ remoteStream }: { remoteStream: MediaStream | null }
     return () => window.clearInterval(intervalId);
   }, [activeCall?.connectedAt, phase]);
 
+  if (!activeCall && !callOutcome) {
+    return null;
+  }
+
+  if (!activeCall && callOutcome) {
+    const outcomeText =
+      callOutcome.reason === "missed"
+        ? "Missed audio call"
+        : callOutcome.reason === "declined"
+          ? "Audio call declined"
+          : callOutcome.reason === "failed"
+            ? "Audio call could not connect"
+            : "Audio call ended";
+
+    return (
+      <div className="pointer-events-none fixed inset-x-0 bottom-5 z-[200] flex justify-center px-4">
+        <section className="pointer-events-auto flex w-full max-w-sm items-center gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-2xl">
+          <UserAvatar
+            name={callOutcome.participant.name}
+            avatarUrl={callOutcome.participant.avatarUrl}
+            className="h-11 w-11"
+            fallbackClassName="bg-cyan-100 font-semibold text-cyan-800"
+          />
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-semibold text-slate-900">
+              {callOutcome.participant.name}
+            </p>
+            <p className="text-xs text-slate-500">{outcomeText}</p>
+          </div>
+          <button
+            type="button"
+            onClick={onDismissOutcome}
+            className="rounded-lg px-3 py-2 text-xs font-semibold text-cyan-700 transition hover:bg-cyan-50"
+          >
+            Close
+          </button>
+        </section>
+      </div>
+    );
+  }
+
   if (!activeCall) {
     return null;
   }
@@ -861,7 +961,9 @@ function AudioCallOverlay({ remoteStream }: { remoteStream: MediaStream | null }
   const isRinging = phase === "ringing";
   const canToggleMute = phase === "connecting" || phase === "connected";
   const status = isRinging
-    ? "Incoming audio call"
+    ? isIncoming
+      ? "Incoming audio call"
+      : "Ringing…"
     : phase === "calling"
       ? "Calling…"
       : phase === "connecting"
@@ -894,7 +996,7 @@ function AudioCallOverlay({ remoteStream }: { remoteStream: MediaStream | null }
 
           <p className="mt-1 text-sm text-slate-300">{status}</p>
 
-          {phase === "calling" && (
+          {!isIncoming && isRinging && (
             <span className="mx-auto mt-5 flex h-10 w-10 items-center justify-center rounded-full bg-cyan-400/15 text-cyan-200">
               <Phone className="h-5 w-5 animate-pulse" />
             </span>
@@ -942,8 +1044,8 @@ function AudioCallOverlay({ remoteStream }: { remoteStream: MediaStream | null }
               <button
                 type="button"
                 onClick={endAudioCall}
-                aria-label={phase === "calling" ? "Cancel audio call" : "End audio call"}
-                title={phase === "calling" ? "Cancel call" : "End call"}
+                aria-label={isRinging ? "Cancel audio call" : "End audio call"}
+                title={isRinging ? "Cancel call" : "End call"}
                 className="flex h-12 w-12 items-center justify-center rounded-full bg-red-500 text-white shadow-lg transition hover:bg-red-400 focus:outline-none focus:ring-4 focus:ring-red-300/30"
               >
                 <PhoneOff className="h-5 w-5" />

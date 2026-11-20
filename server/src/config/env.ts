@@ -10,6 +10,13 @@ const envSchema = z.object({
 
   CLIENT_URL: z.string().url().default("http://localhost:3000"),
 
+  /*
+   * JSON array of RTCIceServer entries. Keep TURN credentials on the API
+   * deployment so the client can request the current relay configuration at
+   * call time instead of depending on a build-time public environment value.
+   */
+  WEBRTC_ICE_SERVERS: z.string().optional(),
+
   MONGODB_URI: z
     .string()
     .min(1, "MONGODB_URI is required")

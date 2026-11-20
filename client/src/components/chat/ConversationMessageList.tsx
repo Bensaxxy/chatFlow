@@ -29,6 +29,7 @@ interface ConversationMessageListProps {
   reactionPickerMessageId: string | null;
   deletingMessageId: string | null;
   reactingMessageId: string | null;
+  selectedMessageIds: ReadonlySet<string>;
   messagesContainerRef: RefObject<HTMLDivElement | null>;
   messagesEndRef: RefObject<HTMLDivElement | null>;
   onScroll: () => void;
@@ -44,6 +45,7 @@ interface ConversationMessageListProps {
   onDelete: (messageId: string, scope: DeleteMessageScope) => void;
   onReaction: (message: ChatMessage, emoji: MessageReactionEmoji) => void;
   onRetry: (message: ChatMessage) => void;
+  onSelect: (message: ChatMessage) => void;
 }
 
 const isSameCalendarDay = (
@@ -101,6 +103,7 @@ export default function ConversationMessageList({
   reactionPickerMessageId,
   deletingMessageId,
   reactingMessageId,
+  selectedMessageIds,
   messagesContainerRef,
   messagesEndRef,
   onScroll,
@@ -116,6 +119,7 @@ export default function ConversationMessageList({
   onDelete,
   onReaction,
   onRetry,
+  onSelect,
 }: ConversationMessageListProps) {
   return (
     <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
@@ -187,6 +191,8 @@ export default function ConversationMessageList({
                     }
                     isDeleting={deletingMessageId === message._id}
                     isReacting={reactingMessageId === message._id}
+                    isSelecting={selectedMessageIds.size > 0}
+                    isSelected={selectedMessageIds.has(message._id)}
                     onToggleMenu={() => onToggleMenu(message._id)}
                     onToggleReactionPicker={() =>
                       onToggleReactionPicker(message._id)
@@ -199,6 +205,7 @@ export default function ConversationMessageList({
                     onDelete={onDelete}
                     onReaction={onReaction}
                     onRetry={onRetry}
+                    onSelect={onSelect}
                   />
                 </Fragment>
               );

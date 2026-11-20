@@ -5,6 +5,7 @@ import {
   Check,
   CheckCheck,
   Forward,
+  ListChecks,
   LoaderCircle,
   MoreVertical,
   Pencil,
@@ -37,6 +38,8 @@ interface ConversationMessageItemProps {
   isReactionPickerOpen: boolean;
   isDeleting: boolean;
   isReacting: boolean;
+  isSelecting: boolean;
+  isSelected: boolean;
   onToggleMenu: () => void;
   onToggleReactionPicker: () => void;
   onCloseMenu: () => void;
@@ -47,6 +50,7 @@ interface ConversationMessageItemProps {
   onDelete: (messageId: string, scope: DeleteMessageScope) => void;
   onReaction: (message: ChatMessage, emoji: MessageReactionEmoji) => void;
   onRetry: (message: ChatMessage) => void;
+  onSelect: (message: ChatMessage) => void;
 }
 
 const formatMessageTime = (value: string): string =>
@@ -71,6 +75,8 @@ export default function ConversationMessageItem({
   isReactionPickerOpen,
   isDeleting,
   isReacting,
+  isSelecting,
+  isSelected,
   onToggleMenu,
   onToggleReactionPicker,
   onCloseMenu,
@@ -81,6 +87,7 @@ export default function ConversationMessageItem({
   onDelete,
   onReaction,
   onRetry,
+  onSelect,
 }: ConversationMessageItemProps) {
   const isMine = message.sender._id === currentUser._id;
   const updatedSenderProfile = updatedProfiles.get(message.sender._id);
@@ -140,6 +147,25 @@ export default function ConversationMessageItem({
         />
       )}
 
+      {isSelecting && !isPendingDelivery && (
+        <button
+          type="button"
+          role="checkbox"
+          aria-checked={isSelected}
+          aria-label={isSelected ? "Deselect message" : "Select message"}
+          onClick={() => onSelect(message)}
+          className={joinClasses(
+            "z-20 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 transition",
+            isSelected
+              ? "border-cyan-600 bg-cyan-600 text-white"
+              : "border-slate-300 bg-white text-transparent hover:border-cyan-400",
+            isMine && "order-first",
+          )}
+        >
+          <Check className="h-4 w-4" strokeWidth={3} />
+        </button>
+      )}
+
       <div
         className={joinClasses(
           "relative min-w-0 max-w-[75%] rounded-2xl px-3 py-2 shadow-sm transition sm:max-w-[60%] lg:max-w-[55%]",
@@ -150,7 +176,7 @@ export default function ConversationMessageItem({
             "ring-2 ring-amber-400 ring-offset-2",
         )}
       >
-        {!isPendingDelivery && (
+        {!isPendingDelivery && !isSelecting && (
           <button
             type="button"
             disabled={isDeleting}
@@ -172,7 +198,7 @@ export default function ConversationMessageItem({
           </button>
         )}
 
-        {isMenuOpen && (
+        {isMenuOpen && !isSelecting && (
           <>
             <button
               type="button"
@@ -217,6 +243,17 @@ export default function ConversationMessageItem({
                 >
                   <Pencil className="h-4 w-4 text-slate-500" />
                   Edit message
+                </button>
+              )}
+
+              {!isDeletedForEveryone && (
+                <button
+                  type="button"
+                  onClick={() => onSelect(message)}
+                  className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left transition hover:bg-slate-50"
+                >
+                  <ListChecks className="h-4 w-4 text-slate-500" />
+                  Select messages
                 </button>
               )}
 
@@ -359,7 +396,8 @@ export default function ConversationMessageItem({
 
         {groupedReactions.length > 0 &&
           !isDeletedForEveryone &&
-          !isPendingDelivery && (
+          !isPendingDelivery &&
+          !isSelecting && (
           <div className="mt-2 flex flex-wrap items-center gap-1">
             {groupedReactions.map(({ emoji, count }) => (
               <button
@@ -442,7 +480,7 @@ export default function ConversationMessageItem({
         </div>
       </div>
 
-      {!isDeletedForEveryone && !isPendingDelivery && (
+      {!isDeletedForEveryone && !isPendingDelivery && !isSelecting && (
         <button
           type="button"
           disabled={isReacting}
@@ -462,7 +500,10 @@ export default function ConversationMessageItem({
         </button>
       )}
 
-      {isReactionPickerOpen && !isDeletedForEveryone && !isPendingDelivery && (
+      {isReactionPickerOpen &&
+        !isDeletedForEveryone &&
+        !isPendingDelivery &&
+        !isSelecting && (
         <>
           <button
             type="button"
