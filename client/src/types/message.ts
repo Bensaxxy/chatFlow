@@ -2,6 +2,13 @@ import type { MessageSender } from "@/types/conversation";
 
 export type DeleteMessageScope = "me" | "everyone";
 
+export type MediaGalleryCategory =
+  | "images"
+  | "videos"
+  | "files"
+  | "voice-notes"
+  | "links";
+
 export interface MessageDeletedPayload {
   conversationId: string;
   messageId: string;

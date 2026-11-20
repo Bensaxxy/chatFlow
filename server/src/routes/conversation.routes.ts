@@ -13,6 +13,7 @@ import {
   createMessage,
   forwardExistingMessage,
   getMessageContext,
+  listConversationMedia,
   listMessages,
   markMessagesRead,
   reactToMessage,
@@ -73,6 +74,12 @@ conversationRouter.patch(
 );
 
 conversationRouter.get("/:conversationId/messages", authenticate, listMessages);
+
+conversationRouter.get(
+  "/:conversationId/media",
+  authenticate,
+  listConversationMedia,
+);
 
 conversationRouter.get(
   "/:conversationId/messages/:messageId/context",

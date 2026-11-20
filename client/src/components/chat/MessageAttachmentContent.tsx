@@ -8,6 +8,7 @@ import {
   Maximize2,
   Pause,
   Play,
+  Video,
   Volume2,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -17,7 +18,7 @@ import type { MessageAttachment } from "@/types/message";
 
 interface MessageAttachmentContentProps {
   attachment: MessageAttachment;
-  messageType: "image" | "file" | "audio";
+  messageType: "image" | "file" | "audio" | "video";
   isMine?: boolean;
   compact?: boolean;
 }
@@ -302,6 +303,52 @@ export default function MessageAttachmentContent({
           )}
         </div>
       </div>
+    );
+  }
+
+  if (messageType === "video") {
+    return (
+      <>
+        <button
+          type="button"
+          onClick={() => setIsPreviewOpen(true)}
+          className={joinClasses(
+            "group relative block overflow-hidden rounded-xl bg-slate-950 text-left",
+            compact ? "max-w-52" : "max-w-sm",
+          )}
+          aria-label={`Play ${attachment.fileName}`}
+        >
+          <video
+            muted
+            playsInline
+            preload="metadata"
+            src={attachment.url}
+            className={joinClasses(
+              "block w-full object-cover opacity-85 transition duration-300 group-hover:scale-[1.02] group-hover:opacity-100",
+              compact ? "max-h-40" : "max-h-64",
+            )}
+          />
+
+          <span className="absolute inset-0 flex items-center justify-center">
+            <span className="flex h-11 w-11 items-center justify-center rounded-full bg-white/90 text-slate-950 shadow-lg transition group-hover:scale-105">
+              <Play className="ml-0.5 h-5 w-5 fill-current" />
+            </span>
+          </span>
+
+          <span className="absolute inset-x-0 bottom-0 flex items-center gap-1.5 bg-gradient-to-t from-slate-950/85 to-transparent px-3 pb-2 pt-8 text-xs font-medium text-white">
+            <Video className="h-3.5 w-3.5 shrink-0" />
+            <span className="truncate">{attachment.fileName}</span>
+          </span>
+        </button>
+
+        {isPreviewOpen && (
+          <AttachmentPreviewDialog
+            attachment={attachment}
+            messageType={messageType}
+            onClose={() => setIsPreviewOpen(false)}
+          />
+        )}
+      </>
     );
   }
 

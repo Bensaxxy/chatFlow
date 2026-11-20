@@ -16,6 +16,7 @@ import { toast } from "react-toastify";
 import ConversationComposer from "@/components/chat/ConversationComposer";
 import ConversationHeader from "@/components/chat/ConversationHeader";
 import ConversationMessageList from "@/components/chat/ConversationMessageList";
+import MediaGalleryDrawer from "@/components/chat/MediaGalleryDrawer";
 import MessageBulkActionBar from "@/components/chat/MessageBulkActionBar";
 import MessageSearchDrawer from "@/components/chat/MessageSearchDrawer";
 import ConfirmModal from "@/components/ui/ConfirmModal";
@@ -96,7 +97,7 @@ const createLocalAttachment = (
   url,
   resourceType: file.type.startsWith("image/")
     ? "image"
-    : file.type.startsWith("audio/")
+    : file.type.startsWith("audio/") || file.type.startsWith("video/")
       ? "video"
       : "raw",
   fileName: file.name,
@@ -436,6 +437,8 @@ export default function ConversationView({
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
 
   const [isMessageSearchOpen, setIsMessageSearchOpen] = useState(false);
+
+  const [isMediaGalleryOpen, setIsMediaGalleryOpen] = useState(false);
 
   const [messageSearchQuery, setMessageSearchQuery] = useState("");
 
@@ -1766,6 +1769,13 @@ export default function ConversationView({
         message.sender._id === currentUserId && !message.deletedForEveryoneAt,
     );
 
+  const mediaGalleryRefreshKey = messages
+    .map(
+      (message) =>
+        `${message._id}:${message.updatedAt}:${message.deletedForEveryoneAt ?? ""}`,
+    )
+    .join("|");
+
   return (
     <section className="relative flex h-full min-w-0 w-full flex-col overflow-hidden bg-white">
       <ConversationHeader
@@ -1791,6 +1801,7 @@ export default function ConversationView({
           }
         }}
         onOpenSearch={openMessageSearch}
+        onOpenMediaGallery={() => setIsMediaGalleryOpen(true)}
         onStartAudioCall={
           isDirectConversation
             ? () => toast.info("Audio calling is coming soon.")
@@ -1923,6 +1934,14 @@ export default function ConversationView({
         onSelectResult={(message) => {
           void handleMessageSearchResult(message);
         }}
+      />
+
+      <MediaGalleryDrawer
+        isOpen={isMediaGalleryOpen}
+        conversationId={conversationId}
+        currentUserId={user._id}
+        refreshKey={mediaGalleryRefreshKey}
+        onClose={() => setIsMediaGalleryOpen(false)}
       />
 
       <ConfirmModal

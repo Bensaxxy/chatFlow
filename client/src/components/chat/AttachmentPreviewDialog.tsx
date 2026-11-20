@@ -1,12 +1,12 @@
 "use client";
 
-import { Download, FileText, ImageIcon, X } from "lucide-react";
+import { Download, FileText, ImageIcon, Play, X } from "lucide-react";
 
 import type { MessageAttachment } from "@/types/message";
 
 interface AttachmentPreviewDialogProps {
   attachment: MessageAttachment;
-  messageType: "image" | "file";
+  messageType: "image" | "file" | "video";
   onClose: () => void;
 }
 
@@ -63,6 +63,7 @@ export default function AttachmentPreviewDialog({
     encodeURIComponent(attachment.url);
   const canPreviewDirectly =
     messageType === "image" ||
+    messageType === "video" ||
     isPdf(mimeType) ||
     isTextDocument(mimeType) ||
     isOfficeDocument(mimeType);
@@ -86,6 +87,8 @@ export default function AttachmentPreviewDialog({
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-cyan-100 text-cyan-700">
             {messageType === "image" ? (
               <ImageIcon className="h-5 w-5" />
+            ) : messageType === "video" ? (
+              <Play className="h-5 w-5" />
             ) : (
               <FileText className="h-5 w-5" />
             )}
@@ -132,6 +135,18 @@ export default function AttachmentPreviewDialog({
                 alt={attachment.fileName}
                 className="max-h-full max-w-full rounded-xl object-contain shadow-sm"
               />
+            </div>
+          ) : messageType === "video" ? (
+            <div className="flex h-full items-center justify-center bg-slate-950 p-3 sm:p-6">
+              <video
+                controls
+                autoPlay
+                playsInline
+                src={attachment.url}
+                className="max-h-full max-w-full rounded-xl shadow-xl"
+              >
+                Your browser does not support video playback.
+              </video>
             </div>
           ) : isPdf(mimeType) || isTextDocument(mimeType) ? (
             <iframe

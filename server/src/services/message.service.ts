@@ -26,6 +26,7 @@ import type {
   DeleteMessageInput,
   EditMessageInput,
   ForwardMessageInput,
+  ListConversationMediaInput,
   ListMessagesInput,
   SendAttachmentMessageInput,
   SendMessageInput,
@@ -83,6 +84,9 @@ const mimeTypeByExtension: Record<string, string> = {
   ".png": "image/png",
   ".webp": "image/webp",
   ".gif": "image/gif",
+  ".mp4": "video/mp4",
+  ".mov": "video/quicktime",
+  ".ogv": "video/ogg",
   ".aac": "audio/aac",
   ".m4a": "audio/mp4",
   ".mp3": "audio/mpeg",
@@ -461,10 +465,11 @@ export const sendMessageAttachment = async (
 
   const isImage = mimeType.startsWith("image/");
   const isAudio = mimeType.startsWith("audio/");
+  const isVideo = mimeType.startsWith("video/");
 
   const resourceType: MessageAttachmentResourceType = isImage
     ? "image"
-    : isAudio
+    : isAudio || isVideo
       ? "video"
       : "raw";
 
@@ -504,7 +509,7 @@ export const sendMessageAttachment = async (
     height:
       typeof uploadResult.height === "number" ? uploadResult.height : null,
     duration:
-      isAudio && typeof uploadResult.duration === "number"
+      (isAudio || isVideo) && typeof uploadResult.duration === "number"
         ? uploadResult.duration
         : null,
   };
@@ -734,6 +739,93 @@ export const getConversationMessages = async (
   return {
     messages,
     nextCursor,
+    hasMore,
+  };
+};
+
+export const getConversationMedia = async (
+  conversationId: string,
+  currentUserId: string,
+  input: ListConversationMediaInput,
+) => {
+  await verifyConversationMembership(conversationId, currentUserId);
+  const preferences = await getConversationPreference(
+    currentUserId,
+    conversationId,
+  );
+
+  const visibleMediaFilter = {
+    conversation: conversationId,
+    deletedFor: {
+      $ne: currentUserId,
+    },
+    deletedForEveryoneAt: null,
+    ...(preferences.clearedAt && {
+      createdAt: {
+        $gt: preferences.clearedAt,
+      },
+    }),
+    ...(input.cursor && {
+      _id: {
+        $lt: input.cursor,
+      },
+    }),
+  };
+
+  const mediaQuery = Message.find(visibleMediaFilter);
+
+  switch (input.category) {
+    case "images":
+      mediaQuery.or([
+        { type: "image" },
+        { "attachment.resourceType": "image" },
+        { "attachment.mimeType": /^image\//i },
+      ]);
+      break;
+    case "videos":
+      mediaQuery.or([
+        { "attachment.mimeType": /^video\//i },
+      ]);
+      break;
+    case "voice-notes":
+      mediaQuery.or([
+        { type: "audio" },
+        { "attachment.mimeType": /^audio\//i },
+      ]);
+      break;
+    case "links":
+      mediaQuery.where("linkPreview.url").exists(true).ne(null);
+      break;
+    case "files":
+      mediaQuery.and([
+        { "attachment.url": { $exists: true } },
+        { type: { $nin: ["image", "audio"] } },
+        { "attachment.mimeType": { $not: /^video\//i } },
+        { "attachment.mimeType": { $not: /^audio\//i } },
+      ]);
+      break;
+  }
+
+  const messages = await mediaQuery
+    .populate(messagePopulateOptions)
+    .sort({
+      _id: -1,
+    })
+    .limit(input.limit + 1)
+    .lean();
+
+  const hasMore = messages.length > input.limit;
+
+  if (hasMore) {
+    messages.pop();
+  }
+
+  const oldestMessage = messages[messages.length - 1];
+
+  return {
+    messages,
+    nextCursor:
+      hasMore && oldestMessage ? oldestMessage._id.toString() : null,
     hasMore,
   };
 };

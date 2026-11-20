@@ -4,6 +4,7 @@ import {
   deleteMessage,
   editMessage,
   forwardMessage,
+  getConversationMedia,
   getConversationMessages,
   getMessageContext as getMessageContextService,
   markConversationAsRead,
@@ -15,6 +16,7 @@ import { AppError } from "../utils/app-error";
 import { asyncHandler } from "../utils/async-handler";
 import {
   conversationParamsSchema,
+  listConversationMediaQuerySchema,
   listMessagesQuerySchema,
   messageParamsSchema,
   sendAttachmentMessageSchema,
@@ -136,6 +138,28 @@ export const listMessages: RequestHandler = asyncHandler(
     response.status(200).json({
       success: true,
       message: "Messages retrieved successfully",
+      data: result,
+    });
+  },
+);
+
+export const listConversationMedia: RequestHandler = asyncHandler(
+  async (request, response) => {
+    const currentUserId = getAuthenticatedUserId(request.auth?.userId);
+
+    const { conversationId } = conversationParamsSchema.parse(request.params);
+
+    const input = listConversationMediaQuerySchema.parse(request.query);
+
+    const result = await getConversationMedia(
+      conversationId,
+      currentUserId,
+      input,
+    );
+
+    response.status(200).json({
+      success: true,
+      message: "Conversation media retrieved successfully",
       data: result,
     });
   },

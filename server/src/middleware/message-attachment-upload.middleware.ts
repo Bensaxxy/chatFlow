@@ -13,6 +13,12 @@ const allowedAttachmentTypes = new Set([
   "image/webp",
   "image/gif",
 
+  // Videos
+  "video/mp4",
+  "video/webm",
+  "video/ogg",
+  "video/quicktime",
+
   // Voice notes and audio attachments
   "audio/aac",
   "audio/mpeg",
@@ -49,6 +55,9 @@ const allowedAttachmentExtensions = new Set([
   ".png",
   ".webp",
   ".gif",
+  ".mp4",
+  ".mov",
+  ".ogv",
   ".aac",
   ".m4a",
   ".mp3",
@@ -80,10 +89,7 @@ const isAllowedAttachment = (file: Express.Multer.File): boolean => {
    * application/octet-stream for otherwise valid documents. Accept those
    * only when their extension is on the same allow-list as the client.
    */
-  if (
-    mimeType &&
-    mimeType !== "application/octet-stream"
-  ) {
+  if (mimeType && mimeType !== "application/octet-stream") {
     return false;
   }
 

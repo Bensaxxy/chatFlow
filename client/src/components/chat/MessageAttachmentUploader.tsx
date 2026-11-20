@@ -5,6 +5,7 @@ import {
   ImageIcon,
   Paperclip,
   SendHorizontal,
+  Video,
   X,
 } from "lucide-react";
 import { Fragment, useEffect, useRef, useState, type ChangeEvent } from "react";
@@ -27,6 +28,10 @@ const ALLOWED_FILE_TYPES = new Set([
   "image/png",
   "image/webp",
   "image/gif",
+  "video/mp4",
+  "video/webm",
+  "video/ogg",
+  "video/quicktime",
   "audio/aac",
   "audio/mpeg",
   "audio/mp4",
@@ -54,6 +59,9 @@ const ALLOWED_FILE_EXTENSIONS = new Set([
   ".png",
   ".webp",
   ".gif",
+  ".mp4",
+  ".mov",
+  ".ogv",
   ".aac",
   ".m4a",
   ".mp3",
@@ -110,6 +118,18 @@ const isImageAttachment = (file: File): boolean => {
   return [".jpg", ".jpeg", ".png", ".webp", ".gif"].includes(extension);
 };
 
+const isVideoAttachment = (file: File): boolean => {
+  if (file.type.startsWith("video/")) {
+    return true;
+  }
+
+  const extension = file.name
+    .slice(file.name.lastIndexOf("."))
+    .toLowerCase();
+
+  return [".mp4", ".mov", ".ogv"].includes(extension);
+};
+
 const formatFileSize = (bytes: number): string => {
   if (bytes < 1024) return `${bytes} B`;
 
@@ -135,6 +155,7 @@ export default function MessageAttachmentUploader({
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [caption, setCaption] = useState("");
   const isImage = selectedFile ? isImageAttachment(selectedFile) : false;
+  const isVideo = selectedFile ? isVideoAttachment(selectedFile) : false;
 
   useEffect(() => {
     return () => {
@@ -171,7 +192,7 @@ export default function MessageAttachmentUploader({
 
     if (!isSupportedAttachment(file)) {
       toast.error(
-        "Choose an image, audio file, PDF, document, spreadsheet, presentation, text file, or ZIP file",
+        "Choose an image, video, audio file, PDF, document, spreadsheet, presentation, text file, or ZIP file",
       );
       event.target.value = "";
       return;
@@ -183,7 +204,7 @@ export default function MessageAttachmentUploader({
 
     setSelectedFile(file);
     setCaption("");
-    if (isImageAttachment(file)) {
+    if (isImageAttachment(file) || isVideoAttachment(file)) {
       setPreviewUrl(URL.createObjectURL(file));
     } else {
       setPreviewUrl(null);
@@ -217,8 +238,8 @@ export default function MessageAttachmentUploader({
         type="button"
         disabled={disabled}
         onClick={() => fileInputRef.current?.click()}
-        aria-label="Attach an image or file"
-        title="Attach image or file"
+        aria-label="Attach media or file"
+        title="Attach media or file"
         className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-100 hover:text-cyan-700 disabled:cursor-not-allowed disabled:opacity-50"
       >
         <Paperclip className="h-5 w-5" />
@@ -243,6 +264,8 @@ export default function MessageAttachmentUploader({
               <div className="flex h-10 w-10 items-center justify-center rounded-full bg-cyan-100 text-cyan-700">
                 {isImage ? (
                   <ImageIcon className="h-5 w-5" />
+                ) : isVideo ? (
+                  <Video className="h-5 w-5" />
                 ) : (
                   <FileText className="h-5 w-5" />
                 )}
@@ -253,7 +276,7 @@ export default function MessageAttachmentUploader({
                   id="attachment-preview-title"
                   className="font-semibold text-slate-950"
                 >
-                  {isImage ? "Send image" : "Send file"}
+                  {isImage ? "Send image" : isVideo ? "Send video" : "Send file"}
                 </h2>
 
                 <p className="truncate text-sm text-slate-500">
@@ -279,6 +302,17 @@ export default function MessageAttachmentUploader({
                     alt={selectedFile.name}
                     className="max-h-[50dvh] max-w-full rounded-2xl object-contain shadow-sm"
                   />
+                </div>
+              ) : isVideo && previewUrl ? (
+                <div className="flex justify-center">
+                  <video
+                    controls
+                    playsInline
+                    src={previewUrl}
+                    className="max-h-[50dvh] max-w-full rounded-2xl bg-slate-950 object-contain shadow-sm"
+                  >
+                    Your browser does not support video playback.
+                  </video>
                 </div>
               ) : (
                 <div className="flex flex-col items-center justify-center rounded-2xl border border-slate-200 bg-white px-6 py-12 text-center">

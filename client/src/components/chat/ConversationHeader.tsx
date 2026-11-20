@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, PhoneCall, Search } from "lucide-react";
+import { ArrowLeft, Images, PhoneCall, Search } from "lucide-react";
 import Link from "next/link";
 
 import UserAvatar from "@/components/chat/UserAvatar";
@@ -14,6 +14,7 @@ interface ConversationHeaderProps {
   isMessageSearchOpen: boolean;
   onViewProfile: () => void;
   onOpenSearch: () => void;
+  onOpenMediaGallery: () => void;
   onStartAudioCall?: () => void;
 }
 
@@ -26,6 +27,7 @@ export default function ConversationHeader({
   isMessageSearchOpen,
   onViewProfile,
   onOpenSearch,
+  onOpenMediaGallery,
   onStartAudioCall,
 }: ConversationHeaderProps) {
   return (
@@ -77,17 +79,27 @@ export default function ConversationHeader({
         </p>
       </div>
 
-      {onStartAudioCall && (
+      <button
+        type="button"
+        onClick={onOpenMediaGallery}
+        aria-label="Open shared media"
+        title="Shared media"
+        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-slate-600 transition hover:bg-slate-100 hover:text-slate-950 sm:h-11 sm:w-11"
+      >
+        <Images className="h-5 w-5" />
+      </button>
+
+      {/* {onStartAudioCall && (
         <button
           type="button"
           onClick={onStartAudioCall}
           aria-label="Audio calls coming soon"
           title="Audio calls coming soon"
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-slate-600 transition hover:bg-cyan-50 hover:text-cyan-700"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-slate-600 transition hover:bg-cyan-50 hover:text-cyan-700 sm:h-11 sm:w-11"
         >
           <PhoneCall className="h-5 w-5" />
         </button>
-      )}
+      )} */}
 
       {/* Call history is intentionally hidden until audio calling is released. */}
 
@@ -97,7 +109,7 @@ export default function ConversationHeader({
         aria-label="Search messages"
         aria-expanded={isMessageSearchOpen}
         title="Search messages"
-        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-slate-600 transition hover:bg-slate-100 hover:text-slate-950"
+        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-slate-600 transition hover:bg-slate-100 hover:text-slate-950 sm:h-11 sm:w-11"
       >
         <Search className="h-5 w-5" />
       </button>

@@ -63,6 +63,21 @@ const joinClasses = (
   ...classNames: Array<string | false | null | undefined>
 ): string => classNames.filter(Boolean).join(" ");
 
+const getAttachmentDisplayType = (
+  messageType: ChatMessage["type"],
+  attachment: ChatMessage["attachment"],
+): "image" | "file" | "audio" | "video" => {
+  if (messageType === "image") {
+    return "image";
+  }
+
+  if (messageType === "audio") {
+    return "audio";
+  }
+
+  return attachment?.mimeType.startsWith("video/") ? "video" : "file";
+};
+
 export default function ConversationMessageItem({
   message,
   messageIndex,
@@ -305,13 +320,10 @@ export default function ConversationMessageItem({
                   <div className={message.replyTo.content ? "mb-2" : ""}>
                     <MessageAttachmentContent
                       attachment={message.replyTo.attachment}
-                      messageType={
-                        message.replyTo.type === "image"
-                          ? "image"
-                          : message.replyTo.type === "audio"
-                            ? "audio"
-                            : "file"
-                      }
+                      messageType={getAttachmentDisplayType(
+                        message.replyTo.type,
+                        message.replyTo.attachment,
+                      )}
                       isMine={isMine}
                       compact
                     />
@@ -339,13 +351,10 @@ export default function ConversationMessageItem({
           <div className={message.content ? "mb-2" : ""}>
             <MessageAttachmentContent
               attachment={message.attachment}
-              messageType={
-                message.type === "image"
-                  ? "image"
-                  : message.type === "audio"
-                    ? "audio"
-                    : "file"
-              }
+              messageType={getAttachmentDisplayType(
+                message.type,
+                message.attachment,
+              )}
               isMine={isMine}
             />
           </div>

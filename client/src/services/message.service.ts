@@ -6,6 +6,7 @@ import type {
   ChatMessage,
   DeleteMessageScope,
   MessageDeletedPayload,
+  MediaGalleryCategory,
   MessageReactionEmoji,
   MessagesPage,
 } from "@/types/message";
@@ -47,6 +48,29 @@ export const getConversationMessages = async (
     {
       params: {
         limit: 30,
+        ...(cursor && {
+          cursor,
+        }),
+      },
+      signal,
+    },
+  );
+
+  return data.data;
+};
+
+export const getConversationMedia = async (
+  conversationId: string,
+  category: MediaGalleryCategory,
+  cursor?: string | null,
+  signal?: AbortSignal,
+): Promise<MessagesPage> => {
+  const { data } = await apiClient.get<MessagesResponse>(
+    `/conversations/${conversationId}/media`,
+    {
+      params: {
+        category,
+        limit: 36,
         ...(cursor && {
           cursor,
         }),

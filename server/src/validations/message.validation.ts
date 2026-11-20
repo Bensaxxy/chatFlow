@@ -97,6 +97,22 @@ export const listMessagesQuerySchema = z.object({
     .optional(),
 });
 
+export const mediaGalleryCategoryValues = [
+  "images",
+  "videos",
+  "files",
+  "voice-notes",
+  "links",
+] as const;
+
+export const listConversationMediaQuerySchema = z.object({
+  category: z.enum(mediaGalleryCategoryValues).default("images"),
+
+  cursor: objectIdSchema("Media cursor is invalid").optional(),
+
+  limit: z.coerce.number().int().min(1).max(50).default(36),
+});
+
 export const messageReactionEmojis = [
   "👍",
   "❤️",
@@ -123,6 +139,10 @@ export type EditMessageInput = z.infer<typeof editMessageSchema>;
 export type DeleteMessageInput = z.infer<typeof deleteMessageSchema>;
 
 export type ListMessagesInput = z.infer<typeof listMessagesQuerySchema>;
+
+export type ListConversationMediaInput = z.infer<
+  typeof listConversationMediaQuerySchema
+>;
 
 export type MessageReactionEmoji = (typeof messageReactionEmojis)[number];
 
