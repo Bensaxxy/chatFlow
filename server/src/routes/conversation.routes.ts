@@ -1,9 +1,12 @@
 import { Router } from "express";
 
 import {
+  clearConversation,
   createDirect,
   getConversation,
   listConversations,
+  markConversationUnread,
+  updateConversationPin,
 } from "../controllers/conversation.controller";
 import {
   createAttachmentMessage,
@@ -19,7 +22,10 @@ import {
 import { authenticate } from "../middleware/auth.middleware";
 import { uploadMessageAttachment } from "../middleware/message-attachment-upload.middleware";
 import { validateBody } from "../middleware/validate.middleware";
-import { createDirectConversationSchema } from "../validations/conversation.validation";
+import {
+  createDirectConversationSchema,
+  updateConversationPinSchema,
+} from "../validations/conversation.validation";
 import {
   deleteMessageSchema,
   editMessageSchema,
@@ -40,6 +46,25 @@ conversationRouter.post(
 );
 
 conversationRouter.get("/:conversationId", authenticate, getConversation);
+
+conversationRouter.patch(
+  "/:conversationId/pin",
+  authenticate,
+  validateBody(updateConversationPinSchema),
+  updateConversationPin,
+);
+
+conversationRouter.patch(
+  "/:conversationId/unread",
+  authenticate,
+  markConversationUnread,
+);
+
+conversationRouter.post(
+  "/:conversationId/clear",
+  authenticate,
+  clearConversation,
+);
 
 conversationRouter.patch(
   "/:conversationId/read",

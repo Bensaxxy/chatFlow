@@ -4,6 +4,7 @@ import type { ApiSuccessResponse } from "@/types/api";
 
 import type {
   Conversation,
+  ConversationPreferences,
   CreateDirectConversationData,
 } from "@/types/conversation";
 
@@ -60,4 +61,44 @@ export const getConversationById = async (
   );
 
   return data.data.conversation;
+};
+
+interface ConversationPreferencesData {
+  preferences: ConversationPreferences;
+}
+
+type ConversationPreferencesResponse = ApiSuccessResponse<
+  ConversationPreferencesData
+>;
+
+export const setConversationPinned = async (
+  conversationId: string,
+  isPinned: boolean,
+): Promise<ConversationPreferences> => {
+  const { data } = await apiClient.patch<ConversationPreferencesResponse>(
+    `/conversations/${conversationId}/pin`,
+    { isPinned },
+  );
+
+  return data.data.preferences;
+};
+
+export const markConversationUnread = async (
+  conversationId: string,
+): Promise<ConversationPreferences> => {
+  const { data } = await apiClient.patch<ConversationPreferencesResponse>(
+    `/conversations/${conversationId}/unread`,
+  );
+
+  return data.data.preferences;
+};
+
+export const clearConversation = async (
+  conversationId: string,
+): Promise<ConversationPreferences> => {
+  const { data } = await apiClient.post<ConversationPreferencesResponse>(
+    `/conversations/${conversationId}/clear`,
+  );
+
+  return data.data.preferences;
 };

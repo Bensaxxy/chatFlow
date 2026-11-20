@@ -21,6 +21,7 @@ import {
 import { toast } from "react-toastify";
 
 import { useAuth } from "@/contexts/AuthContext";
+import ConfirmModal from "@/components/ui/ConfirmModal";
 import { getApiErrorMessage } from "@/lib/api/errors";
 import ChangePasswordForm from "@/components/profile/ChangePasswordForm";
 
@@ -54,6 +55,9 @@ export default function ProfilePage() {
   const [isSaving, setIsSaving] = useState(false);
 
   const [isUpdatingAvatar, setIsUpdatingAvatar] = useState(false);
+
+  const [isRemoveAvatarModalOpen, setIsRemoveAvatarModalOpen] =
+    useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -124,10 +128,6 @@ export default function ProfilePage() {
       return;
     }
 
-    const confirmed = window.confirm("Remove your profile picture?");
-
-    if (!confirmed) return;
-
     try {
       setIsUpdatingAvatar(true);
 
@@ -138,6 +138,7 @@ export default function ProfilePage() {
       toast.error(getApiErrorMessage(error));
     } finally {
       setIsUpdatingAvatar(false);
+      setIsRemoveAvatarModalOpen(false);
     }
   };
 
@@ -258,7 +259,7 @@ export default function ProfilePage() {
                     {user.avatarUrl && (
                       <button
                         type="button"
-                        onClick={() => void handleRemoveAvatar()}
+                        onClick={() => setIsRemoveAvatarModalOpen(true)}
                         disabled={isUpdatingAvatar}
                         className="inline-flex items-center gap-2 rounded-lg bg-red-500/20 px-3 py-2 text-xs font-semibold text-white ring-1 ring-white/30 transition hover:bg-red-500/40 disabled:cursor-not-allowed disabled:opacity-60"
                       >
@@ -413,6 +414,16 @@ export default function ProfilePage() {
           <ChangePasswordForm />
         </div>
       </div>
+
+      <ConfirmModal
+        isOpen={isRemoveAvatarModalOpen}
+        title="Remove profile picture?"
+        description="Your current profile picture will be removed from ChatFlow."
+        confirmLabel="Remove picture"
+        isConfirming={isUpdatingAvatar}
+        onConfirm={() => void handleRemoveAvatar()}
+        onClose={() => setIsRemoveAvatarModalOpen(false)}
+      />
     </section>
   );
 }

@@ -19,18 +19,66 @@ const fallbackIceServers = [
   },
 ];
 
+const getTurnIceServersFromSeparateSettings = () => {
+  const urls = env.WEBRTC_TURN_URLS?.split(",")
+    .map((url) => url.trim())
+    .filter(Boolean);
+
+  if (!urls?.length) {
+    return null;
+  }
+
+  if (!env.WEBRTC_TURN_USERNAME || !env.WEBRTC_TURN_CREDENTIAL) {
+    console.error(
+      "WEBRTC_TURN_URLS is set without TURN credentials; ignoring the incomplete relay configuration.",
+    );
+    return null;
+  }
+
+  const result = iceServerSchema.safeParse({
+    urls,
+    username: env.WEBRTC_TURN_USERNAME,
+    credential: env.WEBRTC_TURN_CREDENTIAL,
+  });
+
+  if (!result.success) {
+    console.error(
+      "WEBRTC_TURN_URLS is invalid; ignoring the relay configuration:",
+      result.error.flatten(),
+    );
+    return null;
+  }
+
+  return [
+    ...fallbackIceServers,
+    result.data,
+  ];
+};
+
 const getIceServers = () => {
-  if (!env.WEBRTC_ICE_SERVERS) {
-    return fallbackIceServers;
+  if (env.WEBRTC_ICE_SERVERS) {
+    try {
+      const result = iceServersSchema.safeParse(
+        JSON.parse(env.WEBRTC_ICE_SERVERS),
+      );
+
+      if (result.success) {
+        return result.data;
+      }
+
+      console.error(
+        "WEBRTC_ICE_SERVERS is invalid; checking separate TURN settings:",
+        result.error.flatten(),
+      );
+    } catch (error) {
+      console.error(
+        "WEBRTC_ICE_SERVERS is not valid JSON; checking separate TURN settings:",
+        error,
+      );
+    }
   }
 
-  try {
-    return iceServersSchema.parse(JSON.parse(env.WEBRTC_ICE_SERVERS));
-  } catch (error) {
-    console.error("WEBRTC_ICE_SERVERS is invalid; using the STUN fallback:", error);
-
-    return fallbackIceServers;
-  }
+  return getTurnIceServersFromSeparateSettings() ?? fallbackIceServers;
 };
 
 export const getCallIceServers: RequestHandler = asyncHandler(

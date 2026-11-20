@@ -3,7 +3,6 @@
 import {
   LogOut,
   MessageCircleMore,
-  MoreVertical,
   Search,
   UserRound,
 } from "lucide-react";
@@ -14,6 +13,7 @@ import { toast } from "react-toastify";
 import ConversationList from "./ConversationList";
 import UserSearchResults from "./UserSearchResults";
 
+import ActionMenu from "@/components/ui/ActionMenu";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSocket } from "@/contexts/SocketContext";
 import { getApiErrorMessage } from "@/lib/api/errors";
@@ -39,18 +39,13 @@ export default function ChatShell({ children }: ChatShellProps) {
 
   const [searchQuery, setSearchQuery] = useState("");
 
-  const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
-
   const conversationIsOpen = pathname !== "/chats";
 
   const handleOpenProfile = (): void => {
-    setIsAccountMenuOpen(false);
     router.push("/profile");
   };
 
   const handleLogout = async (): Promise<void> => {
-    setIsAccountMenuOpen(false);
-
     try {
       await logout();
 
@@ -111,46 +106,27 @@ export default function ChatShell({ children }: ChatShellProps) {
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={() => setIsAccountMenuOpen((current) => !current)}
-            aria-label="Account options"
-            aria-expanded={isAccountMenuOpen}
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
-          >
-            <MoreVertical className="h-5 w-5" />
-          </button>
-
-          {isAccountMenuOpen && (
-            <>
-              <button
-                type="button"
-                aria-label="Close account menu"
-                onClick={() => setIsAccountMenuOpen(false)}
-                className="fixed inset-0 z-40 cursor-default"
-              />
-
-              <div className="absolute right-4 top-16 z-50 w-52 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-xl">
-                <button
-                  type="button"
-                  onClick={handleOpenProfile}
-                  className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-slate-700 transition hover:bg-slate-50"
-                >
-                  <UserRound className="h-4 w-4 text-slate-500" />
-                  View profile
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => void handleLogout()}
-                  className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-red-600 transition hover:bg-red-50"
-                >
-                  <LogOut className="h-4 w-4" />
-                  Log out
-                </button>
-              </div>
-            </>
-          )}
+          <ActionMenu
+            label="Account options"
+            menuLabel="Account options"
+            triggerClassName="h-11 w-11 hover:bg-slate-100"
+            items={[
+              {
+                id: "profile",
+                label: "View profile",
+                icon: UserRound,
+                onSelect: handleOpenProfile,
+              },
+              {
+                id: "logout",
+                label: "Log out",
+                icon: LogOut,
+                tone: "danger",
+                dividerBefore: true,
+                onSelect: () => void handleLogout(),
+              },
+            ]}
+          />
         </header>
 
         <div className="border-b border-slate-200 p-4">

@@ -18,6 +18,7 @@ import { useEffect, useState } from "react";
 import { toast } from "react-toastify";
 
 import UserAvatar from "@/components/chat/UserAvatar";
+import ConfirmModal from "@/components/ui/ConfirmModal";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSocket } from "@/contexts/SocketContext";
 import { getApiErrorMessage } from "@/lib/api/errors";
@@ -99,6 +100,9 @@ export default function PublicProfilePage() {
   const [isStartingConversation, setIsStartingConversation] = useState(false);
 
   const [isUpdatingBlock, setIsUpdatingBlock] = useState(false);
+
+  const [isBlockConfirmModalOpen, setIsBlockConfirmModalOpen] =
+    useState(false);
 
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -193,6 +197,7 @@ export default function PublicProfilePage() {
       toast.error(getApiErrorMessage(error));
     } finally {
       setIsUpdatingBlock(false);
+      setIsBlockConfirmModalOpen(false);
     }
   };
 
@@ -372,7 +377,7 @@ export default function PublicProfilePage() {
                   {!isOwnProfile && (
                     <button
                       type="button"
-                      onClick={() => void handleBlockToggle()}
+                      onClick={() => setIsBlockConfirmModalOpen(true)}
                       disabled={isUpdatingBlock || isStartingConversation}
                       className={[
                         "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border px-5 py-2.5 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60",
@@ -465,6 +470,23 @@ export default function PublicProfilePage() {
           )}
         </div>
       </main>
+
+      <ConfirmModal
+        isOpen={isBlockConfirmModalOpen}
+        title={
+          profile.isBlockedByCurrentUser ? "Unblock this user?" : "Block this user?"
+        }
+        description={
+          profile.isBlockedByCurrentUser
+            ? `You will be able to message ${profile.name} again.`
+            : `You will no longer be able to message ${profile.name} until you unblock them.`
+        }
+        confirmLabel={profile.isBlockedByCurrentUser ? "Unblock user" : "Block user"}
+        tone={profile.isBlockedByCurrentUser ? "primary" : "danger"}
+        isConfirming={isUpdatingBlock}
+        onConfirm={() => void handleBlockToggle()}
+        onClose={() => setIsBlockConfirmModalOpen(false)}
+      />
     </section>
   );
 }

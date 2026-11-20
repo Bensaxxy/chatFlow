@@ -13,6 +13,10 @@ import { Message } from "../models/message.model";
 import { getSocketServer } from "../socket/socket.server";
 import { AppError } from "../utils/app-error";
 import {
+  clearMarkedConversationUnread,
+  getConversationPreference,
+} from "./conversation-preference.service";
+import {
   getLinkPreviewPlaceholder,
   resolveLinkPreview,
   type StoredLinkPreview,
@@ -667,6 +671,10 @@ export const getConversationMessages = async (
   input: ListMessagesInput,
 ) => {
   await verifyConversationMembership(conversationId, currentUserId);
+  const preferences = await getConversationPreference(
+    currentUserId,
+    conversationId,
+  );
 
   const cursorFilter = input.cursor
     ? {
@@ -686,12 +694,21 @@ export const getConversationMessages = async (
       }
     : {};
 
+  const clearedFilter = preferences.clearedAt
+    ? {
+        createdAt: {
+          $gt: preferences.clearedAt,
+        },
+      }
+    : {};
+
   const messages = await Message.find({
     conversation: conversationId,
     deletedFor: {
       $ne: currentUserId,
     },
     ...searchFilter,
+    ...clearedFilter,
     ...cursorFilter,
   })
     .populate(messagePopulateOptions)
@@ -727,6 +744,10 @@ export const getMessageContext = async (
   currentUserId: string,
 ) => {
   await verifyConversationMembership(conversationId, currentUserId);
+  const preferences = await getConversationPreference(
+    currentUserId,
+    conversationId,
+  );
 
   const visibleMessageFilter = {
     conversation: conversationId,
@@ -734,6 +755,11 @@ export const getMessageContext = async (
       $ne: currentUserId,
     },
     deletedForEveryoneAt: null,
+    ...(preferences.clearedAt && {
+      createdAt: {
+        $gt: preferences.clearedAt,
+      },
+    }),
   };
 
   const targetMessage = await Message.findOne({
@@ -788,23 +814,26 @@ export const markConversationAsRead = async (
 ) => {
   await verifyConversationMembership(conversationId, currentUserId);
 
-  const result = await Message.updateMany(
-    {
-      conversation: conversationId,
-      sender: {
-        $ne: currentUserId,
+  const [result] = await Promise.all([
+    Message.updateMany(
+      {
+        conversation: conversationId,
+        sender: {
+          $ne: currentUserId,
+        },
+        readBy: {
+          $ne: currentUserId,
+        },
       },
-      readBy: {
-        $ne: currentUserId,
+      {
+        $addToSet: {
+          readBy: currentUserId,
+          deliveredTo: currentUserId,
+        },
       },
-    },
-    {
-      $addToSet: {
-        readBy: currentUserId,
-        deliveredTo: currentUserId,
-      },
-    },
-  );
+    ),
+    clearMarkedConversationUnread(currentUserId, conversationId),
+  ]);
 
   const readAt = new Date().toISOString();
   const io = getSocketServer();

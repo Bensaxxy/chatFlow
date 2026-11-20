@@ -92,16 +92,27 @@ const fallbackIceServers: RTCIceServer[] = [
   },
 ];
 
-const getRtcConfiguration = async (): Promise<RTCConfiguration> => {
+interface RtcConfigurationResult {
+  configuration: RTCConfiguration;
+  hasTurnServer: boolean;
+}
+
+const getRtcConfiguration = async (): Promise<RtcConfigurationResult> => {
   try {
-    const { iceServers } = await getCallIceServers();
+    const { iceServers, hasTurnServer } = await getCallIceServers();
 
     return {
-      iceServers,
+      configuration: {
+        iceServers,
+      },
+      hasTurnServer,
     };
   } catch {
     return {
-      iceServers: fallbackIceServers,
+      configuration: {
+        iceServers: fallbackIceServers,
+      },
+      hasTurnServer: false,
     };
   }
 };
@@ -173,6 +184,9 @@ export function AudioCallProvider({ children }: { children: ReactNode }) {
   const [isMuted, setIsMuted] = useState(false);
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
   const [callOutcome, setCallOutcome] = useState<CallOutcome | null>(null);
+  const [isTurnRelayAvailable, setIsTurnRelayAvailable] = useState<
+    boolean | null
+  >(null);
 
   const activeCallRef = useRef<ActiveAudioCall | null>(null);
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
@@ -268,6 +282,7 @@ export function AudioCallProvider({ children }: { children: ReactNode }) {
 
     setRemoteStream(null);
     setIsMuted(false);
+    setIsTurnRelayAvailable(null);
     setPhase("idle");
     updateActiveCall(null);
   }, [
@@ -410,9 +425,10 @@ export function AudioCallProvider({ children }: { children: ReactNode }) {
       callId: string,
       conversationId: string,
     ): Promise<RTCPeerConnection> => {
-      const peerConnection = new RTCPeerConnection(
-        await getRtcConfiguration(),
-      );
+      const { configuration, hasTurnServer } = await getRtcConfiguration();
+      setIsTurnRelayAvailable(hasTurnServer);
+
+      const peerConnection = new RTCPeerConnection(configuration);
 
       peerConnection.onicecandidate = (event) => {
         if (!event.candidate) {
@@ -1165,6 +1181,7 @@ export function AudioCallProvider({ children }: { children: ReactNode }) {
       <AudioCallOverlay
         remoteStream={remoteStream}
         callOutcome={callOutcome}
+        isTurnRelayAvailable={isTurnRelayAvailable}
         onDismissOutcome={dismissCallOutcome}
       />
     </AudioCallContext.Provider>
@@ -1174,10 +1191,12 @@ export function AudioCallProvider({ children }: { children: ReactNode }) {
 function AudioCallOverlay({
   remoteStream,
   callOutcome,
+  isTurnRelayAvailable,
   onDismissOutcome,
 }: {
   remoteStream: MediaStream | null;
   callOutcome: CallOutcome | null;
+  isTurnRelayAvailable: boolean | null;
   onDismissOutcome: () => void;
 }) {
   const {
@@ -1300,6 +1319,13 @@ function AudioCallOverlay({
           </h2>
 
           <p className="mt-1 text-sm text-slate-300">{status}</p>
+
+          {isTurnRelayAvailable === false && (
+            <p className="mx-auto mt-3 max-w-xs rounded-lg bg-amber-400/10 px-3 py-2 text-xs leading-5 text-amber-100">
+              A call relay is unavailable. Calls between different networks may
+              not connect yet.
+            </p>
+          )}
 
           {!isIncoming && isRinging && (
             <span className="mx-auto mt-5 flex h-10 w-10 items-center justify-center rounded-full bg-cyan-400/15 text-cyan-200">

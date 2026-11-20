@@ -106,6 +106,13 @@ interface ServerToClientEvents {
     readAt: string;
   }) => void;
 
+  "conversation:preferences-updated": (payload: {
+    conversationId: string;
+    isPinned: boolean;
+    isMarkedUnread: boolean;
+    clearedAt: string | null;
+  }) => void;
+
   "typing:update": (payload: TypingUpdatePayload) => void;
 
   "presence:snapshot": (payload: { onlineUserIds: string[] }) => void;

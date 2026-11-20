@@ -17,6 +17,17 @@ const envSchema = z.object({
    */
   WEBRTC_ICE_SERVERS: z.string().optional(),
 
+  /*
+   * A simpler alternative for hosting providers whose environment editor is
+   * awkward for JSON. URLs are comma-separated and the credentials stay on
+   * the API server, never in the browser bundle.
+   */
+  WEBRTC_TURN_URLS: z.string().optional(),
+
+  WEBRTC_TURN_USERNAME: z.string().optional(),
+
+  WEBRTC_TURN_CREDENTIAL: z.string().optional(),
+
   MONGODB_URI: z
     .string()
     .min(1, "MONGODB_URI is required")

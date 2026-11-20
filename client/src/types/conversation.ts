@@ -42,12 +42,21 @@ export interface Conversation {
   createdBy: string;
   lastMessage: ConversationLastMessage | null;
   unreadCount?: number;
+  isPinned?: boolean;
+  isMarkedUnread?: boolean;
+  clearedAt?: string | null;
   directMessagingAccess?: {
     isBlockedByCurrentUser: boolean;
     canMessage: boolean;
   } | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ConversationPreferences {
+  isPinned: boolean;
+  isMarkedUnread: boolean;
+  clearedAt: string | null;
 }
 
 export interface CreateDirectConversationData {

@@ -14,17 +14,17 @@ import {
 import { toast } from "react-toastify";
 
 import ConversationComposer from "@/components/chat/ConversationComposer";
-import CallHistoryDrawer from "@/components/chat/CallHistoryDrawer";
 import ConversationHeader from "@/components/chat/ConversationHeader";
 import ConversationMessageList from "@/components/chat/ConversationMessageList";
 import MessageBulkActionBar from "@/components/chat/MessageBulkActionBar";
 import MessageSearchDrawer from "@/components/chat/MessageSearchDrawer";
+import ConfirmModal from "@/components/ui/ConfirmModal";
 import { useAuth } from "@/contexts/AuthContext";
-import { useAudioCall } from "@/contexts/AudioCallContext";
 import { useSocket } from "@/contexts/SocketContext";
 import { getApiErrorMessage } from "@/lib/api/errors";
 import {
   getCachedConversation,
+  invalidateConversationCache,
   saveConversationCache,
   type ConversationCacheEntry,
 } from "@/lib/chat/conversation-cache";
@@ -68,6 +68,11 @@ interface PendingDelivery {
   send: () => Promise<ChatMessage>;
   releasePreviewUrl?: () => void;
   isInFlight?: boolean;
+}
+
+interface MessageDeletionRequest {
+  messageIds: string[];
+  scope: DeleteMessageScope;
 }
 
 const getAttachmentMessageType = (
@@ -331,7 +336,6 @@ export default function ConversationView({
   conversationId,
 }: ConversationViewProps) {
   const { user } = useAuth();
-  const { activeCall, startAudioCall } = useAudioCall();
   const router = useRouter();
 
   const {
@@ -422,6 +426,9 @@ export default function ConversationView({
 
   const [isBulkActionWorking, setIsBulkActionWorking] = useState(false);
 
+  const [messageDeletionRequest, setMessageDeletionRequest] =
+    useState<MessageDeletionRequest | null>(null);
+
   const [showFloatingDate, setShowFloatingDate] = useState(false);
 
   const [floatingDate, setFloatingDate] = useState("");
@@ -429,8 +436,6 @@ export default function ConversationView({
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
 
   const [isMessageSearchOpen, setIsMessageSearchOpen] = useState(false);
-
-  const [isCallHistoryOpen, setIsCallHistoryOpen] = useState(false);
 
   const [messageSearchQuery, setMessageSearchQuery] = useState("");
 
@@ -761,6 +766,27 @@ export default function ConversationView({
       setOpenMessageMenuId(null);
     };
 
+    const handlePreferencesUpdate = (payload: {
+      conversationId: string;
+      isPinned: boolean;
+      isMarkedUnread: boolean;
+      clearedAt: string | null;
+    }): void => {
+      if (payload.conversationId !== conversationId || !payload.clearedAt) {
+        return;
+      }
+
+      invalidateConversationCache(`${currentUserId}:${conversationId}`);
+      setMessages([]);
+      setNextCursor(null);
+      setHasMore(false);
+      setReplyingToMessage(null);
+      setOpenMessageMenuId(null);
+      setReactionPickerMessageId(null);
+      setSelectedMessageIds(new Set());
+      setIsOtherUserTyping(false);
+    };
+
     socket.on("message:new", handleNewMessage);
 
     socket.on("message:updated", handleMessageUpdated);
@@ -770,6 +796,8 @@ export default function ConversationView({
     socket.on("typing:update", handleTypingUpdate);
 
     socket.on("message:deleted", handleMessageDeleted);
+
+    socket.on("conversation:preferences-updated", handlePreferencesUpdate);
 
     socket.emit("conversation:join", conversationId, (result) => {
       if (isActive && !result.success) {
@@ -792,6 +820,8 @@ export default function ConversationView({
       socket.off("typing:update", handleTypingUpdate);
 
       socket.off("message:deleted", handleMessageDeleted);
+
+      socket.off("conversation:preferences-updated", handlePreferencesUpdate);
 
       setIsOtherUserTyping(false);
 
@@ -1491,28 +1521,19 @@ export default function ConversationView({
     setSelectedMessageIds(new Set());
   };
 
-  const handleDeleteSelectedMessages = async (
+  const executeDeleteSelectedMessages = async (
     scope: DeleteMessageScope,
+    messageIds: string[],
   ): Promise<void> => {
     if (!currentUserId || isBulkActionWorking) {
       return;
     }
 
     const selectedMessages = messages.filter((message) =>
-      selectedMessageIds.has(message._id),
+      messageIds.includes(message._id),
     );
 
     if (selectedMessages.length === 0) {
-      return;
-    }
-
-    const confirmed = window.confirm(
-      scope === "everyone"
-        ? `Delete ${selectedMessages.length} selected messages for everyone?`
-        : `Delete ${selectedMessages.length} selected messages for you?`,
-    );
-
-    if (!confirmed) {
       return;
     }
 
@@ -1586,7 +1607,7 @@ export default function ConversationView({
     });
   };
 
-  const handleDeleteMessage = async (
+  const executeDeleteMessage = async (
     messageId: string,
     scope: DeleteMessageScope,
   ): Promise<void> => {
@@ -1595,14 +1616,6 @@ export default function ConversationView({
     }
 
     setOpenMessageMenuId(null);
-
-    const confirmed = window.confirm(
-      scope === "everyone"
-        ? "Delete this message for everyone?"
-        : "Delete this message for you?",
-    );
-
-    if (!confirmed) return;
 
     try {
       setDeletingMessageId(messageId);
@@ -1621,7 +1634,7 @@ export default function ConversationView({
         editingMessageIdRef.current = null;
 
         setEditingMessageId(null);
-      restoreCurrentDraft();
+        restoreCurrentDraft();
       }
 
       setReactionPickerMessageId((current) =>
@@ -1642,6 +1655,43 @@ export default function ConversationView({
     } finally {
       setDeletingMessageId(null);
     }
+  };
+
+  const requestDeleteMessage = (
+    messageId: string,
+    scope: DeleteMessageScope,
+  ): void => {
+    setOpenMessageMenuId(null);
+    setMessageDeletionRequest({
+      messageIds: [messageId],
+      scope,
+    });
+  };
+
+  const requestDeleteSelectedMessages = (scope: DeleteMessageScope): void => {
+    const messageIds = messages
+      .filter((message) => selectedMessageIds.has(message._id))
+      .map((message) => message._id);
+
+    if (messageIds.length > 0) {
+      setMessageDeletionRequest({ messageIds, scope });
+    }
+  };
+
+  const confirmMessageDeletion = async (): Promise<void> => {
+    const request = messageDeletionRequest;
+
+    if (!request) {
+      return;
+    }
+
+    if (request.messageIds.length === 1) {
+      await executeDeleteMessage(request.messageIds[0]!, request.scope);
+    } else {
+      await executeDeleteSelectedMessages(request.scope, request.messageIds);
+    }
+
+    setMessageDeletionRequest(null);
   };
 
   if (isLoading) {
@@ -1706,13 +1756,6 @@ export default function ConversationView({
     ? (lastSeenByUser.get(otherParticipantId) ?? otherParticipant?.lastSeenAt)
     : null;
 
-  const canStartAudioCall = Boolean(
-    isDirectConversation &&
-      otherParticipantId &&
-      directMessagingAccess?.canMessage !== false &&
-      isConnected,
-  );
-
   const selectedMessages = messages.filter((message) =>
     selectedMessageIds.has(message._id),
   );
@@ -1736,8 +1779,6 @@ export default function ConversationView({
         }
         canViewProfile={Boolean(otherParticipantId)}
         isOtherUserOnline={isOtherUserOnline}
-        canStartAudioCall={canStartAudioCall}
-        isAudioCallActive={Boolean(activeCall)}
         statusText={
           isDirectConversation
             ? formatLastSeen(otherUserLastSeenAt)
@@ -1750,23 +1791,9 @@ export default function ConversationView({
           }
         }}
         onOpenSearch={openMessageSearch}
-        onOpenCallHistory={
-          isDirectConversation ? () => setIsCallHistoryOpen(true) : undefined
-        }
         onStartAudioCall={
-          isDirectConversation && otherParticipantId
-            ? () =>
-                void startAudioCall({
-                  conversationId,
-                  participant: {
-                    userId: otherParticipantId,
-                    name: displayName,
-                    avatarUrl:
-                      updatedOtherProfile?.avatarUrl ??
-                      otherParticipant?.avatarUrl ??
-                      null,
-                  },
-                })
+          isDirectConversation
+            ? () => toast.info("Audio calling is coming soon.")
             : undefined
         }
       />
@@ -1779,10 +1806,10 @@ export default function ConversationView({
           onCancel={handleCancelMessageSelection}
           onForward={handleForwardSelectedMessages}
           onDeleteForMe={() => {
-            void handleDeleteSelectedMessages("me");
+            requestDeleteSelectedMessages("me");
           }}
           onDeleteForEveryone={() => {
-            void handleDeleteSelectedMessages("everyone");
+            requestDeleteSelectedMessages("everyone");
           }}
         />
       )}
@@ -1830,7 +1857,7 @@ export default function ConversationView({
         onForward={handleStartForwarding}
         onEdit={handleStartEditing}
         onDelete={(messageId, scope) => {
-          void handleDeleteMessage(messageId, scope);
+          requestDeleteMessage(messageId, scope);
         }}
         onReaction={(message, emoji) => {
           void handleMessageReaction(message, emoji);
@@ -1898,18 +1925,29 @@ export default function ConversationView({
         }}
       />
 
-      {isDirectConversation && currentUserId && (
-        <CallHistoryDrawer
-          isOpen={isCallHistoryOpen}
-          conversationId={conversationId}
-          currentUserId={currentUserId}
-          fallbackName={displayName}
-          fallbackAvatarUrl={
-            updatedOtherProfile?.avatarUrl ?? otherParticipant?.avatarUrl ?? null
-          }
-          onClose={() => setIsCallHistoryOpen(false)}
-        />
-      )}
+      <ConfirmModal
+        isOpen={Boolean(messageDeletionRequest)}
+        title={
+          messageDeletionRequest?.scope === "everyone"
+            ? "Delete message for everyone?"
+            : "Delete message for you?"
+        }
+        description={
+          messageDeletionRequest?.scope === "everyone"
+            ? "This will remove the selected message from the chat for every participant."
+            : "This will remove the selected message from your chat only."
+        }
+        confirmLabel={
+          messageDeletionRequest && messageDeletionRequest.messageIds.length > 1
+            ? `Delete ${messageDeletionRequest.messageIds.length} messages`
+            : "Delete message"
+        }
+        isConfirming={Boolean(deletingMessageId || isBulkActionWorking)}
+        onConfirm={() => void confirmMessageDeletion()}
+        onClose={() => setMessageDeletionRequest(null)}
+      />
+
+      {/* Call history is temporarily hidden while audio calling is unavailable. */}
     </section>
   );
 }

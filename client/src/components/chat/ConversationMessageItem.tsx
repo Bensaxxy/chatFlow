@@ -7,7 +7,6 @@ import {
   Forward,
   ListChecks,
   LoaderCircle,
-  MoreVertical,
   Pencil,
   Reply,
   SmilePlus,
@@ -17,6 +16,7 @@ import {
 import MessageAttachmentContent from "@/components/chat/MessageAttachmentContent";
 import MessageLinkPreview from "@/components/chat/MessageLinkPreview";
 import UserAvatar from "@/components/chat/UserAvatar";
+import ActionMenu, { type ActionMenuItem } from "@/components/ui/ActionMenu";
 import { MESSAGE_REACTION_EMOJIS } from "@/types/message";
 import type { AuthUser } from "@/types/auth";
 import type {
@@ -128,6 +128,61 @@ export default function ConversationMessageItem({
     count: reactions.filter((reaction) => reaction.emoji === emoji).length,
   })).filter(({ count }) => count > 0);
   const menuOpensUpward = messageIndex >= totalMessages - 2;
+  const messageMenuItems: ActionMenuItem[] = [
+    ...(!isDeletedForEveryone
+      ? [
+          {
+            id: "reply",
+            label: "Reply",
+            icon: Reply,
+            onSelect: () => onReply(message),
+          },
+          {
+            id: "forward",
+            label: "Forward",
+            icon: Forward,
+            onSelect: () => onForward(message),
+          },
+        ]
+      : []),
+    ...(isMine && !isDeletedForEveryone
+      ? [
+          {
+            id: "edit",
+            label: "Edit message",
+            icon: Pencil,
+            onSelect: () => onEdit(message),
+          },
+        ]
+      : []),
+    ...(!isDeletedForEveryone
+      ? [
+          {
+            id: "select",
+            label: "Select messages",
+            icon: ListChecks,
+            onSelect: () => onSelect(message),
+          },
+        ]
+      : []),
+    {
+      id: "delete-me",
+      label: "Delete for me",
+      icon: Trash2,
+      onSelect: () => onDelete(message._id, "me"),
+    },
+    ...(isMine && !isDeletedForEveryone
+      ? [
+          {
+            id: "delete-everyone",
+            label: "Delete for everyone",
+            icon: Trash2,
+            tone: "danger" as const,
+            onSelect: () => onDelete(message._id, "everyone"),
+          },
+        ]
+      : []),
+  ];
 
   return (
     <div
@@ -177,107 +232,29 @@ export default function ConversationMessageItem({
         )}
       >
         {!isPendingDelivery && !isSelecting && (
-          <button
-            type="button"
-            disabled={isDeleting}
-            onClick={onToggleMenu}
-            aria-label="Message options"
-            title="Message options"
-            className={joinClasses(
-              "absolute right-1 top-1 z-30 flex h-7 w-7 items-center justify-center rounded-full transition disabled:opacity-50",
-              isMine
-                ? "text-cyan-100 hover:bg-cyan-500 hover:text-white"
-                : "text-slate-400 hover:bg-slate-100 hover:text-slate-700",
-            )}
-          >
-            {isDeleting ? (
-              <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <MoreVertical className="h-4 w-4" />
-            )}
-          </button>
-        )}
-
-        {isMenuOpen && !isSelecting && (
-          <>
-            <button
-              type="button"
-              aria-label="Close message menu"
-              onClick={onCloseMenu}
-              className="fixed inset-0 z-40 cursor-default"
+          <div className="absolute right-1 top-1 z-30">
+            <ActionMenu
+              open={isMenuOpen}
+              onOpenChange={(isOpen) => {
+                if (isOpen) {
+                  onToggleMenu();
+                } else {
+                  onCloseMenu();
+                }
+              }}
+              isLoading={isDeleting}
+              label="Message options"
+              menuLabel="Message options"
+              side={menuOpensUpward ? "top" : "bottom"}
+              triggerClassName={joinClasses(
+                "h-7 w-7",
+                isMine
+                  ? "text-cyan-100 hover:bg-cyan-500 hover:text-white"
+                  : "text-slate-400 hover:bg-slate-100 hover:text-slate-700",
+              )}
+              items={messageMenuItems}
             />
-
-            <div
-              className={joinClasses(
-                "absolute right-1 z-50 w-48 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 text-left text-sm text-slate-700 shadow-xl",
-                menuOpensUpward ? "bottom-9" : "top-9",
-              )}
-            >
-              {!isDeletedForEveryone && (
-                <button
-                  type="button"
-                  onClick={() => onReply(message)}
-                  className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left transition hover:bg-slate-50"
-                >
-                  <Reply className="h-4 w-4 text-slate-500" />
-                  Reply
-                </button>
-              )}
-
-              {!isDeletedForEveryone && (
-                <button
-                  type="button"
-                  onClick={() => onForward(message)}
-                  className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left transition hover:bg-slate-50"
-                >
-                  <Forward className="h-4 w-4 text-slate-500" />
-                  Forward
-                </button>
-              )}
-
-              {isMine && !isDeletedForEveryone && (
-                <button
-                  type="button"
-                  onClick={() => onEdit(message)}
-                  className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left transition hover:bg-slate-50"
-                >
-                  <Pencil className="h-4 w-4 text-slate-500" />
-                  Edit message
-                </button>
-              )}
-
-              {!isDeletedForEveryone && (
-                <button
-                  type="button"
-                  onClick={() => onSelect(message)}
-                  className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left transition hover:bg-slate-50"
-                >
-                  <ListChecks className="h-4 w-4 text-slate-500" />
-                  Select messages
-                </button>
-              )}
-
-              <button
-                type="button"
-                onClick={() => onDelete(message._id, "me")}
-                className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left transition hover:bg-slate-50"
-              >
-                <Trash2 className="h-4 w-4 text-slate-500" />
-                Delete for me
-              </button>
-
-              {isMine && !isDeletedForEveryone && (
-                <button
-                  type="button"
-                  onClick={() => onDelete(message._id, "everyone")}
-                  className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-red-600 transition hover:bg-red-50"
-                >
-                  <Trash2 className="h-4 w-4" />
-                  Delete for everyone
-                </button>
-              )}
-            </div>
-          </>
+          </div>
         )}
 
         {message.isForwarded && !isDeletedForEveryone && (
