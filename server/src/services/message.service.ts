@@ -66,6 +66,11 @@ interface StoredMessageAttachment {
   duration: number | null;
 }
 
+interface StoredCloudinaryAttachment {
+  publicId: string;
+  resourceType: MessageAttachmentResourceType;
+}
+
 const escapeRegularExpression = (value: string): string =>
   value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -124,6 +129,29 @@ const resolveAttachmentMimeType = (
 
   return (
     mimeTypeByExtension[extname(fileName).toLowerCase()] ?? normalizedMimeType
+  );
+};
+
+const deleteUnreferencedAttachment = async (
+  attachment: StoredCloudinaryAttachment,
+): Promise<void> => {
+  /*
+   * Forwarded messages deliberately share their source attachment rather
+   * than uploading an unnecessary Cloudinary copy. Only free the asset when
+   * no visible message still references it.
+   */
+  const hasActiveReference = await Message.exists({
+    "attachment.publicId": attachment.publicId,
+    deletedForEveryoneAt: null,
+  });
+
+  if (hasActiveReference) {
+    return;
+  }
+
+  await deleteMessageAttachmentFromCloudinary(
+    attachment.publicId,
+    attachment.resourceType,
   );
 };
 
@@ -1001,6 +1029,12 @@ export const deleteMessage = async (
   }
 
   const deletedAt = message.deletedForEveryoneAt ?? new Date();
+  const attachmentToDelete = message.attachment
+    ? {
+        publicId: message.attachment.publicId,
+        resourceType: message.attachment.resourceType,
+      }
+    : null;
 
   message.deletedForEveryoneAt = deletedAt;
   message.content = "This message was deleted";
@@ -1008,11 +1042,18 @@ export const deleteMessage = async (
   message.attachment = null;
   message.linkPreview = null;
 
-  /**
-   * The physical Cloudinary asset is not removed here because
-   * forwarded messages may still reference the same attachment.
-   */
   await message.save();
+
+  if (attachmentToDelete) {
+    await deleteUnreferencedAttachment(attachmentToDelete).catch(
+      (cleanupError: unknown) => {
+        console.error(
+          "Could not remove deleted message attachment from Cloudinary:",
+          cleanupError,
+        );
+      },
+    );
+  }
 
   const payload = {
     conversationId,
