@@ -28,6 +28,16 @@ const envSchema = z.object({
 
   WEBRTC_TURN_CREDENTIAL: z.string().optional(),
 
+  /*
+   * Web Push is optional so existing deployments keep starting normally.
+   * When enabled, all three values must be supplied from the same VAPID pair.
+   */
+  VAPID_SUBJECT: z.string().trim().min(1).optional(),
+
+  VAPID_PUBLIC_KEY: z.string().trim().min(1).optional(),
+
+  VAPID_PRIVATE_KEY: z.string().trim().min(1).optional(),
+
   MONGODB_URI: z
     .string()
     .min(1, "MONGODB_URI is required")
@@ -79,6 +89,35 @@ const envSchema = z.object({
   EMAIL_VERIFICATION_SECRET: z
     .string()
     .min(32, "EMAIL_VERIFICATION_SECRET must contain at least 32 characters"),
+}).superRefine((values, context) => {
+  const vapidValues = [
+    values.VAPID_SUBJECT,
+    values.VAPID_PUBLIC_KEY,
+    values.VAPID_PRIVATE_KEY,
+  ];
+
+  const configuredVapidValueCount = vapidValues.filter(Boolean).length;
+
+  if (configuredVapidValueCount > 0 && configuredVapidValueCount < 3) {
+    context.addIssue({
+      code: "custom",
+      path: ["VAPID_PUBLIC_KEY"],
+      message:
+        "VAPID_SUBJECT, VAPID_PUBLIC_KEY, and VAPID_PRIVATE_KEY must be configured together",
+    });
+  }
+
+  if (
+    values.VAPID_SUBJECT &&
+    !values.VAPID_SUBJECT.startsWith("mailto:") &&
+    !values.VAPID_SUBJECT.startsWith("https://")
+  ) {
+    context.addIssue({
+      code: "custom",
+      path: ["VAPID_SUBJECT"],
+      message: "VAPID_SUBJECT must start with mailto: or https://",
+    });
+  }
 });
 
 const result = envSchema.safeParse(process.env);

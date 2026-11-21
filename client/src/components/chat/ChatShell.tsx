@@ -20,6 +20,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useChatTheme } from "@/contexts/ChatThemeContext";
 import { useSocket } from "@/contexts/SocketContext";
 import { getApiErrorMessage } from "@/lib/api/errors";
+import { disablePushNotifications } from "@/services/push-notification.service";
 
 interface ChatShellProps {
   children: ReactNode;
@@ -52,6 +53,9 @@ export default function ChatShell({ children }: ChatShellProps) {
 
   const handleLogout = async (): Promise<void> => {
     try {
+      /* Keep a shared browser from receiving this account's alerts after logout. */
+      await disablePushNotifications().catch(() => undefined);
+
       await logout();
 
       toast.success("Logged out successfully");

@@ -26,6 +26,7 @@ import ConfirmModal from "@/components/ui/ConfirmModal";
 import { getApiErrorMessage } from "@/lib/api/errors";
 import ChangePasswordForm from "@/components/profile/ChangePasswordForm";
 import PrivacySettings from "@/components/profile/PrivacySettings";
+import PushNotificationSettings from "@/components/profile/PushNotificationSettings";
 
 const MAX_AVATAR_SIZE = 5 * 1024 * 1024;
 
@@ -410,6 +411,7 @@ export default function ProfilePage() {
           </form>
 
           <aside className="space-y-6 lg:sticky lg:top-0">
+            <PushNotificationSettings />
             <PrivacySettings />
             <ChangePasswordForm />
           </aside>

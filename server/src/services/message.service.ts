@@ -22,6 +22,7 @@ import {
   resolveLinkPreview,
   type StoredLinkPreview,
 } from "./link-preview.service";
+import { sendMessagePushNotifications } from "./push-notification.service";
 import {
   assertDirectMessagingAllowed,
   createViewerSafeUser,
@@ -44,6 +45,13 @@ const asRecord = (value: unknown): Record<string, unknown> | null =>
   typeof value === "object" && value !== null
     ? (value as Record<string, unknown>)
     : null;
+
+const getMessageSenderName = (message: unknown): string => {
+  const sender = asRecord(asRecord(message)?.sender);
+  const name = sender?.name;
+
+  return typeof name === "string" && name.trim() ? name.trim() : "ChatFlow";
+};
 
 const sanitizeMessageForViewer = (
   message: unknown,
@@ -530,6 +538,17 @@ const createRealtimeMessage = async ({
       incrementUnread: participantId !== senderId,
     });
   }
+
+  void sendMessagePushNotifications({
+    recipientIds,
+    conversationId,
+    messageId: message._id.toString(),
+    senderName: getMessageSenderName(realtimeMessage),
+    content,
+    messageType,
+  }).catch((error: unknown) => {
+    console.error("Could not queue push notifications for a message:", error);
+  });
 
   if (linkPreview?.status === "loading") {
     scheduleLinkPreviewResolution(
