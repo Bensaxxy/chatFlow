@@ -8,6 +8,8 @@ export interface AuthUser {
   bio: string;
   chatTheme: ChatThemeSettings;
   lastSeenAt: string | null;
+  isEmailVerified: boolean;
+  emailVerifiedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -25,6 +27,15 @@ export interface RegisterInput {
 export interface LoginInput {
   email: string;
   password: string;
+}
+
+export interface VerifyEmailInput {
+  email: string;
+  code: string;
+}
+
+export interface ResendVerificationInput {
+  email: string;
 }
 
 export interface UpdateProfileInput {

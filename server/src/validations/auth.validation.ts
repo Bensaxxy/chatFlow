@@ -55,3 +55,20 @@ export const changePasswordSchema = z
   });
 
 export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
+
+export const verifyEmailSchema = z.object({
+  email: z.string().trim().toLowerCase().email("Enter a valid email address"),
+
+  code: z
+    .string()
+    .trim()
+    .regex(/^\d{6}$/, "Verification code must contain exactly 6 digits"),
+});
+
+export type VerifyEmailInput = z.infer<typeof verifyEmailSchema>;
+
+export const resendVerificationSchema = z.object({
+  email: z.string().trim().toLowerCase().email("Enter a valid email address"),
+});
+
+export type ResendVerificationInput = z.infer<typeof resendVerificationSchema>;

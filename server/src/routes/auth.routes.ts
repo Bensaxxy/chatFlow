@@ -7,7 +7,9 @@ import {
   me,
   refresh,
   register,
+  resendVerificationCode,
   socketToken,
+  verifyEmail,
 } from "../controllers/auth.controller";
 import { authenticate } from "../middleware/auth.middleware";
 import { validateBody } from "../middleware/validate.middleware";
@@ -15,11 +17,21 @@ import {
   changePasswordSchema,
   loginSchema,
   registerSchema,
+  resendVerificationSchema,
+  verifyEmailSchema,
 } from "../validations/auth.validation";
 
 const authRouter = Router();
 
 authRouter.post("/register", validateBody(registerSchema), register);
+
+authRouter.post("/verify-email", validateBody(verifyEmailSchema), verifyEmail);
+
+authRouter.post(
+  "/resend-verification",
+  validateBody(resendVerificationSchema),
+  resendVerificationCode,
+);
 
 authRouter.post("/login", validateBody(loginSchema), login);
 

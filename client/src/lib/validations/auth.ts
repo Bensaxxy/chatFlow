@@ -39,3 +39,14 @@ export const registerSchema = z
   });
 
 export type RegisterFormValues = z.infer<typeof registerSchema>;
+
+export const verifyEmailSchema = z.object({
+  email: z.string().trim().toLowerCase().email("Enter a valid email address"),
+
+  code: z
+    .string()
+    .trim()
+    .regex(/^\d{6}$/, "Enter the 6-digit verification code"),
+});
+
+export type VerifyEmailFormValues = z.infer<typeof verifyEmailSchema>;

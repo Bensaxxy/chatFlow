@@ -5,6 +5,8 @@ import {
   getCurrentUser,
   loginUser,
   registerUser,
+  resendUserVerificationCode,
+  verifyUserEmail,
 } from "../services/auth.service";
 import { AppError } from "../utils/app-error";
 import { clearAuthCookies, setAuthCookies } from "../utils/auth-cookies";
@@ -19,6 +21,8 @@ import type {
   ChangePasswordInput,
   LoginInput,
   RegisterInput,
+  ResendVerificationInput,
+  VerifyEmailInput,
 } from "../validations/auth.validation";
 
 const getAuthenticatedUserId = (userId: string | undefined): string => {
@@ -37,7 +41,7 @@ export const register: RequestHandler = asyncHandler(
 
     response.status(201).json({
       success: true,
-      message: "Account created successfully",
+      message: "Account created successfully. Check your email for the verification code.",
       data: {
         user,
       },
@@ -161,6 +165,36 @@ export const logout: RequestHandler = asyncHandler(
     response.status(200).json({
       success: true,
       message: "Logout successful",
+    });
+  },
+);
+
+export const verifyEmail: RequestHandler = asyncHandler(
+  async (request, response) => {
+    const input = request.body as VerifyEmailInput;
+
+    const user = await verifyUserEmail(input);
+
+    response.status(200).json({
+      success: true,
+      message: "Email verified successfully. You can now log in.",
+      data: {
+        user,
+      },
+    });
+  },
+);
+
+export const resendVerificationCode: RequestHandler = asyncHandler(
+  async (request, response) => {
+    const input = request.body as ResendVerificationInput;
+
+    await resendUserVerificationCode(input);
+
+    response.status(200).json({
+      success: true,
+      message:
+        "If an unverified account exists for that email, a new verification code has been sent.",
     });
   },
 );

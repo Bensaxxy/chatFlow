@@ -11,6 +11,7 @@ interface LoginPageProps {
   searchParams: Promise<{
     next?: string;
     registered?: string;
+    verified?: string;
     email?: string;
   }>;
 }
@@ -27,6 +28,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
         nextPath={parameters.next}
         initialEmail={parameters.email}
         registrationSucceeded={parameters.registered === "1"}
+        verificationSucceeded={parameters.verified === "1"}
       />
     </AuthShell>
   );

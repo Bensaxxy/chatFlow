@@ -3,13 +3,36 @@ import { createServer, type Server } from "node:http";
 import app from "./app";
 import { connectDatabase, disconnectDatabase } from "./config/database";
 import { env } from "./config/env";
+import { verifyEmailTransport } from "./services/email.service";
 import { initializeSocketServer } from "./socket/socket.server";
 
 let server: Server | undefined;
 
+const checkEmailTransport = async (): Promise<void> => {
+  try {
+    await verifyEmailTransport();
+    console.log("SMTP connection verified successfully.");
+  } catch (error) {
+    const code =
+      error && typeof error === "object" && "code" in error
+        ? String(error.code)
+        : "SMTP_UNAVAILABLE";
+
+    /*
+     * Email delivery is required for registration, but a temporary SMTP
+     * outage must not take the entire chat API offline. Registration will
+     * return a clear 503 until the provider connection is restored.
+     */
+    console.warn(
+      `SMTP connection could not be verified (${code}). Email verification is unavailable until the mail provider configuration is fixed.`,
+    );
+  }
+};
+
 const startServer = async (): Promise<void> => {
   try {
     await connectDatabase();
+    void checkEmailTransport();
 
     const httpServer = createServer(app);
 

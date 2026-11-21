@@ -11,11 +11,13 @@ import { toast } from "react-toastify";
 import { useAuth } from "@/contexts/AuthContext";
 import { getApiErrorMessage, getApiValidationErrors } from "@/lib/api/errors";
 import { loginSchema, type LoginFormValues } from "@/lib/validations/auth";
+import { isAxiosError } from "axios";
 
 interface LoginFormProps {
   nextPath?: string;
   initialEmail?: string;
   registrationSucceeded?: boolean;
+  verificationSucceeded?: boolean;
 }
 
 const getSafeDestination = (destination?: string): string => {
@@ -36,6 +38,7 @@ export default function LoginForm({
   nextPath,
   initialEmail = "",
   registrationSucceeded = false,
+  verificationSucceeded = false,
 }: LoginFormProps) {
   const router = useRouter();
   const { login } = useAuth();
@@ -69,6 +72,26 @@ export default function LoginForm({
 
       router.refresh();
     } catch (error) {
+      type ApiErrorData = {
+        code?: string;
+        message?: string;
+      };
+
+      const errorCode = isAxiosError<ApiErrorData>(error)
+        ? error.response?.data?.code
+        : undefined;
+
+      if (errorCode === "EMAIL_NOT_VERIFIED") {
+        toast.info("Verify your email address before logging in.");
+
+        const parameters = new URLSearchParams({
+          email: values.email.trim().toLowerCase(),
+        });
+
+        router.push(`/verify-email?${parameters.toString()}`);
+
+        return;
+      }
       const validationErrors = getApiValidationErrors(error);
 
       for (const issue of validationErrors) {
@@ -92,6 +115,15 @@ export default function LoginForm({
           className="mb-6 rounded-2xl border border-emerald-300/20 bg-emerald-300/10 px-4 py-3 text-sm text-emerald-100"
         >
           Your account was created successfully. You can now log in.
+        </div>
+      )}
+
+      {verificationSucceeded && (
+        <div
+          role="status"
+          className="mb-6 rounded-2xl border border-emerald-300/20 bg-emerald-300/10 px-4 py-3 text-sm text-emerald-100"
+        >
+          Your email has been verified successfully. You can now log in.
         </div>
       )}
 

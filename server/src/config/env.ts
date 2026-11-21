@@ -54,6 +54,25 @@ const envSchema = z.object({
   CLOUDINARY_API_KEY: z.string().min(1, "CLOUDINARY_API_KEY is required"),
 
   CLOUDINARY_API_SECRET: z.string().min(1, "CLOUDINARY_API_SECRET is required"),
+
+  SMTP_HOST: z.string().min(1, "SMTP_HOST is required"),
+
+  SMTP_PORT: z.coerce.number().int().positive().default(587),
+
+  SMTP_SECURE: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((value) => value === "true"),
+
+  SMTP_USER: z.string().min(1, "SMTP_USER is required"),
+
+  SMTP_PASSWORD: z.string().min(1, "SMTP_PASSWORD is required"),
+
+  EMAIL_FROM: z.string().min(1, "EMAIL_FROM is required"),
+
+  EMAIL_VERIFICATION_SECRET: z
+    .string()
+    .min(32, "EMAIL_VERIFICATION_SECRET must contain at least 32 characters"),
 });
 
 const result = envSchema.safeParse(process.env);

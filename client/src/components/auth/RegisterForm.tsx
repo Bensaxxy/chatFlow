@@ -2,7 +2,6 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
-  CheckCircle2,
   Eye,
   EyeOff,
   LoaderCircle,
@@ -11,9 +10,11 @@ import {
   UserRound,
 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "react-toastify";
+import { isAxiosError } from "axios";
 
 import { useAuth } from "@/contexts/AuthContext";
 import { getApiErrorMessage, getApiValidationErrors } from "@/lib/api/errors";
@@ -24,10 +25,9 @@ import {
 
 export default function RegisterForm() {
   const { register: createAccount } = useAuth();
+  const router = useRouter();
 
   const [showPassword, setShowPassword] = useState(false);
-
-  const [registeredEmail, setRegisteredEmail] = useState<string | null>(null);
 
   const {
     register,
@@ -46,17 +46,43 @@ export default function RegisterForm() {
   });
 
   const onSubmit = async (values: RegisterFormValues) => {
+    const email = values.email.trim().toLowerCase();
+
     try {
       await createAccount({
         name: values.name.trim(),
-        email: values.email.trim(),
+        email,
         password: values.password,
       });
 
-      setRegisteredEmail(values.email.trim());
+      toast.success(
+        "Account created. Check your email for the verification code.",
+      );
 
-      toast.success("Account created successfully");
+      const parameters = new URLSearchParams({
+        email,
+        sent: "1",
+      });
+
+      router.replace(`/verify-email?${parameters.toString()}`);
     } catch (error) {
+      type ApiErrorData = {
+        code?: string;
+      };
+
+      const errorCode = isAxiosError<ApiErrorData>(error)
+        ? error.response?.data?.code
+        : undefined;
+
+      if (errorCode === "EMAIL_ALREADY_EXISTS") {
+        toast.info("This account is waiting for email verification.");
+
+        const parameters = new URLSearchParams({ email });
+
+        router.replace(`/verify-email?${parameters.toString()}`);
+        return;
+      }
+
       const validationErrors = getApiValidationErrors(error);
 
       for (const issue of validationErrors) {
@@ -75,39 +101,6 @@ export default function RegisterForm() {
       toast.error(getApiErrorMessage(error));
     }
   };
-
-  if (registeredEmail) {
-    const loginUrl = `/login?registered=1&email=${encodeURIComponent(
-      registeredEmail,
-    )}`;
-
-    return (
-      <div role="status" className="text-center">
-        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-300/15">
-          <CheckCircle2 className="h-9 w-9 text-emerald-300" />
-        </div>
-
-        <h2 className="mt-5 text-2xl font-black tracking-tight text-white">
-          Account created!
-        </h2>
-
-        <p className="mt-3 text-sm leading-6 text-slate-400">
-          Your account for{" "}
-          <span className="font-semibold text-slate-100">
-            {registeredEmail}
-          </span>{" "}
-          was created successfully.
-        </p>
-
-        <Link
-          href={loginUrl}
-          className="mt-7 inline-flex min-h-12 w-full items-center justify-center rounded-2xl bg-gradient-to-r from-cyan-200 via-cyan-300 to-cyan-400 px-4 py-3 font-black text-slate-950 shadow-[0_18px_40px_-16px_rgba(34,211,238,0.9)] transition hover:-translate-y-0.5 hover:shadow-[0_24px_48px_-16px_rgba(34,211,238,0.95)]"
-        >
-          Continue to login
-        </Link>
-      </div>
-    );
-  }
 
   return (
     <>

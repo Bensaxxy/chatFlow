@@ -50,6 +50,41 @@ const userSchema = new Schema(
       select: false,
     },
 
+    isEmailVerified: {
+      type: Boolean,
+      default: false,
+    },
+
+    emailVerifiedAt: {
+      type: Date,
+      default: null,
+    },
+
+    emailVerificationCodeHash: {
+      type: String,
+      select: false,
+      default: null,
+    },
+
+    emailVerificationExpiresAt: {
+      type: Date,
+      select: false,
+      default: null,
+    },
+
+    emailVerificationSentAt: {
+      type: Date,
+      select: false,
+      default: null,
+    },
+
+    emailVerificationAttempts: {
+      type: Number,
+      select: false,
+      default: 0,
+      min: 0,
+    },
+
     avatarUrl: {
       type: String,
       default: null,
@@ -78,11 +113,6 @@ const userSchema = new Schema(
       default: Date.now,
     },
 
-    /*
-     * This is deliberately excluded from normal profile responses. A user can
-     * see their own block state through the dedicated account endpoints, but
-     * must never receive another user's block list.
-     */
     blockedUsers: {
       type: [
         {
@@ -106,6 +136,10 @@ userSchema.set("toJSON", {
     delete safeObject.passwordHash;
     delete safeObject.avatarPublicId;
     delete safeObject.blockedUsers;
+    delete safeObject.emailVerificationCodeHash;
+    delete safeObject.emailVerificationExpiresAt;
+    delete safeObject.emailVerificationSentAt;
+    delete safeObject.emailVerificationAttempts;
     delete safeObject.__v;
 
     return safeObject;
