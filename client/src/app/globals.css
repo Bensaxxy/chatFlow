@@ -252,3 +252,28 @@ body {
     linear-gradient(90deg, #cbd5e1 1px, transparent 1px), #f8fafc;
   background-size: 13px 13px;
 }
+
+@keyframes landing-float {
+  0%,
+  100% {
+    transform: translateZ(90px) rotateZ(14deg) translateY(0);
+  }
+
+  50% {
+    transform: translateZ(90px) rotateZ(14deg) translateY(-10px);
+  }
+}
+
+[data-landing-hero],
+[data-landing-reveal] {
+  transform-style: preserve-3d;
+  will-change: transform, opacity;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-landing-hero],
+  [data-landing-reveal] {
+    transform: none !important;
+    opacity: 1 !important;
+  }
+}
