@@ -123,7 +123,7 @@ export default function ChatShell({ children }: ChatShellProps) {
           <ActionMenu
             label="Account options"
             menuLabel="Account options"
-            triggerClassName="h-11 w-11 hover:bg-slate-100"
+            triggerClassName="h-11 w-11"
             items={[
               {
                 id: "theme",

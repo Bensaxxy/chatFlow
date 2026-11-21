@@ -369,6 +369,7 @@ export const resetUserPassword = async (
   }
 
   user.passwordHash = await bcrypt.hash(input.newPassword, PASSWORD_HASH_ROUNDS);
+  user.sessionVersion = (user.sessionVersion ?? 0) + 1;
   user.passwordResetTokenHash = null;
   user.passwordResetExpiresAt = null;
   user.passwordResetSentAt = null;
@@ -463,6 +464,8 @@ export const changeUserPassword = async (
     input.newPassword,
     PASSWORD_HASH_ROUNDS,
   );
+
+  user.sessionVersion = (user.sessionVersion ?? 0) + 1;
 
   await user.save();
 };

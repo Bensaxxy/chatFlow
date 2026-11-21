@@ -1,10 +1,15 @@
 import type { RequestHandler } from "express";
 import { JsonWebTokenError, TokenExpiredError } from "jsonwebtoken";
 
+import { User } from "../models/user.model";
 import { AppError } from "../utils/app-error";
 import { verifyAccessToken } from "../utils/auth-tokens";
 
-export const authenticate: RequestHandler = (request, _response, next) => {
+export const authenticate: RequestHandler = async (
+  request,
+  _response,
+  next,
+) => {
   const accessToken = request.cookies?.accessToken as string | undefined;
 
   if (!accessToken) {
@@ -22,8 +27,29 @@ export const authenticate: RequestHandler = (request, _response, next) => {
   try {
     const payload = verifyAccessToken(accessToken);
 
+    const sessionIsCurrent = await User.exists({
+      _id: payload.userId,
+      ...(payload.sessionVersion === 0
+        ? {
+            $or: [
+              { sessionVersion: 0 },
+              { sessionVersion: { $exists: false } },
+            ],
+          }
+        : { sessionVersion: payload.sessionVersion }),
+    });
+
+    if (!sessionIsCurrent) {
+      next(
+        new AppError("Your session has expired", 401, "SESSION_EXPIRED"),
+      );
+
+      return;
+    }
+
     request.auth = {
       userId: payload.userId,
+      sessionVersion: payload.sessionVersion,
     };
 
     next();

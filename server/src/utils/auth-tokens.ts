@@ -2,10 +2,22 @@ import jwt from "jsonwebtoken";
 
 import { env } from "../config/env";
 
-export const createAccessToken = (userId: string): string => {
+interface SessionTokenPayload {
+  userId: string;
+  sessionVersion: number;
+}
+
+const isValidSessionVersion = (value: unknown): value is number =>
+  typeof value === "number" && Number.isInteger(value) && value >= 0;
+
+export const createAccessToken = (
+  userId: string,
+  sessionVersion: number,
+): string => {
   return jwt.sign(
     {
       tokenType: "access",
+      sessionVersion,
     },
     env.JWT_ACCESS_SECRET,
     {
@@ -15,10 +27,14 @@ export const createAccessToken = (userId: string): string => {
   );
 };
 
-export const createRefreshToken = (userId: string): string => {
+export const createRefreshToken = (
+  userId: string,
+  sessionVersion: number,
+): string => {
   return jwt.sign(
     {
       tokenType: "refresh",
+      sessionVersion,
     },
     env.JWT_REFRESH_SECRET,
     {
@@ -34,10 +50,14 @@ export const createRefreshToken = (userId: string): string => {
  * to that connection. This brief token is requested through the same-origin
  * API proxy and is used only during the socket handshake.
  */
-export const createSocketToken = (userId: string): string => {
+export const createSocketToken = (
+  userId: string,
+  sessionVersion: number,
+): string => {
   return jwt.sign(
     {
       tokenType: "socket",
+      sessionVersion,
     },
     env.JWT_ACCESS_SECRET,
     {
@@ -47,50 +67,56 @@ export const createSocketToken = (userId: string): string => {
   );
 };
 
-export const verifyAccessToken = (token: string): { userId: string } => {
+export const verifyAccessToken = (token: string): SessionTokenPayload => {
   const decoded = jwt.verify(token, env.JWT_ACCESS_SECRET);
 
   if (
     typeof decoded === "string" ||
     decoded.tokenType !== "access" ||
-    typeof decoded.sub !== "string"
+    typeof decoded.sub !== "string" ||
+    !isValidSessionVersion(decoded.sessionVersion)
   ) {
     throw new Error("Invalid access token payload");
   }
 
   return {
     userId: decoded.sub,
+    sessionVersion: decoded.sessionVersion,
   };
 };
 
-export const verifySocketToken = (token: string): { userId: string } => {
+export const verifySocketToken = (token: string): SessionTokenPayload => {
   const decoded = jwt.verify(token, env.JWT_ACCESS_SECRET);
 
   if (
     typeof decoded === "string" ||
     decoded.tokenType !== "socket" ||
-    typeof decoded.sub !== "string"
+    typeof decoded.sub !== "string" ||
+    !isValidSessionVersion(decoded.sessionVersion)
   ) {
     throw new Error("Invalid socket token payload");
   }
 
   return {
     userId: decoded.sub,
+    sessionVersion: decoded.sessionVersion,
   };
 };
 
-export const verifyRefreshToken = (token: string): { userId: string } => {
+export const verifyRefreshToken = (token: string): SessionTokenPayload => {
   const decoded = jwt.verify(token, env.JWT_REFRESH_SECRET);
 
   if (
     typeof decoded === "string" ||
     decoded.tokenType !== "refresh" ||
-    typeof decoded.sub !== "string"
+    typeof decoded.sub !== "string" ||
+    !isValidSessionVersion(decoded.sessionVersion)
   ) {
     throw new Error("Invalid refresh token payload");
   }
 
   return {
     userId: decoded.sub,
+    sessionVersion: decoded.sessionVersion,
   };
 };

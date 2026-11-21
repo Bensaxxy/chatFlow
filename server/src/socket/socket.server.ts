@@ -394,34 +394,49 @@ export const initializeSocketServer = (
     io.to(`user:${call.recipientId}`).emit("call:ended", payload);
   };
 
-  io.use((socket, next) => {
+  io.use(async (socket, next) => {
     try {
       const socketToken = socket.handshake.auth.token;
 
+      let payload;
+
       if (typeof socketToken === "string" && socketToken) {
-        const payload = verifySocketToken(socketToken);
+        payload = verifySocketToken(socketToken);
+      } else {
+        const rawCookie = socket.handshake.headers.cookie;
 
-        socket.data.userId = payload.userId;
-        next();
-        return;
+        if (!rawCookie) {
+          next(new Error("AUTHENTICATION_REQUIRED"));
+          return;
+        }
+
+        const cookies = parse(rawCookie);
+        const accessToken = cookies.accessToken;
+
+        if (!accessToken) {
+          next(new Error("AUTHENTICATION_REQUIRED"));
+          return;
+        }
+
+        payload = verifyAccessToken(accessToken);
       }
 
-      const rawCookie = socket.handshake.headers.cookie;
+      const sessionIsCurrent = await User.exists({
+        _id: payload.userId,
+        ...(payload.sessionVersion === 0
+          ? {
+              $or: [
+                { sessionVersion: 0 },
+                { sessionVersion: { $exists: false } },
+              ],
+            }
+          : { sessionVersion: payload.sessionVersion }),
+      });
 
-      if (!rawCookie) {
-        next(new Error("AUTHENTICATION_REQUIRED"));
+      if (!sessionIsCurrent) {
+        next(new Error("INVALID_ACCESS_TOKEN"));
         return;
       }
-
-      const cookies = parse(rawCookie);
-      const accessToken = cookies.accessToken;
-
-      if (!accessToken) {
-        next(new Error("AUTHENTICATION_REQUIRED"));
-        return;
-      }
-
-      const payload = verifyAccessToken(accessToken);
 
       socket.data.userId = payload.userId;
 

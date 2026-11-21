@@ -60,9 +60,9 @@ export const login: RequestHandler = asyncHandler(async (request, response) => {
 
   const userId = user._id.toString();
 
-  const accessToken = createAccessToken(userId);
+  const accessToken = createAccessToken(userId, user.sessionVersion);
 
-  const refreshToken = createRefreshToken(userId);
+  const refreshToken = createRefreshToken(userId, user.sessionVersion);
 
   setAuthCookies(response, accessToken, refreshToken);
 
@@ -92,12 +92,17 @@ export const me: RequestHandler = asyncHandler(async (request, response) => {
 export const socketToken: RequestHandler = asyncHandler(
   async (request, response) => {
     const userId = getAuthenticatedUserId(request.auth?.userId);
+    const sessionVersion = request.auth?.sessionVersion;
+
+    if (sessionVersion === undefined) {
+      throw new Error("Authenticated request is missing its session version");
+    }
 
     response.status(200).json({
       success: true,
       message: "Socket token created successfully",
       data: {
-        token: createSocketToken(userId),
+        token: createSocketToken(userId, sessionVersion),
       },
     });
   },
@@ -122,9 +127,19 @@ export const refresh: RequestHandler = asyncHandler(
 
       const user = await getCurrentUser(payload.userId);
 
-      const newAccessToken = createAccessToken(user._id.toString());
+      if (user.sessionVersion !== payload.sessionVersion) {
+        throw new Error("Session has been invalidated");
+      }
 
-      const newRefreshToken = createRefreshToken(user._id.toString());
+      const newAccessToken = createAccessToken(
+        user._id.toString(),
+        user.sessionVersion,
+      );
+
+      const newRefreshToken = createRefreshToken(
+        user._id.toString(),
+        user.sessionVersion,
+      );
 
       setAuthCookies(response, newAccessToken, newRefreshToken);
 

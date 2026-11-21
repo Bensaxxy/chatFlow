@@ -86,6 +86,13 @@ const userSchema = new Schema(
       select: false,
     },
 
+    /* Incremented after password changes to invalidate every older session. */
+    sessionVersion: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
     isEmailVerified: {
       type: Boolean,
       default: false,
@@ -204,6 +211,7 @@ userSchema.set("toJSON", {
     const safeObject = returnedObject as Record<string, unknown>;
 
     delete safeObject.passwordHash;
+    delete safeObject.sessionVersion;
     delete safeObject.avatarPublicId;
     delete safeObject.blockedUsers;
     delete safeObject.emailVerificationCodeHash;
