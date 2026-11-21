@@ -206,7 +206,7 @@ export default function ForwardMessageModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="forward-message-title"
-        className="relative z-10 flex max-h-[90dvh] w-full flex-col overflow-hidden rounded-t-3xl bg-white shadow-2xl sm:max-h-[720px] sm:max-w-lg sm:rounded-3xl"
+        className="chat-themed-modal relative z-10 flex max-h-[90dvh] w-full flex-col overflow-hidden rounded-t-3xl bg-[var(--chat-surface)] text-[var(--chat-text)] shadow-2xl sm:max-h-[720px] sm:max-w-lg sm:rounded-3xl"
       >
         <header className="flex items-center gap-3 border-b border-slate-200 px-5 py-4">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-cyan-100 text-cyan-700">
@@ -266,7 +266,7 @@ export default function ForwardMessageModal({
           </div>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="chat-scrollbar min-h-0 flex-1 overflow-y-auto">
           {isLoading ? (
             <div className="flex items-center justify-center gap-2 px-5 py-12 text-sm text-slate-500">
               <LoaderCircle className="h-5 w-5 animate-spin text-cyan-600" />

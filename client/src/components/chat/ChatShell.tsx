@@ -174,7 +174,7 @@ export default function ChatShell({ children }: ChatShellProps) {
           </div>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="chat-scrollbar min-h-0 flex-1 overflow-y-auto">
           {searchQuery.trim() ? (
             <UserSearchResults query={searchQuery} />
           ) : (

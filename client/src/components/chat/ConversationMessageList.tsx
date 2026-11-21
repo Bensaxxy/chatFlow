@@ -126,7 +126,7 @@ export default function ConversationMessageList({
       <div
         ref={messagesContainerRef}
         onScroll={onScroll}
-        className="chat-wallpaper h-full overflow-x-hidden overflow-y-auto px-3 py-5 sm:px-6"
+        className="chat-scrollbar chat-wallpaper h-full overflow-x-hidden overflow-y-auto px-3 py-5 sm:px-6"
       >
         {hasMore && (
           <div className="mb-5 text-center">

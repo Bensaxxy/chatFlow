@@ -81,7 +81,7 @@ export default function AttachmentPreviewDialog({
         role="dialog"
         aria-modal="true"
         aria-labelledby="attachment-preview-title"
-        className="relative z-10 flex h-[88dvh] w-full max-w-5xl flex-col overflow-hidden rounded-t-3xl bg-white shadow-2xl sm:rounded-3xl"
+        className="chat-themed-modal relative z-10 flex h-[88dvh] w-full max-w-5xl flex-col overflow-hidden rounded-t-3xl bg-[var(--chat-surface)] text-[var(--chat-text)] shadow-2xl sm:rounded-3xl"
       >
         <header className="flex items-center gap-3 border-b border-slate-200 px-4 py-3 sm:px-5">
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-cyan-100 text-cyan-700">

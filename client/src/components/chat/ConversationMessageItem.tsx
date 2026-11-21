@@ -247,7 +247,12 @@ export default function ConversationMessageItem({
         )}
       >
         {!isPendingDelivery && !isSelecting && (
-          <div className="absolute right-1 top-1 z-30">
+          <div
+            className={joinClasses(
+              "absolute right-1 top-1",
+              isMenuOpen ? "z-[70]" : "z-30",
+            )}
+          >
             <ActionMenu
               open={isMenuOpen}
               onOpenChange={(isOpen) => {

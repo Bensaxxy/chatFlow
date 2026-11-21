@@ -4,7 +4,6 @@ import {
   AlertCircle,
   Ban,
   Eraser,
-  LoaderCircle,
   Mail,
   MessageCircleMore,
   Pin,
@@ -17,6 +16,7 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "react-toastify";
 
 import UserAvatar from "@/components/chat/UserAvatar";
+import ChatFlowLoader from "@/components/shared/ChatFlowLoader";
 import ActionMenu from "@/components/ui/ActionMenu";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import { useAuth } from "@/contexts/AuthContext";
@@ -690,12 +690,7 @@ export default function ConversationList() {
   if (!user) return null;
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center gap-2 px-6 py-10 text-sm text-slate-500">
-        <LoaderCircle className="h-5 w-5 animate-spin text-cyan-600" />
-        Loading conversations...
-      </div>
-    );
+    return <ChatFlowLoader compact message="Loading conversations..." />;
   }
 
   if (errorMessage) {
@@ -789,7 +784,8 @@ export default function ConversationList() {
 
         const draftText = conversationDrafts.get(conversation._id) ?? "";
 
-        const hasDraft = Boolean(draftText.trim());
+        const hasDraft =
+          Boolean(draftText.trim()) && !isActive;
 
         const isBlockedByCurrentUser = Boolean(
           conversation.directMessagingAccess?.isBlockedByCurrentUser,

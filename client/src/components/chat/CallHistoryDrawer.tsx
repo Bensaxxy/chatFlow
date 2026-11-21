@@ -162,7 +162,7 @@ export default function CallHistoryDrawer({
         aria-modal="true"
         aria-hidden={!isOpen}
         aria-label="Call history"
-        className={`fixed inset-y-0 right-0 z-[80] flex w-full max-w-md flex-col border-l border-slate-200 bg-white shadow-2xl transition-transform duration-300 ease-out ${
+        className={`chat-themed-drawer fixed inset-y-0 right-0 z-[80] flex w-full max-w-md flex-col border-l border-[var(--chat-border)] bg-[var(--chat-surface)] text-[var(--chat-text)] shadow-2xl transition-transform duration-300 ease-out ${
           isOpen ? "translate-x-0" : "translate-x-full"
         }`}
       >
@@ -184,7 +184,7 @@ export default function CallHistoryDrawer({
           </button>
         </header>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3 sm:px-4">
+        <div className="chat-scrollbar min-h-0 flex-1 overflow-y-auto px-3 py-3 sm:px-4">
           {isLoading ? (
             <div className="flex min-h-48 items-center justify-center gap-2 text-sm text-slate-500">
               <LoaderCircle className="h-5 w-5 animate-spin text-cyan-600" />

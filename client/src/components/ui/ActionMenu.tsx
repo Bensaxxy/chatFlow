@@ -1,7 +1,7 @@
 "use client";
 
 import { EllipsisVertical, LoaderCircle, type LucideIcon } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 export interface ActionMenuItem {
   id: string;
@@ -27,9 +27,10 @@ interface ActionMenuProps {
 }
 
 const toneClassNames: Record<NonNullable<ActionMenuItem["tone"]>, string> = {
-  default: "text-slate-700 hover:bg-slate-50",
-  danger: "text-red-700 hover:bg-red-50",
-  success: "text-emerald-700 hover:bg-emerald-50",
+  default:
+    "text-[var(--chat-text,#334155)] hover:bg-[var(--chat-hover,#f8fafc)]",
+  danger: "text-red-700 hover:bg-red-500/10",
+  success: "text-emerald-700 hover:bg-emerald-500/10",
 };
 
 export default function ActionMenu({
@@ -48,13 +49,16 @@ export default function ActionMenu({
   const menuRef = useRef<HTMLDivElement | null>(null);
   const isOpen = open ?? uncontrolledOpen;
 
-  const setIsOpen = (nextOpen: boolean): void => {
-    if (open === undefined) {
-      setUncontrolledOpen(nextOpen);
-    }
+  const setIsOpen = useCallback(
+    (nextOpen: boolean): void => {
+      if (open === undefined) {
+        setUncontrolledOpen(nextOpen);
+      }
 
-    onOpenChange?.(nextOpen);
-  };
+      onOpenChange?.(nextOpen);
+    },
+    [onOpenChange, open],
+  );
 
   useEffect(() => {
     if (!isOpen) {
@@ -83,10 +87,13 @@ export default function ActionMenu({
       document.removeEventListener("pointerdown", closeWhenClickingOutside);
       document.removeEventListener("keydown", closeOnEscape);
     };
-  }, [isOpen]);
+  }, [isOpen, setIsOpen]);
 
   return (
-    <div ref={menuRef} className="relative shrink-0">
+    <div
+      ref={menuRef}
+      className={`chat-themed-menu relative shrink-0 ${isOpen ? "z-[70]" : "z-0"}`}
+    >
       <button
         type="button"
         disabled={isLoading}
@@ -94,7 +101,7 @@ export default function ActionMenu({
         aria-label={label}
         aria-expanded={isOpen}
         title={label}
-        className={`flex items-center justify-center rounded-full text-slate-500 transition hover:bg-white hover:text-slate-900 hover:shadow-sm disabled:cursor-wait disabled:opacity-50 ${triggerClassName}`}
+        className={`flex items-center justify-center rounded-full text-[var(--chat-muted,#64748b)] transition hover:bg-[var(--chat-hover,#f8fafc)] hover:text-[var(--chat-text,#0f172a)] hover:shadow-sm disabled:cursor-wait disabled:opacity-50 ${triggerClassName}`}
       >
         {isLoading ? (
           <LoaderCircle className="h-4 w-4 animate-spin" />
@@ -107,7 +114,7 @@ export default function ActionMenu({
         <div
           role="menu"
           aria-label={menuLabel ?? label}
-          className={`absolute z-50 overflow-hidden rounded-lg border border-slate-200 bg-white py-0.5 shadow-lg ${menuClassName} ${
+          className={`chat-themed-menu absolute z-[80] overflow-hidden rounded-lg border border-[var(--chat-border,#e2e8f0)] bg-[var(--chat-surface,#ffffff)] py-0.5 shadow-lg ${menuClassName} ${
             side === "top" ? "bottom-9" : "top-9"
           } ${align === "start" ? "left-0" : "right-0"}`}
         >
@@ -117,7 +124,7 @@ export default function ActionMenu({
             return (
               <div key={item.id}>
                 {item.dividerBefore && (
-                  <div className="my-0.5 border-t border-slate-100" />
+                  <div className="my-0.5 border-t border-[var(--chat-border,#f1f5f9)]" />
                 )}
                 <button
                   type="button"

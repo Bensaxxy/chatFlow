@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertCircle, LoaderCircle } from "lucide-react";
+import { AlertCircle } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -20,6 +20,7 @@ import MediaGalleryDrawer from "@/components/chat/MediaGalleryDrawer";
 import MessageBulkActionBar from "@/components/chat/MessageBulkActionBar";
 import MessageSearchDrawer from "@/components/chat/MessageSearchDrawer";
 import ConfirmModal from "@/components/ui/ConfirmModal";
+import ChatFlowLoader from "@/components/shared/ChatFlowLoader";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSocket } from "@/contexts/SocketContext";
 import { getApiErrorMessage } from "@/lib/api/errors";
@@ -75,6 +76,8 @@ interface MessageDeletionRequest {
   messageIds: string[];
   scope: DeleteMessageScope;
 }
+
+type ActiveConversationDrawer = "search" | "media" | null;
 
 const getAttachmentMessageType = (
   file: File,
@@ -436,9 +439,12 @@ export default function ConversationView({
 
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
 
-  const [isMessageSearchOpen, setIsMessageSearchOpen] = useState(false);
+  const [activeDrawer, setActiveDrawer] =
+    useState<ActiveConversationDrawer>(null);
 
-  const [isMediaGalleryOpen, setIsMediaGalleryOpen] = useState(false);
+  const isMessageSearchOpen = activeDrawer === "search";
+
+  const isMediaGalleryOpen = activeDrawer === "media";
 
   const [messageSearchQuery, setMessageSearchQuery] = useState("");
 
@@ -966,7 +972,7 @@ export default function ConversationView({
   };
 
   const closeMessageSearch = (): void => {
-    setIsMessageSearchOpen(false);
+    setActiveDrawer((current) => (current === "search" ? null : current));
     if (messageSearchResetTimeoutRef.current !== null) {
       window.clearTimeout(messageSearchResetTimeoutRef.current);
     }
@@ -986,7 +992,16 @@ export default function ConversationView({
       messageSearchResetTimeoutRef.current = null;
     }
 
-    setIsMessageSearchOpen(true);
+    setOpenMessageMenuId(null);
+    setReactionPickerMessageId(null);
+    setActiveDrawer("search");
+  };
+
+  const openMediaGallery = (): void => {
+    setOpenMessageMenuId(null);
+    setReactionPickerMessageId(null);
+    closeMessageSearch();
+    setActiveDrawer("media");
   };
 
   const handleMessageSearchResult = async (
@@ -1027,7 +1042,10 @@ export default function ConversationView({
       });
 
       setHighlightedMessageId(message._id);
-      closeMessageSearch();
+
+      if (!window.matchMedia("(min-width: 768px)").matches) {
+        closeMessageSearch();
+      }
     } catch (error) {
       setMessageSearchError(getApiErrorMessage(error));
     } finally {
@@ -1698,12 +1716,7 @@ export default function ConversationView({
   };
 
   if (isLoading) {
-    return (
-      <div className="flex h-full w-full items-center justify-center gap-3 bg-slate-50 text-slate-500">
-        <LoaderCircle className="h-6 w-6 animate-spin text-cyan-600" />
-        Loading conversation...
-      </div>
-    );
+    return <ChatFlowLoader message="Loading conversation..." />;
   }
 
   if (errorMessage || !conversation || !user) {
@@ -1777,8 +1790,9 @@ export default function ConversationView({
     .join("|");
 
   return (
-    <section className="relative flex h-full min-w-0 w-full flex-col overflow-hidden bg-[var(--chat-surface)]">
-      <ConversationHeader
+    <section className="relative flex h-full min-w-0 w-full flex-col overflow-hidden bg-[var(--chat-surface)] md:flex-row">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <ConversationHeader
         displayName={displayName}
         avatarUrl={
           conversation.type === "direct"
@@ -1801,16 +1815,11 @@ export default function ConversationView({
           }
         }}
         onOpenSearch={openMessageSearch}
-        onOpenMediaGallery={() => setIsMediaGalleryOpen(true)}
-        onStartAudioCall={
-          isDirectConversation
-            ? () => toast.info("Audio calling is coming soon.")
-            : undefined
-        }
+        onOpenMediaGallery={openMediaGallery}
       />
 
-      {selectedMessageIds.size > 0 && (
-        <MessageBulkActionBar
+        {selectedMessageIds.size > 0 && (
+          <MessageBulkActionBar
           selectedCount={selectedMessages.length}
           canDeleteForEveryone={canDeleteSelectedForEveryone}
           isWorking={isBulkActionWorking}
@@ -1822,10 +1831,10 @@ export default function ConversationView({
           onDeleteForEveryone={() => {
             requestDeleteSelectedMessages("everyone");
           }}
-        />
-      )}
+          />
+        )}
 
-      <ConversationMessageList
+        <ConversationMessageList
         messages={messages}
         currentUser={user}
         otherParticipantId={otherParticipantId}
@@ -1875,8 +1884,8 @@ export default function ConversationView({
         }}
         onRetry={handleRetryMessage}
         onSelect={handleSelectMessage}
-      />
-      <ConversationComposer
+        />
+        <ConversationComposer
         messageInputRef={messageInputRef}
         messageText={messageText}
         replyingToMessage={replyingToMessage}
@@ -1903,17 +1912,8 @@ export default function ConversationView({
         onCancelEditing={handleCancelEditing}
         onAttachmentQueued={handleAttachmentQueued}
         onVoiceNoteQueued={handleVoiceNoteQueued}
-      />
-
-      {currentUserId && (
-        <ForwardMessageModal
-          messages={forwardingMessages}
-          sourceConversationId={conversationId}
-          currentUserId={currentUserId}
-          onClose={() => setForwardingMessages([])}
-          onForwarded={handleMessagesForwarded}
         />
-      )}
+      </div>
 
       <MessageSearchDrawer
         isOpen={isMessageSearchOpen}
@@ -1941,8 +1941,20 @@ export default function ConversationView({
         conversationId={conversationId}
         currentUserId={user._id}
         refreshKey={mediaGalleryRefreshKey}
-        onClose={() => setIsMediaGalleryOpen(false)}
+        onClose={() =>
+          setActiveDrawer((current) => (current === "media" ? null : current))
+        }
       />
+
+      {currentUserId && (
+        <ForwardMessageModal
+          messages={forwardingMessages}
+          sourceConversationId={conversationId}
+          currentUserId={currentUserId}
+          onClose={() => setForwardingMessages([])}
+          onForwarded={handleMessagesForwarded}
+        />
+      )}
 
       <ConfirmModal
         isOpen={Boolean(messageDeletionRequest)}

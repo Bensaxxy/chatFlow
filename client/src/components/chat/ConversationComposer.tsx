@@ -6,6 +6,7 @@ import {
   useState,
   type ChangeEvent,
   type FormEvent,
+  type KeyboardEvent,
   type RefObject,
 } from "react";
 
@@ -76,6 +77,26 @@ export default function ConversationComposer({
       : replyingToMessage?.type === "audio"
         ? "🎤 Voice note"
       : replyingToMessage?.attachment?.fileName || "File");
+
+  const handleMessageKeyDown = (
+    event: KeyboardEvent<HTMLTextAreaElement>,
+  ): void => {
+    if (
+      event.key !== "Enter" ||
+      event.shiftKey ||
+      event.nativeEvent.isComposing
+    ) {
+      return;
+    }
+
+    event.preventDefault();
+
+    if (!messageText.trim() || isEditingMessage) {
+      return;
+    }
+
+    event.currentTarget.form?.requestSubmit();
+  };
 
   return (
     <form
@@ -174,6 +195,7 @@ export default function ConversationComposer({
               ref={messageInputRef}
               value={messageText}
               onChange={onMessageChange}
+              onKeyDown={handleMessageKeyDown}
               maxLength={5000}
               rows={1}
               placeholder={

@@ -18,6 +18,7 @@ import { useEffect, useState } from "react";
 import { toast } from "react-toastify";
 
 import UserAvatar from "@/components/chat/UserAvatar";
+import ChatFlowLoader from "@/components/shared/ChatFlowLoader";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSocket } from "@/contexts/SocketContext";
@@ -202,25 +203,18 @@ export default function PublicProfilePage() {
   };
 
   if (isLoading) {
-    return (
-      <div className="flex h-full w-full items-center justify-center bg-slate-50">
-        <div className="flex items-center gap-3 text-sm text-slate-500">
-          <LoaderCircle className="h-6 w-6 animate-spin text-cyan-600" />
-          Loading profile...
-        </div>
-      </div>
-    );
+    return <ChatFlowLoader message="Loading profile..." />;
   }
 
   if (errorMessage || !profile) {
     return (
-      <div className="flex h-full w-full flex-col bg-slate-50">
-        <header className="flex h-20 shrink-0 items-center border-b border-slate-200 bg-white px-4 sm:px-6">
+      <div className="public-profile-page flex h-full w-full flex-col bg-slate-50">
+        <header className="flex h-20 shrink-0 items-center border-b border-[var(--chat-border)] bg-[var(--chat-surface)] px-4 sm:px-6">
           <button
             type="button"
             onClick={() => router.back()}
             aria-label="Go back"
-            className="flex h-10 w-10 items-center justify-center rounded-full text-slate-600 transition hover:bg-slate-100"
+            className="flex h-10 w-10 items-center justify-center rounded-full text-[var(--chat-muted)] transition hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]"
           >
             <ArrowLeft className="h-5 w-5" />
           </button>
@@ -256,26 +250,26 @@ export default function PublicProfilePage() {
   const isMessagingUnavailable = !isOwnProfile && profile.canMessage === false;
 
   return (
-    <section className="relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-slate-100">
+    <section className="public-profile-page relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-[var(--chat-app)]">
       <div
         aria-hidden="true"
         className="pointer-events-none absolute -right-32 -top-36 h-96 w-96 rounded-full bg-cyan-200/40 blur-3xl"
       />
 
-      <header className="relative z-10 flex h-16 shrink-0 items-center gap-2 border-b border-slate-200/80 bg-white/90 px-2 backdrop-blur sm:h-20 sm:gap-3 sm:px-6">
+      <header className="relative z-10 flex h-16 shrink-0 items-center gap-2 border-b border-[var(--chat-border)] bg-[var(--chat-surface)] px-2 backdrop-blur sm:h-20 sm:gap-3 sm:px-6">
         <button
           type="button"
           onClick={() => router.back()}
           aria-label="Go back"
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-slate-600 transition hover:bg-slate-100 hover:text-slate-950"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[var(--chat-muted)] transition hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]"
         >
           <ArrowLeft className="h-5 w-5" />
         </button>
 
         <div className="min-w-0">
-          <h1 className="font-semibold text-slate-950">Profile</h1>
+          <h1 className="font-semibold text-[var(--chat-text)]">Profile</h1>
 
-          <p className="truncate text-xs text-slate-500">
+          <p className="truncate text-xs text-[var(--chat-muted)]">
             View profile information
           </p>
         </div>

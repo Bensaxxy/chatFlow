@@ -94,7 +94,7 @@ export default function ChatThemeDrawer({
         aria-hidden={!isOpen}
         inert={!isOpen}
         className={[
-          "fixed inset-y-0 right-0 z-[160] flex w-full max-w-md flex-col border-l border-[var(--chat-border)] bg-[var(--chat-surface)] text-[var(--chat-text)] shadow-2xl transition-transform duration-300 ease-out",
+          "chat-themed-drawer fixed inset-y-0 right-0 z-[160] flex w-full max-w-md flex-col border-l border-[var(--chat-border)] bg-[var(--chat-surface)] text-[var(--chat-text)] shadow-2xl transition-transform duration-300 ease-out",
           isOpen ? "translate-x-0" : "translate-x-full",
         ].join(" ")}
       >
@@ -121,7 +121,7 @@ export default function ChatThemeDrawer({
           </button>
         </header>
 
-        <div className="min-h-0 flex-1 overflow-y-auto p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:p-5">
+        <div className="chat-scrollbar min-h-0 flex-1 overflow-y-auto p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:p-5">
           <section aria-labelledby="appearance-title">
             <div className="flex items-baseline justify-between gap-3">
               <div>

@@ -67,8 +67,10 @@ export default function MessageSearchDrawer({
         tabIndex={isOpen ? 0 : -1}
         aria-label="Close message search"
         className={[
-          "absolute inset-0 z-30 bg-slate-950/25 backdrop-blur-[1px] transition-opacity duration-300",
-          isOpen ? "opacity-100" : "pointer-events-none opacity-0",
+          "absolute inset-0 z-40 bg-slate-950/25 backdrop-blur-[1px] transition-opacity duration-300 md:hidden",
+          isOpen
+            ? "visible opacity-100"
+            : "invisible pointer-events-none opacity-0",
         ].join(" ")}
       />
 
@@ -77,8 +79,10 @@ export default function MessageSearchDrawer({
         aria-hidden={!isOpen}
         inert={!isOpen}
         className={[
-          "absolute inset-y-0 right-0 z-40 flex w-full max-w-md flex-col border-l border-slate-200 bg-white shadow-2xl transition-transform duration-300 ease-out",
-          isOpen ? "translate-x-0" : "translate-x-full",
+          "chat-themed-drawer absolute inset-y-0 right-0 z-50 flex w-full max-w-md flex-col border-l border-[var(--chat-border)] bg-[var(--chat-surface)] text-[var(--chat-text)] shadow-2xl transition-[transform,width,border-color] duration-300 ease-out md:static md:z-0 md:h-full md:max-w-none md:shrink-0 md:overflow-hidden md:shadow-none",
+          isOpen
+            ? "visible translate-x-0 md:w-96"
+            : "invisible pointer-events-none translate-x-full md:visible md:w-0 md:translate-x-0 md:border-l-0",
         ].join(" ")}
       >
         <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
@@ -124,7 +128,7 @@ export default function MessageSearchDrawer({
           </div>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto p-3">
+        <div className="chat-scrollbar min-h-0 flex-1 overflow-y-auto p-3">
           {errorMessage && (
             <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">
               {errorMessage}

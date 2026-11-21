@@ -263,8 +263,10 @@ export default function MediaGalleryDrawer({
         tabIndex={isOpen ? 0 : -1}
         aria-label="Close shared media"
         className={[
-          "absolute inset-0 z-30 bg-slate-950/25 backdrop-blur-[1px] transition-opacity duration-300",
-          isOpen ? "opacity-100" : "pointer-events-none opacity-0",
+          "absolute inset-0 z-40 bg-slate-950/25 backdrop-blur-[1px] transition-opacity duration-300",
+          isOpen
+            ? "visible opacity-100"
+            : "invisible pointer-events-none opacity-0",
         ].join(" ")}
       />
 
@@ -273,8 +275,10 @@ export default function MediaGalleryDrawer({
         aria-hidden={!isOpen}
         inert={!isOpen}
         className={[
-          "absolute inset-y-0 right-0 z-40 flex w-full max-w-xl flex-col border-l border-slate-200 bg-slate-50 shadow-2xl transition-transform duration-300 ease-out",
-          isOpen ? "translate-x-0" : "translate-x-full",
+          "chat-themed-drawer absolute inset-y-0 right-0 z-50 flex w-full max-w-xl flex-col border-l border-[var(--chat-border)] bg-[var(--chat-canvas)] text-[var(--chat-text)] shadow-2xl transition-transform duration-300 ease-out",
+          isOpen
+            ? "visible translate-x-0"
+            : "invisible pointer-events-none translate-x-full",
         ].join(" ")}
       >
         <header className="border-b border-slate-200 bg-white px-4 pb-3 pt-4 sm:px-5">
@@ -333,7 +337,7 @@ export default function MediaGalleryDrawer({
           </nav>
         </header>
 
-        <div className="min-h-0 flex-1 overflow-y-auto p-3 sm:p-4">
+        <div className="chat-scrollbar min-h-0 flex-1 overflow-y-auto p-3 sm:p-4">
           {isLoading ? (
             <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
               <LoaderCircle className="h-7 w-7 animate-spin text-cyan-600" />

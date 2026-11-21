@@ -21,6 +21,7 @@ import {
 import { toast } from "react-toastify";
 
 import { useAuth } from "@/contexts/AuthContext";
+import ChatFlowLoader from "@/components/shared/ChatFlowLoader";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import { getApiErrorMessage } from "@/lib/api/errors";
 import ChangePasswordForm from "@/components/profile/ChangePasswordForm";
@@ -67,11 +68,7 @@ export default function ProfilePage() {
   }, [user?.name, user?.bio]);
 
   if (!user) {
-    return (
-      <div className="flex h-full w-full items-center justify-center bg-slate-50">
-        <LoaderCircle className="h-7 w-7 animate-spin text-cyan-600" />
-      </div>
-    );
+    return <ChatFlowLoader message="Loading your profile..." />;
   }
 
   const trimmedName = name.trim();
@@ -180,7 +177,7 @@ export default function ProfilePage() {
   };
 
   return (
-    <section className="flex h-full w-full flex-col bg-slate-50">
+    <section className="profile-page flex h-full w-full flex-col bg-slate-50">
       <header className="flex h-20 shrink-0 items-center gap-3 border-b border-slate-200 bg-white px-4 sm:px-6">
         <Link
           href="/chats"

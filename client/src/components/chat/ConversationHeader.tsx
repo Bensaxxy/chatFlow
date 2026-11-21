@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Images, PhoneCall, Search } from "lucide-react";
+import { ArrowLeft, Images, Search } from "lucide-react";
 import Link from "next/link";
 
 import UserAvatar from "@/components/chat/UserAvatar";
@@ -15,7 +15,6 @@ interface ConversationHeaderProps {
   onViewProfile: () => void;
   onOpenSearch: () => void;
   onOpenMediaGallery: () => void;
-  onStartAudioCall?: () => void;
 }
 
 export default function ConversationHeader({
@@ -28,14 +27,13 @@ export default function ConversationHeader({
   onViewProfile,
   onOpenSearch,
   onOpenMediaGallery,
-  onStartAudioCall,
 }: ConversationHeaderProps) {
   return (
     <header className="flex h-16 shrink-0 items-center gap-2 border-b border-[var(--chat-border)] bg-[var(--chat-surface)] px-2 text-[var(--chat-text)] sm:h-20 sm:gap-3 sm:px-6">
       <Link
         href="/chats"
         aria-label="Back to conversations"
-        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[var(--chat-muted)] transition hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)] md:hidden"
+        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[var(--chat-muted)] transition hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]"
       >
         <ArrowLeft className="h-5 w-5" />
       </Link>
@@ -88,18 +86,6 @@ export default function ConversationHeader({
       >
         <Images className="h-5 w-5" />
       </button>
-
-      {/* {onStartAudioCall && (
-        <button
-          type="button"
-          onClick={onStartAudioCall}
-          aria-label="Audio calls coming soon"
-          title="Audio calls coming soon"
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[var(--chat-muted)] transition hover:bg-[var(--chat-accent-soft)] hover:text-[var(--chat-accent)] sm:h-11 sm:w-11"
-        >
-          <PhoneCall className="h-5 w-5" />
-        </button>
-      )} */}
 
       {/* Call history is intentionally hidden until audio calling is released. */}
 

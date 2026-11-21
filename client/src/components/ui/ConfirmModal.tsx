@@ -72,7 +72,7 @@ export default function ConfirmModal({
         aria-modal="true"
         aria-labelledby="confirm-modal-title"
         aria-describedby="confirm-modal-description"
-        className="w-full max-w-md overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl"
+        className="chat-themed-modal w-full max-w-md overflow-hidden rounded-2xl border border-[var(--chat-border)] bg-[var(--chat-surface)] text-[var(--chat-text)] shadow-2xl"
       >
         <div className="flex items-start gap-3 px-5 pb-3 pt-5 sm:px-6 sm:pt-6">
           <span
