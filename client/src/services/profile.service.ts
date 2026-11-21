@@ -3,6 +3,7 @@ import { apiClient } from "@/lib/api/client";
 import type { ApiSuccessResponse } from "@/types/api";
 import type { AuthUser, AuthUserData, UpdateProfileInput } from "@/types/auth";
 import type { ChatThemeSettings } from "@/types/chat-theme";
+import type { PrivacySettings } from "@/types/privacy";
 
 type ProfileResponse = ApiSuccessResponse<AuthUserData>;
 
@@ -26,6 +27,17 @@ export const updateMyChatTheme = async (
   const { data } = await apiClient.patch<ProfileResponse>(
     "/users/me/chat-theme",
     theme,
+  );
+
+  return data.data.user;
+};
+
+export const updateMyPrivacySettings = async (
+  privacySettings: PrivacySettings,
+): Promise<AuthUser> => {
+  const { data } = await apiClient.patch<ProfileResponse>(
+    "/users/me/privacy",
+    privacySettings,
   );
 
   return data.data.user;

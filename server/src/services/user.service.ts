@@ -11,6 +11,58 @@ export interface DirectMessagingAccess {
   canMessage: boolean;
 }
 
+export type PrivacyVisibility = "everyone" | "nobody";
+
+export interface UserPrivacySettings {
+  profilePhotoVisibility: PrivacyVisibility;
+  lastSeenVisibility: PrivacyVisibility;
+  readReceipts: boolean;
+}
+
+interface PrivacyAwareUser {
+  _id: { toString(): string } | string;
+  avatarUrl?: string | null;
+  lastSeenAt?: Date | string | null;
+  privacySettings?: Partial<UserPrivacySettings> | null;
+}
+
+export const getPrivacySettings = (
+  privacySettings?: Partial<UserPrivacySettings> | null,
+): UserPrivacySettings => ({
+  profilePhotoVisibility:
+    privacySettings?.profilePhotoVisibility === "nobody" ? "nobody" : "everyone",
+  lastSeenVisibility:
+    privacySettings?.lastSeenVisibility === "nobody" ? "nobody" : "everyone",
+  readReceipts: privacySettings?.readReceipts !== false,
+});
+
+export const canViewProfilePhoto = (
+  user: Pick<PrivacyAwareUser, "_id" | "privacySettings">,
+  viewerId: string,
+): boolean =>
+  user._id.toString() === viewerId ||
+  getPrivacySettings(user.privacySettings).profilePhotoVisibility === "everyone";
+
+export const canViewPresence = (
+  user: Pick<PrivacyAwareUser, "_id" | "privacySettings">,
+  viewerId?: string,
+): boolean =>
+  user._id.toString() === viewerId ||
+  getPrivacySettings(user.privacySettings).lastSeenVisibility === "everyone";
+
+export const createViewerSafeUser = (
+  user: PrivacyAwareUser,
+  viewerId: string,
+): Record<string, unknown> => {
+  const { privacySettings: _privacySettings, ...safeUser } = user;
+
+  return {
+    ...safeUser,
+    avatarUrl: canViewProfilePhoto(user, viewerId) ? user.avatarUrl ?? null : null,
+    lastSeenAt: canViewPresence(user, viewerId) ? user.lastSeenAt ?? null : null,
+  };
+};
+
 const getBlockedUserIds = (
   user: { blockedUsers?: Array<{ toString(): string }> } | null,
 ): Set<string> =>
@@ -165,12 +217,12 @@ export const searchUsers = async (
       },
     ],
   })
-    .select("name email avatarUrl bio lastSeenAt createdAt")
+    .select("name email avatarUrl bio lastSeenAt createdAt privacySettings")
     .sort({
       name: 1,
     })
     .limit(input.limit)
     .lean();
 
-  return users;
+  return users.map((user) => createViewerSafeUser(user, currentUserId));
 };

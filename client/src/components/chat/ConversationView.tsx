@@ -138,12 +138,12 @@ const formatMessageDateLabel = (value: string): string => {
 };
 
 const formatLastSeen = (value?: string | null): string => {
-  if (!value) return "Offline";
+  if (!value) return "Last seen unavailable";
 
   const lastSeenDate = new Date(value);
 
   if (Number.isNaN(lastSeenDate.getTime())) {
-    return "Offline";
+    return "Last seen unavailable";
   }
 
   const now = new Date();
@@ -439,6 +439,8 @@ export default function ConversationView({
 
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
 
+  const [newMessagesBelowCount, setNewMessagesBelowCount] = useState(0);
+
   const [activeDrawer, setActiveDrawer] =
     useState<ActiveConversationDrawer>(null);
 
@@ -468,6 +470,8 @@ export default function ConversationView({
 
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
 
+  const isNearBottomRef = useRef(true);
+
   const messageInputRef = useRef<HTMLTextAreaElement | null>(null);
 
   const messageSearchInputRef = useRef<HTMLInputElement | null>(null);
@@ -496,7 +500,14 @@ export default function ConversationView({
     const distanceFromBottom =
       container.scrollHeight - container.scrollTop - container.clientHeight;
 
-    setShowScrollToBottom(distanceFromBottom > 160);
+    const isNearBottom = distanceFromBottom <= 48;
+
+    isNearBottomRef.current = isNearBottom;
+    setShowScrollToBottom(!isNearBottom);
+
+    if (isNearBottom) {
+      setNewMessagesBelowCount(0);
+    }
 
     const containerTop = container.getBoundingClientRect().top;
 
@@ -671,9 +682,20 @@ export default function ConversationView({
         }
       }
 
+      const shouldStayAtBottom = isNearBottomRef.current;
+
       setMessages((current) => addMessageIfMissing(current, message));
 
       if (message.sender._id !== currentUserId) {
+        if (shouldStayAtBottom) {
+          window.requestAnimationFrame(() => {
+            messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+          });
+        } else {
+          setNewMessagesBelowCount((current) => current + 1);
+          setShowScrollToBottom(true);
+        }
+
         clearRemoteTypingTimeout();
         setIsOtherUserTyping(false);
 
@@ -845,8 +867,10 @@ export default function ConversationView({
       messagesEndRef.current?.scrollIntoView({
         behavior: "smooth",
       });
+
+      isNearBottomRef.current = true;
     }
-  }, [isLoading, messages.length]);
+  }, [isLoading]);
 
   useEffect(() => {
     if (!highlightedMessageId) {
@@ -969,6 +993,8 @@ export default function ConversationView({
     });
 
     setShowScrollToBottom(false);
+    setNewMessagesBelowCount(0);
+    isNearBottomRef.current = true;
   };
 
   const closeMessageSearch = (): void => {
@@ -1769,7 +1795,9 @@ export default function ConversationView({
     Boolean(otherParticipantId && onlineUserIds.has(otherParticipantId));
 
   const otherUserLastSeenAt = otherParticipantId
-    ? (lastSeenByUser.get(otherParticipantId) ?? otherParticipant?.lastSeenAt)
+    ? (updatedOtherProfile
+        ? updatedOtherProfile.lastSeenAt
+        : (lastSeenByUser.get(otherParticipantId) ?? otherParticipant?.lastSeenAt))
     : null;
 
   const selectedMessages = messages.filter((message) =>
@@ -1846,6 +1874,7 @@ export default function ConversationView({
         showFloatingDate={showFloatingDate}
         floatingDate={floatingDate}
         showScrollToBottom={showScrollToBottom}
+        newMessagesBelowCount={newMessagesBelowCount}
         highlightedMessageId={highlightedMessageId}
         openMessageMenuId={openMessageMenuId}
         reactionPickerMessageId={reactionPickerMessageId}

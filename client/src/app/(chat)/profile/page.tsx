@@ -25,6 +25,7 @@ import ChatFlowLoader from "@/components/shared/ChatFlowLoader";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import { getApiErrorMessage } from "@/lib/api/errors";
 import ChangePasswordForm from "@/components/profile/ChangePasswordForm";
+import PrivacySettings from "@/components/profile/PrivacySettings";
 
 const MAX_AVATAR_SIZE = 5 * 1024 * 1024;
 
@@ -406,6 +407,10 @@ export default function ProfilePage() {
             </div>
           </div>
         </form>
+
+        <div className="mx-auto mt-6 w-full max-w-2xl">
+          <PrivacySettings />
+        </div>
 
         <div className="mx-auto mt-6 w-full max-w-2xl">
           <ChangePasswordForm />

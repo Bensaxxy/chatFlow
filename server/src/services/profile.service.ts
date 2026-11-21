@@ -8,11 +8,17 @@ import { User } from "../models/user.model";
 import { AppError } from "../utils/app-error";
 import type {
   UpdateChatThemeInput,
+  UpdatePrivacySettingsInput,
   UpdateProfileInput,
 } from "../validations/profile.validation";
 import { getSocketServer } from "../socket/socket.server";
 import { Conversation } from "../models/conversation.model";
-import { getDirectMessagingAccess } from "./user.service";
+import {
+  createViewerSafeUser,
+  getDirectMessagingAccess,
+  getPrivacySettings,
+  type UserPrivacySettings,
+} from "./user.service";
 
 interface ProfileUpdatePayload {
   user: {
@@ -20,23 +26,35 @@ interface ProfileUpdatePayload {
     name: string;
     avatarUrl: string | null;
     bio: string;
+    lastSeenAt: string | null;
     updatedAt: string;
   };
 }
 
+interface ProfileUpdateSource {
+  _id: { toString(): string } | string;
+  name: string;
+  avatarUrl?: string | null;
+  bio?: string;
+  updatedAt?: Date;
+  lastSeenAt?: Date | null;
+  privacySettings?: Partial<UserPrivacySettings> | null;
+}
+
 const emitProfileUpdate = async (
-  payload: ProfileUpdatePayload,
+  user: ProfileUpdateSource,
 ): Promise<void> => {
   try {
     const io = getSocketServer();
+    const userId = user._id.toString();
 
     const conversations = await Conversation.find({
-      participants: payload.user._id,
+      participants: userId,
     })
       .select("participants")
       .lean();
 
-    const recipientIds = new Set<string>([payload.user._id]);
+    const recipientIds = new Set<string>([userId]);
 
     for (const conversation of conversations) {
       for (const participantId of conversation.participants) {
@@ -45,7 +63,10 @@ const emitProfileUpdate = async (
     }
 
     for (const recipientId of recipientIds) {
-      io.to(`user:${recipientId}`).emit("user:profile-updated", payload);
+      io.to(`user:${recipientId}`).emit(
+        "user:profile-updated",
+        createProfileUpdatePayload(user, recipientId),
+      );
     }
   } catch (error) {
     /*
@@ -56,23 +77,56 @@ const emitProfileUpdate = async (
   }
 };
 
-const createProfileUpdatePayload = (user: {
-  _id: unknown;
-  name: string;
-  avatarUrl?: string | null;
-  bio?: string;
-  updatedAt?: Date;
-}): ProfileUpdatePayload => ({
-  user: {
-    _id: String(user._id),
-    name: user.name,
-    avatarUrl: user.avatarUrl ?? null,
-    bio: user.bio ?? "",
-    updatedAt: user.updatedAt
-      ? new Date(user.updatedAt).toISOString()
-      : new Date().toISOString(),
-  },
-});
+const createProfileUpdatePayload = (
+  user: ProfileUpdateSource,
+  recipientId: string,
+): ProfileUpdatePayload => {
+  const visibleUser = createViewerSafeUser(user, recipientId);
+
+  return {
+    user: {
+      _id: user._id.toString(),
+      name: user.name,
+      avatarUrl:
+        typeof visibleUser.avatarUrl === "string" ? visibleUser.avatarUrl : null,
+      bio: user.bio ?? "",
+      lastSeenAt:
+        visibleUser.lastSeenAt instanceof Date
+          ? visibleUser.lastSeenAt.toISOString()
+          : typeof visibleUser.lastSeenAt === "string"
+            ? visibleUser.lastSeenAt
+            : null,
+      updatedAt: user.updatedAt
+        ? new Date(user.updatedAt).toISOString()
+        : new Date().toISOString(),
+    },
+  };
+};
+
+const emitPresenceVisibilityUpdate = async (
+  user: ProfileUpdateSource,
+): Promise<void> => {
+  try {
+    const io = getSocketServer();
+    const userId = user._id.toString();
+    const privacySettings = getPrivacySettings(user.privacySettings);
+    const activeSockets = await io.in(`user:${userId}`).fetchSockets();
+    const isOnline =
+      privacySettings.lastSeenVisibility === "everyone" &&
+      activeSockets.length > 0;
+
+    io.emit("presence:update", {
+      userId,
+      isOnline,
+      lastSeenAt:
+        privacySettings.lastSeenVisibility === "everyone" && !isOnline
+          ? (user.lastSeenAt?.toISOString() ?? null)
+          : null,
+    });
+  } catch (error) {
+    console.error("Could not update presence visibility:", error);
+  }
+};
 
 export const getUserProfile = async (userId: string) => {
   const user = await User.findById(userId);
@@ -113,7 +167,7 @@ export const updateUserProfile = async (
     throw new AppError("User profile was not found", 404, "USER_NOT_FOUND");
   }
 
-  await emitProfileUpdate(createProfileUpdatePayload(updatedUser));
+  await emitProfileUpdate(updatedUser);
 
   return updatedUser;
 };
@@ -138,6 +192,35 @@ export const updateUserChatTheme = async (
   if (!updatedUser) {
     throw new AppError("User profile was not found", 404, "USER_NOT_FOUND");
   }
+
+  return updatedUser;
+};
+
+export const updateUserPrivacySettings = async (
+  userId: string,
+  input: UpdatePrivacySettingsInput,
+) => {
+  const updatedUser = await User.findByIdAndUpdate(
+    userId,
+    {
+      $set: {
+        privacySettings: input,
+      },
+    },
+    {
+      new: true,
+      runValidators: true,
+    },
+  );
+
+  if (!updatedUser) {
+    throw new AppError("User profile was not found", 404, "USER_NOT_FOUND");
+  }
+
+  await Promise.all([
+    emitProfileUpdate(updatedUser),
+    emitPresenceVisibilityUpdate(updatedUser),
+  ]);
 
   return updatedUser;
 };
@@ -183,7 +266,7 @@ export const updateUserAvatar = async (
     );
   }
 
-  await emitProfileUpdate(createProfileUpdatePayload(user));
+  await emitProfileUpdate(user);
 
   return user;
 };
@@ -208,7 +291,7 @@ export const removeUserAvatar = async (userId: string) => {
     });
   }
 
-  await emitProfileUpdate(createProfileUpdatePayload(user));
+  await emitProfileUpdate(user);
 
   return user;
 };
@@ -218,7 +301,7 @@ export const getPublicUserProfile = async (
   currentUserId: string,
 ) => {
   const user = await User.findById(userId).select(
-    "name avatarUrl bio lastSeenAt createdAt updatedAt",
+    "name avatarUrl bio lastSeenAt createdAt updatedAt privacySettings",
   );
 
   if (!user) {
@@ -236,7 +319,10 @@ export const getPublicUserProfile = async (
   const access = await getDirectMessagingAccess(currentUserId, userId);
 
   return {
-    ...user.toJSON(),
+    ...createViewerSafeUser(
+      user.toJSON() as unknown as ProfileUpdateSource,
+      currentUserId,
+    ),
     ...access,
   };
 };

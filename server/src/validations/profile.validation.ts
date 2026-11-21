@@ -28,3 +28,13 @@ export const updateChatThemeSchema = z.object({
 });
 
 export type UpdateChatThemeInput = z.infer<typeof updateChatThemeSchema>;
+
+export const updatePrivacySettingsSchema = z.object({
+  profilePhotoVisibility: z.enum(["everyone", "nobody"]),
+  lastSeenVisibility: z.enum(["everyone", "nobody"]),
+  readReceipts: z.boolean(),
+});
+
+export type UpdatePrivacySettingsInput = z.infer<
+  typeof updatePrivacySettingsSchema
+>;

@@ -13,7 +13,10 @@ import {
 } from "../services/call-history.service";
 import { verifyAccessToken, verifySocketToken } from "../utils/auth-tokens";
 import { User } from "../models/user.model";
-import { getDirectMessagingAccess } from "../services/user.service";
+import {
+  canViewPresence,
+  getDirectMessagingAccess,
+} from "../services/user.service";
 
 interface SocketResult {
   success: boolean;
@@ -142,6 +145,7 @@ interface ServerToClientEvents {
       name: string;
       avatarUrl: string | null;
       bio: string;
+      lastSeenAt: string | null;
       updatedAt: string;
     };
   }) => void;
@@ -293,6 +297,48 @@ export const initializeSocketServer = (
    * This supports multiple tabs and devices.
    */
   const connectedUserCounts = new Map<string, number>();
+
+  const getVisibleOnlineUserIds = async (
+    viewerId: string,
+  ): Promise<string[]> => {
+    const onlineUserIds = Array.from(connectedUserCounts.keys());
+
+    if (onlineUserIds.length === 0) {
+      return [];
+    }
+
+    const users = await User.find({
+      _id: {
+        $in: onlineUserIds,
+      },
+    })
+      .select("_id privacySettings")
+      .lean();
+
+    return users
+      .filter((user) => canViewPresence(user, viewerId))
+      .map((user) => user._id.toString());
+  };
+
+  const emitPresenceUpdateIfVisible = async (
+    userId: string,
+    isOnline: boolean,
+    lastSeenAt: string | null,
+  ): Promise<void> => {
+    const user = await User.findById(userId)
+      .select("_id privacySettings")
+      .lean();
+
+    if (!user || !canViewPresence(user)) {
+      return;
+    }
+
+    io.emit("presence:update", {
+      userId,
+      isOnline,
+      lastSeenAt,
+    });
+  };
   const activeCalls = new Map<string, ActiveAudioCall>();
   const activeCallByUserId = new Map<string, string>();
 
@@ -404,19 +450,21 @@ export const initializeSocketServer = (
      * Give the newly connected browser the complete list
      * of users who are currently online.
      */
-    socket.emit("presence:snapshot", {
-      onlineUserIds: Array.from(connectedUserCounts.keys()),
-    });
+    void getVisibleOnlineUserIds(userId)
+      .then((onlineUserIds) => {
+        socket.emit("presence:snapshot", { onlineUserIds });
+      })
+      .catch((error) => {
+        console.error("Could not create presence snapshot:", error);
+      });
 
     /**
      * Only announce online status when this is the user's
      * first active socket.
      */
     if (previousConnectionCount === 0) {
-      io.emit("presence:update", {
-        userId,
-        isOnline: true,
-        lastSeenAt: null,
+      void emitPresenceUpdateIfVisible(userId, true, null).catch((error) => {
+        console.error("Could not announce online status:", error);
       });
     }
 
@@ -971,17 +1019,31 @@ export const initializeSocketServer = (
 
       const lastSeenAt = new Date();
 
-      io.emit("presence:update", {
+      void User.findByIdAndUpdate(
         userId,
-        isOnline: false,
-        lastSeenAt: lastSeenAt.toISOString(),
-      });
+        {
+          lastSeenAt,
+        },
+        {
+          new: true,
+        },
+      )
+        .select("_id privacySettings")
+        .lean()
+        .then((user) => {
+          if (!user || !canViewPresence(user)) {
+            return;
+          }
 
-      void User.findByIdAndUpdate(userId, {
-        lastSeenAt,
-      }).catch((error) => {
-        console.error(`Could not update last seen for user ${userId}:`, error);
-      });
+          io.emit("presence:update", {
+            userId,
+            isOnline: false,
+            lastSeenAt: lastSeenAt.toISOString(),
+          });
+        })
+        .catch((error) => {
+          console.error(`Could not update last seen for user ${userId}:`, error);
+        });
     });
   });
 

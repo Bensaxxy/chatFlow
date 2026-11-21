@@ -25,6 +25,30 @@ const chatThemeSchema = new Schema(
   },
 );
 
+const privacySettingsSchema = new Schema(
+  {
+    profilePhotoVisibility: {
+      type: String,
+      enum: ["everyone", "nobody"],
+      default: "everyone",
+    },
+
+    lastSeenVisibility: {
+      type: String,
+      enum: ["everyone", "nobody"],
+      default: "everyone",
+    },
+
+    readReceipts: {
+      type: Boolean,
+      default: true,
+    },
+  },
+  {
+    _id: false,
+  },
+);
+
 const userSchema = new Schema(
   {
     name: {
@@ -105,6 +129,11 @@ const userSchema = new Schema(
 
     chatTheme: {
       type: chatThemeSchema,
+      default: () => ({}),
+    },
+
+    privacySettings: {
+      type: privacySettingsSchema,
       default: () => ({}),
     },
 

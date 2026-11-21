@@ -30,6 +30,7 @@ export interface RealtimeUserProfile {
   name: string;
   avatarUrl: string | null;
   bio: string;
+  lastSeenAt: string | null;
   updatedAt: string;
 }
 

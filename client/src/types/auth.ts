@@ -1,4 +1,5 @@
 import type { ChatThemeSettings } from "@/types/chat-theme";
+import type { PrivacySettings } from "@/types/privacy";
 
 export interface AuthUser {
   _id: string;
@@ -7,6 +8,7 @@ export interface AuthUser {
   avatarUrl: string | null;
   bio: string;
   chatTheme: ChatThemeSettings;
+  privacySettings: PrivacySettings;
   lastSeenAt: string | null;
   isEmailVerified: boolean;
   emailVerifiedAt: string | null;

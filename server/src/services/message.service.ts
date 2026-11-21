@@ -10,6 +10,7 @@ import {
 } from "../config/cloudinary";
 import { Conversation } from "../models/conversation.model";
 import { Message } from "../models/message.model";
+import { User } from "../models/user.model";
 import { getSocketServer } from "../socket/socket.server";
 import { AppError } from "../utils/app-error";
 import {
@@ -21,7 +22,11 @@ import {
   resolveLinkPreview,
   type StoredLinkPreview,
 } from "./link-preview.service";
-import { assertDirectMessagingAllowed } from "./user.service";
+import {
+  assertDirectMessagingAllowed,
+  createViewerSafeUser,
+  getPrivacySettings,
+} from "./user.service";
 import type {
   DeleteMessageInput,
   EditMessageInput,
@@ -33,7 +38,103 @@ import type {
   UpdateMessageReactionInput,
 } from "../validations/message.validation";
 
-const senderFields = "name email avatarUrl";
+const senderFields = "name email avatarUrl privacySettings";
+
+const asRecord = (value: unknown): Record<string, unknown> | null =>
+  typeof value === "object" && value !== null
+    ? (value as Record<string, unknown>)
+    : null;
+
+const sanitizeMessageForViewer = (
+  message: unknown,
+  viewerId: string,
+  hiddenReadReceiptUserIds = new Set<string>(),
+): unknown => {
+  const messageRecord = asRecord(message);
+
+  if (!messageRecord) {
+    return message;
+  }
+
+  const sender = asRecord(messageRecord.sender);
+  const replyTo = asRecord(messageRecord.replyTo);
+  const replySender = replyTo ? asRecord(replyTo.sender) : null;
+
+  return {
+    ...messageRecord,
+    sender: sender
+      ? createViewerSafeUser(
+          sender as unknown as Parameters<typeof createViewerSafeUser>[0],
+          viewerId,
+        )
+      : messageRecord.sender,
+    replyTo: replyTo
+      ? {
+          ...replyTo,
+          sender: replySender
+            ? createViewerSafeUser(
+                replySender as unknown as Parameters<typeof createViewerSafeUser>[0],
+                viewerId,
+              )
+            : replyTo.sender,
+        }
+      : messageRecord.replyTo,
+    readBy: Array.isArray(messageRecord.readBy)
+      ? messageRecord.readBy.filter((readerId) => {
+          const normalizedReaderId = String(readerId);
+
+          return (
+            normalizedReaderId === viewerId ||
+            !hiddenReadReceiptUserIds.has(normalizedReaderId)
+          );
+        })
+      : messageRecord.readBy,
+  };
+};
+
+const sanitizeMessagesForViewer = async (
+  messages: unknown[],
+  viewerId: string,
+): Promise<unknown[]> => {
+  const readerIds = new Set<string>();
+
+  for (const message of messages) {
+    const readBy = asRecord(message)?.readBy;
+
+    if (!Array.isArray(readBy)) {
+      continue;
+    }
+
+    for (const readerId of readBy) {
+      const normalizedReaderId = String(readerId);
+
+      if (normalizedReaderId !== viewerId) {
+        readerIds.add(normalizedReaderId);
+      }
+    }
+  }
+
+  const hiddenReadReceiptUserIds = new Set<string>();
+
+  if (readerIds.size > 0) {
+    const usersWithHiddenReadReceipts = await User.find({
+      _id: {
+        $in: [...readerIds],
+      },
+      "privacySettings.readReceipts": false,
+    })
+      .select("_id")
+      .lean();
+
+    for (const user of usersWithHiddenReadReceipts) {
+      hiddenReadReceiptUserIds.add(user._id.toString());
+    }
+  }
+
+  return messages.map((message) =>
+    sanitizeMessageForViewer(message, viewerId, hiddenReadReceiptUserIds),
+  );
+};
 
 const replyMessageFields =
   "content type attachment linkPreview sender isForwarded deletedFor " +
@@ -304,7 +405,10 @@ const scheduleLinkPreviewResolution = (
       for (const participantId of conversation.participants) {
         io.to(`user:${participantId.toString()}`).emit("message:updated", {
           conversationId,
-          message: realtimeMessage,
+          message: sanitizeMessageForViewer(
+            realtimeMessage,
+            participantId.toString(),
+          ),
         });
       }
     })
@@ -409,14 +513,19 @@ const createRealtimeMessage = async ({
 
   const realtimeMessage = message.toJSON();
 
-  io.to(`conversation:${conversationId}`).emit("message:new", {
-    message: realtimeMessage,
-  });
-
   for (const participantId of participantIds) {
+    const viewerMessage = sanitizeMessageForViewer(
+      realtimeMessage,
+      participantId,
+    );
+
+    io.to(`user:${participantId}`).emit("message:new", {
+      message: viewerMessage,
+    });
+
     io.to(`user:${participantId}`).emit("conversation:updated", {
       conversationId,
-      message: realtimeMessage,
+      message: viewerMessage,
       updatedAt: message.createdAt.toISOString(),
       incrementUnread: participantId !== senderId,
     });
@@ -765,7 +874,7 @@ export const getConversationMessages = async (
   messages.reverse();
 
   return {
-    messages,
+    messages: await sanitizeMessagesForViewer(messages, currentUserId),
     nextCursor,
     hasMore,
   };
@@ -851,7 +960,7 @@ export const getConversationMedia = async (
   const oldestMessage = messages[messages.length - 1];
 
   return {
-    messages,
+    messages: await sanitizeMessagesForViewer(messages, currentUserId),
     nextCursor:
       hasMore && oldestMessage ? oldestMessage._id.toString() : null,
     hasMore,
@@ -924,7 +1033,10 @@ export const getMessageContext = async (
   messagesBefore.reverse();
 
   return {
-    messages: [...messagesBefore, targetMessage, ...messagesAfter],
+    messages: await sanitizeMessagesForViewer(
+      [...messagesBefore, targetMessage, ...messagesAfter],
+      currentUserId,
+    ),
   };
 };
 
@@ -956,15 +1068,26 @@ export const markConversationAsRead = async (
   ]);
 
   const readAt = new Date().toISOString();
-  const io = getSocketServer();
+  const reader = await User.findById(currentUserId)
+    .select("privacySettings")
+    .lean();
 
-  io.to(`conversation:${conversationId}`)
-    .to(`user:${currentUserId}`)
-    .emit("conversation:read", {
+  if (reader) {
+    const io = getSocketServer();
+    const payload = {
       conversationId,
       userId: currentUserId,
       readAt,
-    });
+    };
+
+    if (getPrivacySettings(reader.privacySettings).readReceipts) {
+      io.to(`conversation:${conversationId}`)
+        .to(`user:${currentUserId}`)
+        .emit("conversation:read", payload);
+    } else {
+      io.to(`user:${currentUserId}`).emit("conversation:read", payload);
+    }
+  }
 
   return {
     markedCount: result.modifiedCount,
@@ -1121,7 +1244,7 @@ export const editMessage = async (
   for (const participantId of conversation.participants) {
     io.to(`user:${participantId.toString()}`).emit("message:updated", {
       conversationId,
-      message: realtimeMessage,
+      message: sanitizeMessageForViewer(realtimeMessage, participantId.toString()),
     });
   }
 
@@ -1210,7 +1333,7 @@ export const updateMessageReaction = async (
   for (const participantId of conversation.participants) {
     io.to(`user:${participantId.toString()}`).emit("message:updated", {
       conversationId,
-      message: realtimeMessage,
+      message: sanitizeMessageForViewer(realtimeMessage, participantId.toString()),
     });
   }
 

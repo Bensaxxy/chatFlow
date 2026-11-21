@@ -45,12 +45,12 @@ const formatJoinedDate = (value: string): string => {
 };
 
 const formatLastSeen = (value: string | null): string => {
-  if (!value) return "Offline";
+  if (!value) return "Last seen unavailable";
 
   const lastSeenDate = new Date(value);
 
   if (Number.isNaN(lastSeenDate.getTime())) {
-    return "Offline";
+    return "Last seen unavailable";
   }
 
   const now = new Date();
@@ -90,7 +90,7 @@ export default function PublicProfilePage() {
 
   const { user: currentUser } = useAuth();
 
-  const { onlineUserIds, lastSeenByUser } = useSocket();
+  const { onlineUserIds, lastSeenByUser, updatedProfiles } = useSocket();
 
   const userId = params.userId;
 
@@ -245,7 +245,11 @@ export default function PublicProfilePage() {
 
   const isOnline = !isOwnProfile && onlineUserIds.has(profile._id);
 
-  const lastSeenAt = lastSeenByUser.get(profile._id) ?? profile.lastSeenAt;
+  const updatedProfile = updatedProfiles.get(profile._id);
+
+  const lastSeenAt = updatedProfile
+    ? updatedProfile.lastSeenAt
+    : (lastSeenByUser.get(profile._id) ?? profile.lastSeenAt);
 
   const isMessagingUnavailable = !isOwnProfile && profile.canMessage === false;
 
@@ -289,7 +293,11 @@ export default function PublicProfilePage() {
                 <div className="relative">
                   <UserAvatar
                     name={profile.name}
-                    avatarUrl={profile.avatarUrl}
+                    avatarUrl={
+                      updatedProfile
+                        ? updatedProfile.avatarUrl
+                        : profile.avatarUrl
+                    }
                     className="h-28 w-28 border-4 border-white text-2xl shadow-xl sm:h-32 sm:w-32 sm:text-3xl"
                     fallbackClassName="bg-cyan-100 font-bold text-cyan-800"
                   />

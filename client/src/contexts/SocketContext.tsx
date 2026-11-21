@@ -110,17 +110,17 @@ export function SocketProvider({ children }: SocketProviderProps) {
         return nextOnlineUsers;
       });
 
-      if (payload.lastSeenAt) {
-        const lastSeenAt = payload.lastSeenAt;
+      setLastSeenByUser((currentLastSeen) => {
+        const nextLastSeen = new Map(currentLastSeen);
 
-        setLastSeenByUser((currentLastSeen) => {
-          const nextLastSeen = new Map(currentLastSeen);
+        if (payload.lastSeenAt) {
+          nextLastSeen.set(payload.userId, payload.lastSeenAt);
+        } else {
+          nextLastSeen.delete(payload.userId);
+        }
 
-          nextLastSeen.set(payload.userId, lastSeenAt);
-
-          return nextLastSeen;
-        });
-      }
+        return nextLastSeen;
+      });
     };
 
     const handleProfileUpdated = (payload: UserProfileUpdatedPayload): void => {

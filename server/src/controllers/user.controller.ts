@@ -6,6 +6,7 @@ import {
   removeUserAvatar,
   updateUserAvatar,
   updateUserChatTheme,
+  updateUserPrivacySettings,
   updateUserProfile,
 } from "../services/profile.service";
 import {
@@ -17,6 +18,7 @@ import { AppError } from "../utils/app-error";
 import { asyncHandler } from "../utils/async-handler";
 import type {
   UpdateChatThemeInput,
+  UpdatePrivacySettingsInput,
   UpdateProfileInput,
 } from "../validations/profile.validation";
 import { searchUsersSchema } from "../validations/user.validation";
@@ -93,6 +95,24 @@ export const updateMyChatTheme: RequestHandler = asyncHandler(
     response.status(200).json({
       success: true,
       message: "Chat theme updated successfully",
+      data: {
+        user,
+      },
+    });
+  },
+);
+
+export const updateMyPrivacySettings: RequestHandler = asyncHandler(
+  async (request, response) => {
+    const currentUserId = getAuthenticatedUserId(request.auth?.userId);
+
+    const input = request.body as UpdatePrivacySettingsInput;
+
+    const user = await updateUserPrivacySettings(currentUserId, input);
+
+    response.status(200).json({
+      success: true,
+      message: "Privacy settings updated successfully",
       data: {
         user,
       },

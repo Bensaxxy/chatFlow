@@ -9,6 +9,7 @@ import {
   unblock,
   updateMyAvatar,
   updateMyChatTheme,
+  updateMyPrivacySettings,
   updateMyProfile,
 } from "../controllers/user.controller";
 import { authenticate } from "../middleware/auth.middleware";
@@ -16,6 +17,7 @@ import { uploadAvatarImage } from "../middleware/avatar-upload.middleware";
 import { validateBody } from "../middleware/validate.middleware";
 import {
   updateChatThemeSchema,
+  updatePrivacySettingsSchema,
   updateProfileSchema,
 } from "../validations/profile.validation";
 
@@ -37,6 +39,13 @@ userRouter.patch(
   authenticate,
   validateBody(updateChatThemeSchema),
   updateMyChatTheme,
+);
+
+userRouter.patch(
+  "/me/privacy",
+  authenticate,
+  validateBody(updatePrivacySettingsSchema),
+  updateMyPrivacySettings,
 );
 
 userRouter.patch("/me/avatar", authenticate, uploadAvatarImage, updateMyAvatar);

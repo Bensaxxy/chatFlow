@@ -24,6 +24,7 @@ interface ConversationMessageListProps {
   showFloatingDate: boolean;
   floatingDate: string;
   showScrollToBottom: boolean;
+  newMessagesBelowCount: number;
   highlightedMessageId: string | null;
   openMessageMenuId: string | null;
   reactionPickerMessageId: string | null;
@@ -98,6 +99,7 @@ export default function ConversationMessageList({
   showFloatingDate,
   floatingDate,
   showScrollToBottom,
+  newMessagesBelowCount,
   highlightedMessageId,
   openMessageMenuId,
   reactionPickerMessageId,
@@ -248,6 +250,11 @@ export default function ConversationMessageList({
           className="absolute bottom-5 right-5 z-20 flex h-11 w-11 items-center justify-center rounded-full bg-[var(--chat-sent)] text-white shadow-lg transition hover:bg-[var(--chat-sent-hover)] focus:outline-none focus:ring-4 focus:ring-[var(--chat-accent-soft)]"
         >
           <ArrowDown className="h-5 w-5" />
+          {newMessagesBelowCount > 0 && (
+            <span className="absolute -bottom-1 -right-1 flex min-h-5 min-w-5 items-center justify-center rounded-full bg-[var(--chat-control)] px-1 text-[10px] font-bold text-[var(--chat-accent)] shadow-sm ring-1 ring-[var(--chat-border)]">
+              {newMessagesBelowCount > 99 ? "99+" : newMessagesBelowCount}
+            </span>
+          )}
         </button>
       )}
     </div>

@@ -11,11 +11,62 @@ import {
   setConversationPinned,
   type ConversationPreferences,
 } from "./conversation-preference.service";
-import { getDirectMessagingAccess } from "./user.service";
+import {
+  createViewerSafeUser,
+  getDirectMessagingAccess,
+} from "./user.service";
 import "../models/message.model";
 import { Message } from "../models/message.model";
 
-const participantFields = "name email avatarUrl bio lastSeenAt";
+const participantFields = "name email avatarUrl bio lastSeenAt privacySettings";
+
+const asRecord = (value: unknown): Record<string, unknown> | null =>
+  typeof value === "object" && value !== null
+    ? (value as Record<string, unknown>)
+    : null;
+
+const sanitizeMessageSenderForViewer = (
+  message: unknown,
+  viewerId: string,
+): unknown => {
+  const messageRecord = asRecord(message);
+
+  if (!messageRecord) {
+    return message;
+  }
+
+  const sender = asRecord(messageRecord.sender);
+
+  return {
+    ...messageRecord,
+    sender: sender
+      ? createViewerSafeUser(
+          sender as unknown as Parameters<typeof createViewerSafeUser>[0],
+          viewerId,
+        )
+      : messageRecord.sender,
+  };
+};
+
+const sanitizeConversationForViewer = (
+  conversation: Record<string, unknown>,
+  viewerId: string,
+): Record<string, unknown> => ({
+  ...conversation,
+  participants: Array.isArray(conversation.participants)
+    ? conversation.participants.map((participant) => {
+        const participantRecord = asRecord(participant);
+
+        return participantRecord
+          ? createViewerSafeUser(
+              participantRecord as unknown as Parameters<typeof createViewerSafeUser>[0],
+              viewerId,
+            )
+          : participant;
+      })
+    : conversation.participants,
+  lastMessage: sanitizeMessageSenderForViewer(conversation.lastMessage, viewerId),
+});
 
 const getDirectKey = (firstUserId: string, secondUserId: string): string => {
   return [firstUserId, secondUserId].sort().join(":");
@@ -271,12 +322,19 @@ export const getUserConversations = async (currentUserId: string) => {
 
       const conversationJson = conversation.toJSON() as Record<string, unknown>;
 
+      const visibleConversation = sanitizeConversationForViewer(
+        {
+          ...conversationJson,
+          lastMessage: getVisibleLastMessage(
+            conversationJson.lastMessage,
+            preferences,
+          ),
+        },
+        currentUserId,
+      );
+
       return {
-        ...conversationJson,
-        lastMessage: getVisibleLastMessage(
-          conversationJson.lastMessage,
-          preferences,
-        ),
+        ...visibleConversation,
         directMessagingAccess,
         unreadCount: preferences.isMarkedUnread
           ? Math.max(1, unreadCount)
@@ -346,9 +404,16 @@ export const getConversationById = async (
   );
   const conversationJson = conversation.toJSON() as Record<string, unknown>;
 
+  const visibleConversation = sanitizeConversationForViewer(
+    {
+      ...conversationJson,
+      lastMessage: getVisibleLastMessage(conversationJson.lastMessage, preferences),
+    },
+    currentUserId,
+  );
+
   return {
-    ...conversationJson,
-    lastMessage: getVisibleLastMessage(conversationJson.lastMessage, preferences),
+    ...visibleConversation,
     directMessagingAccess,
     isPinned: preferences.isPinned,
     isMarkedUnread: preferences.isMarkedUnread,
