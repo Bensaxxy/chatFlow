@@ -70,6 +70,12 @@ const envSchema = z.object({
 
   EMAIL_FROM: z.string().min(1, "EMAIL_FROM is required"),
 
+  /*
+   * Render free services cannot open outbound SMTP connections. When this is
+   * configured, transactional messages are sent through Brevo over HTTPS.
+   */
+  BREVO_API_KEY: z.string().min(1).optional(),
+
   EMAIL_VERIFICATION_SECRET: z
     .string()
     .min(32, "EMAIL_VERIFICATION_SECRET must contain at least 32 characters"),

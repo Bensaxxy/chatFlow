@@ -3,15 +3,15 @@ import { createServer, type Server } from "node:http";
 import app from "./app";
 import { connectDatabase, disconnectDatabase } from "./config/database";
 import { env } from "./config/env";
-import { verifyEmailTransport } from "./services/email.service";
+import { verifyEmailDeliveryProvider } from "./services/email.service";
 import { initializeSocketServer } from "./socket/socket.server";
 
 let server: Server | undefined;
 
 const checkEmailTransport = async (): Promise<void> => {
   try {
-    await verifyEmailTransport();
-    console.log("SMTP connection verified successfully.");
+    const provider = await verifyEmailDeliveryProvider();
+    console.log(`Email delivery provider is ready (${provider}).`);
   } catch (error) {
     const code =
       error && typeof error === "object" && "code" in error
