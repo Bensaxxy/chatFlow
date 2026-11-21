@@ -1,6 +1,13 @@
 "use client";
 
-import { Eye, EyeOff, KeyRound, LoaderCircle, LockKeyhole } from "lucide-react";
+import {
+  ChevronDown,
+  Eye,
+  EyeOff,
+  KeyRound,
+  LoaderCircle,
+  LockKeyhole,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { toast } from "react-toastify";
@@ -26,6 +33,8 @@ export default function ChangePasswordForm() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const [isExpanded, setIsExpanded] = useState(false);
 
   const newPasswordIsValid =
     newPassword.length >= 8 && newPassword.length <= 72;
@@ -72,30 +81,47 @@ export default function ChangePasswordForm() {
   };
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
-    >
-      <div className="flex items-start gap-3 border-b border-slate-200 px-5 py-5 sm:px-7">
-        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-cyan-100 text-cyan-700">
+    <section className="overflow-hidden rounded-2xl border border-[var(--chat-border)] bg-[var(--chat-surface)] shadow-sm">
+      <button
+        type="button"
+        aria-expanded={isExpanded}
+        aria-controls="change-password-content"
+        onClick={() => setIsExpanded((current) => !current)}
+        className={`flex w-full items-start gap-3 px-5 py-5 text-left transition hover:bg-[var(--chat-hover)] sm:px-7 ${
+          isExpanded ? "border-b border-[var(--chat-border)]" : ""
+        }`}
+      >
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--chat-accent-soft)] text-[var(--chat-accent)]">
           <KeyRound className="h-5 w-5" />
         </span>
 
-        <div>
-          <h2 className="font-semibold text-slate-950">Change password</h2>
+        <div className="min-w-0 flex-1">
+          <span className="flex items-center gap-2">
+            <span className="font-semibold text-[var(--chat-text)]">Change password</span>
+            {isSubmitting && (
+              <LoaderCircle className="h-4 w-4 animate-spin text-[var(--chat-accent)]" />
+            )}
+          </span>
 
-          <p className="mt-1 text-sm leading-5 text-slate-500">
+          <span className="mt-1 block text-sm leading-6 text-[var(--chat-muted)]">
             Update your account password. You will need to sign in again after
             changing it.
-          </p>
+          </span>
         </div>
-      </div>
+        <ChevronDown
+          className={`mt-2 h-5 w-5 shrink-0 text-[var(--chat-muted)] transition-transform ${
+            isExpanded ? "rotate-180" : ""
+          }`}
+        />
+      </button>
 
-      <div className="space-y-5 p-5 sm:p-7">
+      {isExpanded && (
+        <form id="change-password-content" onSubmit={handleSubmit}>
+          <div className="space-y-5 p-5 sm:p-7">
         <div>
           <label
             htmlFor="current-password"
-            className="mb-2 block text-sm font-semibold text-slate-700"
+            className="mb-2 block text-sm font-semibold text-[var(--chat-text)]"
           >
             Current password
           </label>
@@ -110,7 +136,7 @@ export default function ChangePasswordForm() {
               onChange={(event) => setCurrentPassword(event.target.value)}
               autoComplete="current-password"
               required
-              className="w-full rounded-xl border border-slate-300 bg-white py-3 pl-11 pr-12 text-sm text-slate-900 outline-none transition focus:border-cyan-500 focus:ring-4 focus:ring-cyan-100"
+              className="w-full rounded-xl border border-[var(--chat-border)] bg-[var(--chat-control)] py-3 pl-11 pr-12 text-sm text-[var(--chat-text)] outline-none transition focus:border-[var(--chat-accent)] focus:ring-4 focus:ring-[var(--chat-accent-soft)]"
             />
 
             <button
@@ -121,7 +147,7 @@ export default function ChangePasswordForm() {
                   ? "Hide current password"
                   : "Show current password"
               }
-              className="absolute right-3 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+              className="absolute right-3 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-[var(--chat-muted)] transition hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]"
             >
               {showCurrentPassword ? (
                 <EyeOff className="h-4 w-4" />
@@ -135,7 +161,7 @@ export default function ChangePasswordForm() {
         <div>
           <label
             htmlFor="new-password"
-            className="mb-2 block text-sm font-semibold text-slate-700"
+            className="mb-2 block text-sm font-semibold text-[var(--chat-text)]"
           >
             New password
           </label>
@@ -152,7 +178,7 @@ export default function ChangePasswordForm() {
               maxLength={72}
               autoComplete="new-password"
               required
-              className="w-full rounded-xl border border-slate-300 bg-white py-3 pl-11 pr-12 text-sm text-slate-900 outline-none transition focus:border-cyan-500 focus:ring-4 focus:ring-cyan-100"
+              className="w-full rounded-xl border border-[var(--chat-border)] bg-[var(--chat-control)] py-3 pl-11 pr-12 text-sm text-[var(--chat-text)] outline-none transition focus:border-[var(--chat-accent)] focus:ring-4 focus:ring-[var(--chat-accent-soft)]"
             />
 
             <button
@@ -161,7 +187,7 @@ export default function ChangePasswordForm() {
               aria-label={
                 showNewPassword ? "Hide new password" : "Show new password"
               }
-              className="absolute right-3 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+              className="absolute right-3 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-[var(--chat-muted)] transition hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]"
             >
               {showNewPassword ? (
                 <EyeOff className="h-4 w-4" />
@@ -174,7 +200,7 @@ export default function ChangePasswordForm() {
           <p
             className={`mt-1.5 text-xs ${
               newPassword.length === 0 || newPasswordIsValid
-                ? "text-slate-500"
+                ? "text-[var(--chat-muted)]"
                 : "text-red-600"
             }`}
           >
@@ -191,7 +217,7 @@ export default function ChangePasswordForm() {
         <div>
           <label
             htmlFor="confirm-password"
-            className="mb-2 block text-sm font-semibold text-slate-700"
+            className="mb-2 block text-sm font-semibold text-[var(--chat-text)]"
           >
             Confirm new password
           </label>
@@ -206,7 +232,7 @@ export default function ChangePasswordForm() {
               onChange={(event) => setConfirmPassword(event.target.value)}
               autoComplete="new-password"
               required
-              className="w-full rounded-xl border border-slate-300 bg-white py-3 pl-11 pr-12 text-sm text-slate-900 outline-none transition focus:border-cyan-500 focus:ring-4 focus:ring-cyan-100"
+              className="w-full rounded-xl border border-[var(--chat-border)] bg-[var(--chat-control)] py-3 pl-11 pr-12 text-sm text-[var(--chat-text)] outline-none transition focus:border-[var(--chat-accent)] focus:ring-4 focus:ring-[var(--chat-accent-soft)]"
             />
 
             <button
@@ -217,7 +243,7 @@ export default function ChangePasswordForm() {
                   ? "Hide password confirmation"
                   : "Show password confirmation"
               }
-              className="absolute right-3 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+              className="absolute right-3 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-[var(--chat-muted)] transition hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]"
             >
               {showConfirmPassword ? (
                 <EyeOff className="h-4 w-4" />
@@ -233,27 +259,29 @@ export default function ChangePasswordForm() {
             </p>
           )}
         </div>
-      </div>
+          </div>
 
-      <div className="flex justify-end border-t border-slate-200 bg-slate-50 px-5 py-4 sm:px-7">
-        <button
-          type="submit"
-          disabled={!formIsValid || isSubmitting}
-          className="inline-flex min-w-40 items-center justify-center gap-2 rounded-xl bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {isSubmitting ? (
-            <>
-              <LoaderCircle className="h-4 w-4 animate-spin" />
-              Updating...
-            </>
-          ) : (
-            <>
-              <KeyRound className="h-4 w-4" />
-              Change password
-            </>
-          )}
-        </button>
-      </div>
-    </form>
+          <div className="flex justify-end border-t border-[var(--chat-border)] bg-[var(--chat-canvas)] px-5 py-4 sm:px-7">
+            <button
+              type="submit"
+              disabled={!formIsValid || isSubmitting}
+              className="inline-flex min-w-40 items-center justify-center gap-2 rounded-xl bg-[var(--chat-sent)] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[var(--chat-sent-hover)] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isSubmitting ? (
+                <>
+                  <LoaderCircle className="h-4 w-4 animate-spin" />
+                  Updating...
+                </>
+              ) : (
+                <>
+                  <KeyRound className="h-4 w-4" />
+                  Change password
+                </>
+              )}
+            </button>
+          </div>
+        </form>
+      )}
+    </section>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { LoaderCircle, Play, Vibrate, Volume2 } from "lucide-react";
+import { ChevronDown, LoaderCircle, Play, Vibrate, Volume2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "react-toastify";
 
@@ -27,6 +27,7 @@ const getSettings = (
 export default function MessageAlertSettings() {
   const { user, updateNotificationSettings } = useAuth();
   const [isSaving, setIsSaving] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
 
   if (!user) {
     return null;
@@ -57,7 +58,15 @@ export default function MessageAlertSettings() {
 
   return (
     <section className="overflow-hidden rounded-2xl border border-[var(--chat-border)] bg-[var(--chat-surface)] shadow-sm">
-      <div className="flex items-start gap-3 border-b border-[var(--chat-border)] px-5 py-5 sm:px-7">
+      <button
+        type="button"
+        aria-expanded={isExpanded}
+        aria-controls="message-alert-settings-content"
+        onClick={() => setIsExpanded((current) => !current)}
+        className={`flex w-full items-start gap-3 px-5 py-5 text-left transition hover:bg-[var(--chat-hover)] sm:px-7 ${
+          isExpanded ? "border-b border-[var(--chat-border)]" : ""
+        }`}
+      >
         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--chat-accent-soft)] text-[var(--chat-accent)]">
           <Volume2 className="h-5 w-5" />
         </span>
@@ -74,9 +83,15 @@ export default function MessageAlertSettings() {
             Choose how incoming messages notify you while ChatFlow is open.
           </p>
         </div>
-      </div>
+        <ChevronDown
+          className={`mt-2 h-5 w-5 shrink-0 text-[var(--chat-muted)] transition-transform ${
+            isExpanded ? "rotate-180" : ""
+          }`}
+        />
+      </button>
 
-      <div className="space-y-5 p-5 sm:p-7">
+      {isExpanded && (
+        <div id="message-alert-settings-content" className="space-y-5 p-5 sm:p-7">
         <div>
           <label
             htmlFor="message-sound"
@@ -105,7 +120,12 @@ export default function MessageAlertSettings() {
 
             <button
               type="button"
-              onClick={() => playMessageFeedback({ sound: settings.messageSound, vibration: settings.vibration })}
+              onClick={() =>
+                playMessageFeedback({
+                  sound: settings.messageSound,
+                  vibration: settings.vibration,
+                })
+              }
               disabled={isSaving || settings.messageSound === "none"}
               className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-[var(--chat-border)] bg-[var(--chat-control)] text-[var(--chat-accent)] transition hover:bg-[var(--chat-accent-soft)] disabled:cursor-not-allowed disabled:opacity-50"
               aria-label="Preview alert sound"
@@ -149,7 +169,8 @@ export default function MessageAlertSettings() {
             />
           </button>
         </div>
-      </div>
+        </div>
+      )}
     </section>
   );
 }
