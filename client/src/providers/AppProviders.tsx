@@ -8,6 +8,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { AudioCallProvider } from "@/contexts/AudioCallContext";
 import { ChatThemeProvider } from "@/contexts/ChatThemeContext";
 import { SocketProvider } from "@/contexts/SocketContext";
+import MessageNotificationFeedback from "@/components/shared/MessageNotificationFeedback";
 
 interface AppProvidersProps {
   children: ReactNode;
@@ -19,6 +20,7 @@ export default function AppProviders({ children }: AppProvidersProps) {
       <ChatThemeProvider>
         <SocketProvider>
           <AudioCallProvider>{children}</AudioCallProvider>
+          <MessageNotificationFeedback />
 
           <ToastContainer
             position="top-right"

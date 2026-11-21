@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="chatflow-gradient" x1="10" y1="8" x2="55" y2="58" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#67E8F9"/>
+      <stop offset="0.52" stop-color="#22D3EE"/>
+      <stop offset="1" stop-color="#2563EB"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="18" fill="#071427"/>
+  <path d="M13 28.5C13 18.835 21.283 11 31.5 11S50 18.835 50 28.5 41.717 46 31.5 46c-2.25 0-4.405-.38-6.398-1.08L16 50l2.045-8.197C14.89 38.615 13 33.797 13 28.5Z" fill="url(#chatflow-gradient)"/>
+  <path d="M22 28.5h19M22 35h12" stroke="#071427" stroke-width="4" stroke-linecap="round"/>
+  <circle cx="22" cy="22" r="3" fill="white" fill-opacity=".95"/>
+</svg>

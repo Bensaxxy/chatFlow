@@ -55,6 +55,17 @@ const notificationSettingsSchema = new Schema(
       type: Boolean,
       default: true,
     },
+
+    messageSound: {
+      type: String,
+      enum: ["chime", "pulse", "pop", "none"],
+      default: "chime",
+    },
+
+    vibration: {
+      type: Boolean,
+      default: true,
+    },
   },
   {
     _id: false,

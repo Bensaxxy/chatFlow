@@ -35,6 +35,8 @@ export default function EmailNotificationSettings() {
 
       await updateNotificationSettings({
         emailNotifications: nextValue,
+        messageSound: user.notificationSettings?.messageSound ?? "chime",
+        vibration: user.notificationSettings?.vibration !== false,
       });
 
       toast.success(

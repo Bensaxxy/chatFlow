@@ -26,6 +26,7 @@ import ConfirmModal from "@/components/ui/ConfirmModal";
 import { getApiErrorMessage } from "@/lib/api/errors";
 import ChangePasswordForm from "@/components/profile/ChangePasswordForm";
 import EmailNotificationSettings from "@/components/profile/EmailNotificationSettings";
+import MessageAlertSettings from "@/components/profile/MessageAlertSettings";
 import PrivacySettings from "@/components/profile/PrivacySettings";
 import PushNotificationSettings from "@/components/profile/PushNotificationSettings";
 
@@ -414,6 +415,7 @@ export default function ProfilePage() {
           <aside className="space-y-6 lg:sticky lg:top-0">
             <PushNotificationSettings />
             <EmailNotificationSettings />
+            <MessageAlertSettings />
             <PrivacySettings />
             <ChangePasswordForm />
           </aside>

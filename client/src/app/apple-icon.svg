@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180" fill="none">
+  <defs>
+    <linearGradient id="chatflow-apple-gradient" x1="28" y1="20" x2="154" y2="165" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#67E8F9"/>
+      <stop offset="0.52" stop-color="#22D3EE"/>
+      <stop offset="1" stop-color="#2563EB"/>
+    </linearGradient>
+  </defs>
+  <rect width="180" height="180" rx="48" fill="#071427"/>
+  <path d="M36 81C36 52.005 60.85 28.5 91.5 28.5S147 52.005 147 81s-24.85 52.5-55.5 52.5c-6.75 0-13.215-1.14-19.195-3.24L45 145.5l6.135-24.59C41.67 111.345 36 96.89 36 81Z" fill="url(#chatflow-apple-gradient)"/>
+  <path d="M63 81h57M63 100.5h36" stroke="#071427" stroke-width="12" stroke-linecap="round"/>
+  <circle cx="63" cy="61.5" r="9" fill="white" fill-opacity=".95"/>
+</svg>

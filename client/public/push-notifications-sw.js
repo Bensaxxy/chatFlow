@@ -33,6 +33,7 @@ self.addEventListener("push", (event) => {
       await self.registration.showNotification(payload.title || "ChatFlow", {
         body: payload.body || "You have a new message.",
         tag: payload.tag || "chatflow-message",
+        vibrate: payload.vibrate === false ? undefined : [70, 45, 70],
         data: {
           url: payload.url || DEFAULT_URL,
         },

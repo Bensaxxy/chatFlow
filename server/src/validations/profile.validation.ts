@@ -41,6 +41,8 @@ export type UpdatePrivacySettingsInput = z.infer<
 
 export const updateNotificationSettingsSchema = z.object({
   emailNotifications: z.boolean(),
+  messageSound: z.enum(["chime", "pulse", "pop", "none"]),
+  vibration: z.boolean(),
 });
 
 export type UpdateNotificationSettingsInput = z.infer<

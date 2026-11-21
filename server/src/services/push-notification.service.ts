@@ -3,6 +3,7 @@ import type { PushSubscription as WebPushSubscription } from "web-push";
 
 import { env } from "../config/env";
 import { PushSubscription } from "../models/push-subscription.model";
+import { User } from "../models/user.model";
 import type {
   PushSubscriptionInput,
   RemovePushSubscriptionInput,
@@ -124,14 +125,19 @@ export const sendMessagePushNotifications = async ({
     return;
   }
 
-  const payload = JSON.stringify({
-    title: senderName,
-    body: getMessagePreview(content, messageType).slice(0, 240),
-    tag: `chatflow-message-${conversationId}`,
-    url: `${env.CLIENT_URL}/chats/${conversationId}`,
-    conversationId,
-    messageId,
-  });
+  const recipients = await User.find({
+    _id: {
+      $in: recipientIds,
+    },
+  })
+    .select("notificationSettings")
+    .lean();
+  const vibrationByUserId = new Map(
+    recipients.map((recipient) => [
+      recipient._id.toString(),
+      recipient.notificationSettings?.vibration !== false,
+    ]),
+  );
 
   await Promise.all(
     subscriptions.map(async (subscription) => {
@@ -153,6 +159,16 @@ export const sendMessagePushNotifications = async ({
           auth: keys.auth,
         },
       };
+
+      const payload = JSON.stringify({
+        title: senderName,
+        body: getMessagePreview(content, messageType).slice(0, 240),
+        tag: `chatflow-message-${conversationId}`,
+        url: `${env.CLIENT_URL}/chats/${conversationId}`,
+        conversationId,
+        messageId,
+        vibrate: vibrationByUserId.get(subscription.user.toString()) !== false,
+      });
 
       try {
         await webpush.sendNotification(webPushSubscription, payload, {
