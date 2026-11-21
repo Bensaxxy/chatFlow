@@ -1,6 +1,14 @@
 "use client";
 
-import { Check, CheckCheck, Eye, EyeOff, LoaderCircle, ShieldCheck } from "lucide-react";
+import {
+  Check,
+  CheckCheck,
+  ChevronDown,
+  Eye,
+  EyeOff,
+  LoaderCircle,
+  ShieldCheck,
+} from "lucide-react";
 import { useState } from "react";
 import { toast } from "react-toastify";
 
@@ -91,6 +99,10 @@ function VisibilitySetting({
 export default function PrivacySettings() {
   const { user, updatePrivacySettings } = useAuth();
   const [isSaving, setIsSaving] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [pendingReadReceipts, setPendingReadReceipts] = useState<
+    boolean | null
+  >(null);
 
   if (!user) {
     return null;
@@ -119,79 +131,130 @@ export default function PrivacySettings() {
     }
   };
 
+  const readReceiptsEnabled =
+    pendingReadReceipts ?? privacySettings.readReceipts;
+
+  const handleReadReceiptsToggle = async (): Promise<void> => {
+    if (isSaving) {
+      return;
+    }
+
+    const nextValue = !readReceiptsEnabled;
+
+    try {
+      // Update the control immediately, then restore the saved value if the request fails.
+      setPendingReadReceipts(nextValue);
+      setIsSaving(true);
+
+      await updatePrivacySettings({
+        ...privacySettings,
+        readReceipts: nextValue,
+      });
+
+      toast.success(`Read receipts ${nextValue ? "enabled" : "disabled"}`);
+    } catch (error) {
+      toast.error(getApiErrorMessage(error));
+    } finally {
+      setPendingReadReceipts(null);
+      setIsSaving(false);
+    }
+  };
+
   return (
     <section className="overflow-hidden rounded-2xl border border-[var(--chat-border)] bg-[var(--chat-surface)] shadow-sm">
-      <header className="flex items-start gap-3 border-b border-[var(--chat-border)] px-5 py-5 sm:px-7">
+      <button
+        type="button"
+        aria-expanded={isExpanded}
+        aria-controls="privacy-settings-content"
+        onClick={() => setIsExpanded((current) => !current)}
+        className={`flex w-full items-start gap-3 px-5 py-5 text-left transition hover:bg-[var(--chat-hover)] sm:px-7 ${
+          isExpanded ? "border-b border-[var(--chat-border)]" : ""
+        }`}
+      >
         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--chat-accent-soft)] text-[var(--chat-accent)]">
           <ShieldCheck className="h-5 w-5" />
         </span>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <h2 className="font-semibold text-[var(--chat-text)]">Privacy</h2>
+        <span className="min-w-0 flex-1">
+          <span className="flex items-center gap-2">
+            <span className="font-semibold text-[var(--chat-text)]">Privacy</span>
             {isSaving && <LoaderCircle className="h-4 w-4 animate-spin text-[var(--chat-accent)]" />}
-          </div>
-          <p className="mt-1 text-sm leading-6 text-[var(--chat-muted)]">
+          </span>
+          <span className="mt-1 block text-sm leading-6 text-[var(--chat-muted)]">
             Decide what other people can see about you.
-          </p>
-        </div>
-      </header>
-
-      <div className="space-y-7 p-5 sm:p-7">
-        <VisibilitySetting
-          title="Profile photo"
-          description="Choose who can see your profile photo across ChatFlow."
-          value={privacySettings.profilePhotoVisibility}
-          disabled={isSaving}
-          onChange={(profilePhotoVisibility) =>
-            void saveSettings({ profilePhotoVisibility })
-          }
+          </span>
+        </span>
+        <ChevronDown
+          className={`mt-2 h-5 w-5 shrink-0 text-[var(--chat-muted)] transition-transform ${
+            isExpanded ? "rotate-180" : ""
+          }`}
         />
+      </button>
 
-        <VisibilitySetting
-          title="Last seen and online"
-          description="This controls both your last seen time and live online status."
-          value={privacySettings.lastSeenVisibility}
-          disabled={isSaving}
-          onChange={(lastSeenVisibility) =>
-            void saveSettings({ lastSeenVisibility })
-          }
-        />
+      {isExpanded && (
+        <div id="privacy-settings-content" className="space-y-7 p-5 sm:p-7">
+          <VisibilitySetting
+            title="Profile photo"
+            description="Choose who can see your profile photo across ChatFlow."
+            value={privacySettings.profilePhotoVisibility}
+            disabled={isSaving}
+            onChange={(profilePhotoVisibility) =>
+              void saveSettings({ profilePhotoVisibility })
+            }
+          />
 
-        <section className="border-t border-[var(--chat-border)] pt-6">
-          <div className="flex items-start gap-3">
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--chat-accent-soft)] text-[var(--chat-accent)]">
-              <CheckCheck className="h-5 w-5" />
-            </span>
-            <div className="min-w-0 flex-1">
-              <h3 className="text-sm font-semibold text-[var(--chat-text)]">Read receipts</h3>
-              <p className="mt-1 text-xs leading-5 text-[var(--chat-muted)]">
-                Let people know when you have read their messages. Typing indicators are unchanged.
-              </p>
-            </div>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={privacySettings.readReceipts}
-              aria-label="Toggle read receipts"
-              disabled={isSaving}
-              onClick={() =>
-                void saveSettings({ readReceipts: !privacySettings.readReceipts })
-              }
-              className={`relative mt-0.5 h-7 w-12 shrink-0 rounded-full transition disabled:cursor-wait disabled:opacity-60 ${
-                privacySettings.readReceipts
-                  ? "bg-[var(--chat-sent)]"
-                  : "bg-[var(--chat-border)]"
-              }`}
-            >
-              <span
-                className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${
-                  privacySettings.readReceipts ? "translate-x-6" : "translate-x-1"
+          <VisibilitySetting
+            title="Last seen and online"
+            description="This controls both your last seen time and live online status."
+            value={privacySettings.lastSeenVisibility}
+            disabled={isSaving}
+            onChange={(lastSeenVisibility) =>
+              void saveSettings({ lastSeenVisibility })
+            }
+          />
+
+          <section className="border-t border-[var(--chat-border)] pt-6">
+            <div className="flex items-start gap-3">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--chat-accent-soft)] text-[var(--chat-accent)]">
+                <CheckCheck className="h-5 w-5" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <h3 className="text-sm font-semibold text-[var(--chat-text)]">
+                  Read receipts
+                </h3>
+                <p
+                  id="read-receipts-description"
+                  className="mt-1 text-xs leading-5 text-[var(--chat-muted)]"
+                >
+                  Let people know when you have read their messages. Typing indicators are unchanged.
+                </p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={readReceiptsEnabled}
+                aria-label="Toggle read receipts"
+                aria-describedby="read-receipts-description"
+                disabled={isSaving}
+                onClick={() => void handleReadReceiptsToggle()}
+                className={`relative mt-0.5 flex h-8 w-16 shrink-0 items-center rounded-full px-1 text-[10px] font-bold uppercase tracking-wide text-white shadow-sm transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--chat-accent)] disabled:cursor-wait disabled:opacity-60 ${
+                  readReceiptsEnabled
+                    ? "justify-start bg-[var(--chat-sent)]"
+                    : "justify-end bg-[var(--chat-muted)]"
                 }`}
-              />
-            </button>
-          </div>
-        </section>
-      </div>
+              >
+                <span aria-hidden="true">
+                  {readReceiptsEnabled ? "On" : "Off"}
+                </span>
+                <span
+                  className={`absolute top-1 h-6 w-6 rounded-full bg-white shadow-sm transition-all ${
+                    readReceiptsEnabled ? "right-1" : "left-1"
+                  }`}
+                />
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
     </section>
   );
 }
