@@ -1,17 +1,25 @@
-import { createHmac, randomInt, timingSafeEqual } from "node:crypto";
+import {
+  createHash,
+  createHmac,
+  randomBytes,
+  randomInt,
+  timingSafeEqual,
+} from "node:crypto";
 
 import bcrypt from "bcryptjs";
 
 import { env } from "../config/env";
 import { User } from "../models/user.model";
 import { AppError } from "../utils/app-error";
-import { sendVerificationEmail } from "./email.service";
+import { sendPasswordResetEmail, sendVerificationEmail } from "./email.service";
 
 import type {
   ChangePasswordInput,
   LoginInput,
   RegisterInput,
+  RequestPasswordResetInput,
   ResendVerificationInput,
+  ResetPasswordInput,
   VerifyEmailInput,
 } from "../validations/auth.validation";
 
@@ -20,6 +28,8 @@ const PASSWORD_HASH_ROUNDS = 12;
 const VERIFICATION_CODE_TTL_MS = 10 * 60 * 1000;
 const VERIFICATION_RESEND_COOLDOWN_MS = 60 * 1000;
 const MAX_VERIFICATION_ATTEMPTS = 5;
+const PASSWORD_RESET_TTL_MS = 15 * 60 * 1000;
+const PASSWORD_RESET_RESEND_COOLDOWN_MS = 60 * 1000;
 
 const createVerificationCode = (): string =>
   randomInt(100000, 1000000).toString();
@@ -28,6 +38,9 @@ const hashVerificationCode = (email: string, code: string): string =>
   createHmac("sha256", env.EMAIL_VERIFICATION_SECRET)
     .update(`${email.toLowerCase()}:${code}`)
     .digest("hex");
+
+const hashPasswordResetToken = (token: string): string =>
+  createHash("sha256").update(token).digest("hex");
 
 const verificationHashesMatch = (
   storedHash: string,
@@ -273,6 +286,94 @@ export const resendUserVerificationCode = async (
       "VERIFICATION_EMAIL_DELIVERY_FAILED",
     );
   }
+};
+
+export const requestPasswordReset = async (
+  input: RequestPasswordResetInput,
+): Promise<void> => {
+  const user = await User.findOne({
+    email: input.email,
+  }).select(
+    [
+      "+passwordResetTokenHash",
+      "+passwordResetExpiresAt",
+      "+passwordResetSentAt",
+    ].join(" "),
+  );
+
+  // Use the same response for every address so this endpoint cannot reveal accounts.
+  if (!user || !user.isEmailVerified) {
+    return;
+  }
+
+  if (
+    user.passwordResetSentAt &&
+    user.passwordResetSentAt.getTime() + PASSWORD_RESET_RESEND_COOLDOWN_MS >
+      Date.now()
+  ) {
+    return;
+  }
+
+  const rawToken = randomBytes(32).toString("hex");
+  const now = new Date();
+
+  user.passwordResetTokenHash = hashPasswordResetToken(rawToken);
+  user.passwordResetExpiresAt = new Date(now.getTime() + PASSWORD_RESET_TTL_MS);
+  user.passwordResetSentAt = now;
+
+  await user.save();
+
+  const resetUrl = new URL("/reset-password", env.CLIENT_URL);
+  resetUrl.searchParams.set("token", rawToken);
+
+  try {
+    await sendPasswordResetEmail({
+      recipientName: user.name,
+      recipientEmail: user.email,
+      resetUrl: resetUrl.toString(),
+    });
+  } catch (error) {
+    console.error("Could not send password reset email:", error);
+
+    user.passwordResetTokenHash = null;
+    user.passwordResetExpiresAt = null;
+    user.passwordResetSentAt = null;
+    await user.save();
+  }
+};
+
+export const resetUserPassword = async (
+  input: ResetPasswordInput,
+): Promise<void> => {
+  const tokenHash = hashPasswordResetToken(input.token);
+  const user = await User.findOne({
+    passwordResetTokenHash: tokenHash,
+    passwordResetExpiresAt: {
+      $gt: new Date(),
+    },
+  }).select(
+    [
+      "+passwordHash",
+      "+passwordResetTokenHash",
+      "+passwordResetExpiresAt",
+      "+passwordResetSentAt",
+    ].join(" "),
+  );
+
+  if (!user) {
+    throw new AppError(
+      "This password reset link is invalid or has expired. Request a new one.",
+      400,
+      "INVALID_PASSWORD_RESET_TOKEN",
+    );
+  }
+
+  user.passwordHash = await bcrypt.hash(input.newPassword, PASSWORD_HASH_ROUNDS);
+  user.passwordResetTokenHash = null;
+  user.passwordResetExpiresAt = null;
+  user.passwordResetSentAt = null;
+
+  await user.save();
 };
 
 export const loginUser = async (input: LoginInput) => {

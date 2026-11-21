@@ -8,6 +8,7 @@ import { User } from "../models/user.model";
 import { AppError } from "../utils/app-error";
 import type {
   UpdateChatThemeInput,
+  UpdateNotificationSettingsInput,
   UpdatePrivacySettingsInput,
   UpdateProfileInput,
 } from "../validations/profile.validation";
@@ -221,6 +222,30 @@ export const updateUserPrivacySettings = async (
     emitProfileUpdate(updatedUser),
     emitPresenceVisibilityUpdate(updatedUser),
   ]);
+
+  return updatedUser;
+};
+
+export const updateUserNotificationSettings = async (
+  userId: string,
+  input: UpdateNotificationSettingsInput,
+) => {
+  const updatedUser = await User.findByIdAndUpdate(
+    userId,
+    {
+      $set: {
+        notificationSettings: input,
+      },
+    },
+    {
+      new: true,
+      runValidators: true,
+    },
+  );
+
+  if (!updatedUser) {
+    throw new AppError("User profile was not found", 404, "USER_NOT_FOUND");
+  }
 
   return updatedUser;
 };

@@ -182,3 +182,148 @@ export const sendVerificationEmail = async ({
     throw new Error("The SMTP server did not accept the verification email");
   }
 };
+
+interface SendTransactionalEmailInput {
+  recipientName: string;
+  recipientEmail: string;
+  subject: string;
+  text: string;
+  html: string;
+}
+
+const sendTransactionalEmail = async ({
+  recipientName,
+  recipientEmail,
+  subject,
+  text,
+  html,
+}: SendTransactionalEmailInput): Promise<void> => {
+  if (env.BREVO_API_KEY) {
+    const response = await fetch("https://api.brevo.com/v3/smtp/email", {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        "api-key": env.BREVO_API_KEY,
+      },
+      body: JSON.stringify({
+        sender: getBrevoSender(),
+        to: [
+          {
+            email: recipientEmail,
+            name: recipientName,
+          },
+        ],
+        subject,
+        textContent: text,
+        htmlContent: html,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Brevo email API rejected the request (${response.status})`);
+    }
+
+    return;
+  }
+
+  const delivery = await emailTransporter.sendMail({
+    from: env.EMAIL_FROM,
+    to: recipientEmail,
+    subject,
+    text,
+    html,
+  });
+  const normalizedRecipient = recipientEmail.trim().toLowerCase();
+  const wasAccepted = delivery.accepted.some(
+    (acceptedRecipient) =>
+      acceptedRecipient.trim().toLowerCase() === normalizedRecipient,
+  );
+
+  if (!wasAccepted) {
+    throw new Error("The SMTP server did not accept the email");
+  }
+};
+
+interface SendPasswordResetEmailInput {
+  recipientName: string;
+  recipientEmail: string;
+  resetUrl: string;
+}
+
+export const sendPasswordResetEmail = async ({
+  recipientName,
+  recipientEmail,
+  resetUrl,
+}: SendPasswordResetEmailInput): Promise<void> => {
+  const safeName = escapeHtml(recipientName);
+  const safeResetUrl = escapeHtml(resetUrl);
+
+  await sendTransactionalEmail({
+    recipientName,
+    recipientEmail,
+    subject: "Reset your ChatFlow password",
+    text: [
+      `Hello ${recipientName},`,
+      "",
+      "We received a request to reset your ChatFlow password.",
+      `Reset it here: ${resetUrl}`,
+      "",
+      "This link expires in 15 minutes. If you did not request a password reset, you can ignore this email.",
+    ].join("\n"),
+    html: `
+      <div style="background:#f8fafc;padding:32px;font-family:Arial,sans-serif;color:#0f172a">
+        <div style="max-width:520px;margin:0 auto;background:#ffffff;border-radius:18px;padding:32px;border:1px solid #e2e8f0">
+          <h1 style="margin:0 0 16px;font-size:24px">Reset your password</h1>
+          <p style="margin:0 0 16px;line-height:1.6">Hello ${safeName},</p>
+          <p style="margin:0 0 24px;line-height:1.6">We received a request to reset your ChatFlow password. Use the button below to choose a new one.</p>
+          <a href="${safeResetUrl}" style="display:inline-block;border-radius:12px;background:#0891b2;color:#ffffff;padding:13px 20px;font-weight:700;text-decoration:none">Reset password</a>
+          <p style="margin:24px 0 0;color:#64748b;font-size:14px;line-height:1.6">This link expires in 15 minutes. If you did not request a reset, you can safely ignore this email.</p>
+        </div>
+      </div>
+    `,
+  });
+};
+
+interface SendMessageNotificationEmailInput {
+  recipientName: string;
+  recipientEmail: string;
+  senderName: string;
+  conversationUrl: string;
+}
+
+export const sendMessageNotificationEmail = async ({
+  recipientName,
+  recipientEmail,
+  senderName,
+  conversationUrl,
+}: SendMessageNotificationEmailInput): Promise<void> => {
+  const safeRecipientName = escapeHtml(recipientName);
+  const safeSenderName = escapeHtml(senderName);
+  const safeConversationUrl = escapeHtml(conversationUrl);
+
+  await sendTransactionalEmail({
+    recipientName,
+    recipientEmail,
+    subject: `${senderName} sent you a message on ChatFlow`,
+    text: [
+      `Hello ${recipientName},`,
+      "",
+      `${senderName} sent you a new message on ChatFlow.`,
+      `Open the conversation: ${conversationUrl}`,
+      "",
+      "You can change email notification preferences in your ChatFlow profile.",
+    ].join("\n"),
+    html: `
+      <div style="background:#f8fafc;padding:32px;font-family:Arial,sans-serif;color:#0f172a">
+        <div style="max-width:520px;margin:0 auto;background:#ffffff;border-radius:18px;padding:32px;border:1px solid #e2e8f0">
+          <h1 style="margin:0 0 16px;font-size:24px">New ChatFlow message</h1>
+          <p style="margin:0 0 16px;line-height:1.6">Hello ${safeRecipientName},</p>
+          <p style="margin:0 0 24px;line-height:1.6"><strong>${safeSenderName}</strong> sent you a new message.</p>
+          <a href="${safeConversationUrl}" style="display:inline-block;border-radius:12px;background:#0891b2;color:#ffffff;padding:13px 20px;font-weight:700;text-decoration:none">Open ChatFlow</a>
+          <p style="margin:24px 0 0;color:#64748b;font-size:14px;line-height:1.6">You can change email notification preferences in your ChatFlow profile.</p>
+        </div>
+      </div>
+    `,
+  });
+};

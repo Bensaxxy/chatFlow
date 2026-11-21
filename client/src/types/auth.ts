@@ -1,5 +1,6 @@
 import type { ChatThemeSettings } from "@/types/chat-theme";
 import type { PrivacySettings } from "@/types/privacy";
+import type { NotificationSettings } from "@/types/notification";
 
 export interface AuthUser {
   _id: string;
@@ -9,6 +10,7 @@ export interface AuthUser {
   bio: string;
   chatTheme: ChatThemeSettings;
   privacySettings: PrivacySettings;
+  notificationSettings: NotificationSettings;
   lastSeenAt: string | null;
   isEmailVerified: boolean;
   emailVerifiedAt: string | null;
@@ -47,6 +49,16 @@ export interface UpdateProfileInput {
 
 export interface ChangePasswordInput {
   currentPassword: string;
+  newPassword: string;
+  confirmPassword: string;
+}
+
+export interface RequestPasswordResetInput {
+  email: string;
+}
+
+export interface ResetPasswordInput {
+  token: string;
   newPassword: string;
   confirmPassword: string;
 }

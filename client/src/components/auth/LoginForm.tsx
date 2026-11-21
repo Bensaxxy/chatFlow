@@ -18,6 +18,7 @@ interface LoginFormProps {
   initialEmail?: string;
   registrationSucceeded?: boolean;
   verificationSucceeded?: boolean;
+  passwordResetSucceeded?: boolean;
 }
 
 const getSafeDestination = (destination?: string): string => {
@@ -39,6 +40,7 @@ export default function LoginForm({
   initialEmail = "",
   registrationSucceeded = false,
   verificationSucceeded = false,
+  passwordResetSucceeded = false,
 }: LoginFormProps) {
   const router = useRouter();
   const { login } = useAuth();
@@ -127,6 +129,15 @@ export default function LoginForm({
         </div>
       )}
 
+      {passwordResetSucceeded && (
+        <div
+          role="status"
+          className="mb-6 rounded-2xl border border-emerald-300/20 bg-emerald-300/10 px-4 py-3 text-sm text-emerald-100"
+        >
+          Your password has been reset. You can now sign in.
+        </div>
+      )}
+
       <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-5">
         <div>
           <label
@@ -160,12 +171,20 @@ export default function LoginForm({
         </div>
 
         <div>
-          <label
-            htmlFor="password"
-            className="mb-2 block text-sm font-semibold text-slate-200"
-          >
-            Password
-          </label>
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <label
+              htmlFor="password"
+              className="text-sm font-semibold text-slate-200"
+            >
+              Password
+            </label>
+            <Link
+              href="/forgot-password"
+              className="text-xs font-bold text-cyan-300 transition hover:text-cyan-100"
+            >
+              Forgot password?
+            </Link>
+          </div>
 
           <div className="relative">
             <LockKeyhole className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-500" />

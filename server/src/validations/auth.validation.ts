@@ -72,3 +72,32 @@ export const resendVerificationSchema = z.object({
 });
 
 export type ResendVerificationInput = z.infer<typeof resendVerificationSchema>;
+
+export const requestPasswordResetSchema = z.object({
+  email: z.string().trim().toLowerCase().email("Enter a valid email address"),
+});
+
+export type RequestPasswordResetInput = z.infer<
+  typeof requestPasswordResetSchema
+>;
+
+export const resetPasswordSchema = z
+  .object({
+    token: z
+      .string()
+      .trim()
+      .regex(/^[a-f\d]{64}$/i, "The reset link is invalid or has expired"),
+
+    newPassword: z
+      .string()
+      .min(8, "New password must contain at least 8 characters")
+      .max(72, "New password cannot exceed 72 characters"),
+
+    confirmPassword: z.string().min(1, "Confirm your new password"),
+  })
+  .refine((input) => input.newPassword === input.confirmPassword, {
+    path: ["confirmPassword"],
+    message: "Password confirmation does not match",
+  });
+
+export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;

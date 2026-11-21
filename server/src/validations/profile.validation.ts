@@ -38,3 +38,11 @@ export const updatePrivacySettingsSchema = z.object({
 export type UpdatePrivacySettingsInput = z.infer<
   typeof updatePrivacySettingsSchema
 >;
+
+export const updateNotificationSettingsSchema = z.object({
+  emailNotifications: z.boolean(),
+});
+
+export type UpdateNotificationSettingsInput = z.infer<
+  typeof updateNotificationSettingsSchema
+>;

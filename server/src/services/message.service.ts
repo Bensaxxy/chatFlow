@@ -22,6 +22,7 @@ import {
   resolveLinkPreview,
   type StoredLinkPreview,
 } from "./link-preview.service";
+import { sendMessageEmailNotifications } from "./email-notification.service";
 import { sendMessagePushNotifications } from "./push-notification.service";
 import {
   assertDirectMessagingAllowed,
@@ -475,6 +476,10 @@ const createRealtimeMessage = async ({
     (recipientId): recipientId is string => recipientId !== null,
   );
 
+  const offlineRecipientIds = recipientIds.filter(
+    (recipientId) => !deliveredRecipientIds.includes(recipientId),
+  );
+
   let message;
 
   try {
@@ -548,6 +553,14 @@ const createRealtimeMessage = async ({
     messageType,
   }).catch((error: unknown) => {
     console.error("Could not queue push notifications for a message:", error);
+  });
+
+  void sendMessageEmailNotifications({
+    recipientIds: offlineRecipientIds,
+    conversationId,
+    senderName: getMessageSenderName(realtimeMessage),
+  }).catch((error: unknown) => {
+    console.error("Could not queue message notification emails:", error);
   });
 
   if (linkPreview?.status === "loading") {

@@ -8,7 +8,9 @@ import type {
   ChangePasswordInput,
   LoginInput,
   RegisterInput,
+  RequestPasswordResetInput,
   ResendVerificationInput,
+  ResetPasswordInput,
   VerifyEmailInput,
 } from "@/types/auth";
 
@@ -68,6 +70,28 @@ export const changeUserPassword = async (
 ): Promise<string> => {
   const { data } = await apiClient.patch<MessageResponse>(
     "/auth/change-password",
+    input,
+  );
+
+  return data.message;
+};
+
+export const requestPasswordReset = async (
+  input: RequestPasswordResetInput,
+): Promise<string> => {
+  const { data } = await apiClient.post<MessageResponse>(
+    "/auth/forgot-password",
+    input,
+  );
+
+  return data.message;
+};
+
+export const resetPassword = async (
+  input: ResetPasswordInput,
+): Promise<string> => {
+  const { data } = await apiClient.post<MessageResponse>(
+    "/auth/reset-password",
     input,
   );
 

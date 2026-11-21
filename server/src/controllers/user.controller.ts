@@ -6,6 +6,7 @@ import {
   removeUserAvatar,
   updateUserAvatar,
   updateUserChatTheme,
+  updateUserNotificationSettings,
   updateUserPrivacySettings,
   updateUserProfile,
 } from "../services/profile.service";
@@ -18,6 +19,7 @@ import { AppError } from "../utils/app-error";
 import { asyncHandler } from "../utils/async-handler";
 import type {
   UpdateChatThemeInput,
+  UpdateNotificationSettingsInput,
   UpdatePrivacySettingsInput,
   UpdateProfileInput,
 } from "../validations/profile.validation";
@@ -113,6 +115,24 @@ export const updateMyPrivacySettings: RequestHandler = asyncHandler(
     response.status(200).json({
       success: true,
       message: "Privacy settings updated successfully",
+      data: {
+        user,
+      },
+    });
+  },
+);
+
+export const updateMyNotificationSettings: RequestHandler = asyncHandler(
+  async (request, response) => {
+    const currentUserId = getAuthenticatedUserId(request.auth?.userId);
+
+    const input = request.body as UpdateNotificationSettingsInput;
+
+    const user = await updateUserNotificationSettings(currentUserId, input);
+
+    response.status(200).json({
+      success: true,
+      message: "Notification settings updated successfully",
       data: {
         user,
       },

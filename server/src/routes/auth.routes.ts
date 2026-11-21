@@ -2,12 +2,14 @@ import { Router } from "express";
 
 import {
   changePassword,
+  forgotPassword,
   login,
   logout,
   me,
   refresh,
   register,
   resendVerificationCode,
+  resetPassword,
   socketToken,
   verifyEmail,
 } from "../controllers/auth.controller";
@@ -15,9 +17,11 @@ import { authenticate } from "../middleware/auth.middleware";
 import { validateBody } from "../middleware/validate.middleware";
 import {
   changePasswordSchema,
+  requestPasswordResetSchema,
   loginSchema,
   registerSchema,
   resendVerificationSchema,
+  resetPasswordSchema,
   verifyEmailSchema,
 } from "../validations/auth.validation";
 
@@ -34,6 +38,18 @@ authRouter.post(
 );
 
 authRouter.post("/login", validateBody(loginSchema), login);
+
+authRouter.post(
+  "/forgot-password",
+  validateBody(requestPasswordResetSchema),
+  forgotPassword,
+);
+
+authRouter.post(
+  "/reset-password",
+  validateBody(resetPasswordSchema),
+  resetPassword,
+);
 
 authRouter.post("/refresh", refresh);
 

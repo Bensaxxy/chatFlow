@@ -49,6 +49,18 @@ const privacySettingsSchema = new Schema(
   },
 );
 
+const notificationSettingsSchema = new Schema(
+  {
+    emailNotifications: {
+      type: Boolean,
+      default: true,
+    },
+  },
+  {
+    _id: false,
+  },
+);
+
 const userSchema = new Schema(
   {
     name: {
@@ -137,6 +149,35 @@ const userSchema = new Schema(
       default: () => ({}),
     },
 
+    notificationSettings: {
+      type: notificationSettingsSchema,
+      default: () => ({}),
+    },
+
+    lastMessageEmailNotificationAt: {
+      type: Date,
+      default: null,
+      select: false,
+    },
+
+    passwordResetTokenHash: {
+      type: String,
+      default: null,
+      select: false,
+    },
+
+    passwordResetExpiresAt: {
+      type: Date,
+      default: null,
+      select: false,
+    },
+
+    passwordResetSentAt: {
+      type: Date,
+      default: null,
+      select: false,
+    },
+
     lastSeenAt: {
       type: Date,
       default: Date.now,
@@ -169,6 +210,10 @@ userSchema.set("toJSON", {
     delete safeObject.emailVerificationExpiresAt;
     delete safeObject.emailVerificationSentAt;
     delete safeObject.emailVerificationAttempts;
+    delete safeObject.lastMessageEmailNotificationAt;
+    delete safeObject.passwordResetTokenHash;
+    delete safeObject.passwordResetExpiresAt;
+    delete safeObject.passwordResetSentAt;
     delete safeObject.__v;
 
     return safeObject;

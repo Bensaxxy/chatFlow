@@ -5,7 +5,9 @@ import {
   getCurrentUser,
   loginUser,
   registerUser,
+  requestPasswordReset,
   resendUserVerificationCode,
+  resetUserPassword,
   verifyUserEmail,
 } from "../services/auth.service";
 import { AppError } from "../utils/app-error";
@@ -21,7 +23,9 @@ import type {
   ChangePasswordInput,
   LoginInput,
   RegisterInput,
+  RequestPasswordResetInput,
   ResendVerificationInput,
+  ResetPasswordInput,
   VerifyEmailInput,
 } from "../validations/auth.validation";
 
@@ -195,6 +199,34 @@ export const resendVerificationCode: RequestHandler = asyncHandler(
       success: true,
       message:
         "If an unverified account exists for that email, a new verification code has been sent.",
+    });
+  },
+);
+
+export const forgotPassword: RequestHandler = asyncHandler(
+  async (request, response) => {
+    const input = request.body as RequestPasswordResetInput;
+
+    await requestPasswordReset(input);
+
+    response.status(200).json({
+      success: true,
+      message:
+        "If an account exists for that email address, a password reset link has been sent.",
+    });
+  },
+);
+
+export const resetPassword: RequestHandler = asyncHandler(
+  async (request, response) => {
+    const input = request.body as ResetPasswordInput;
+
+    await resetUserPassword(input);
+    clearAuthCookies(response);
+
+    response.status(200).json({
+      success: true,
+      message: "Password reset successfully. You can now sign in.",
     });
   },
 );

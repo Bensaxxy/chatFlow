@@ -4,6 +4,7 @@ import type { ApiSuccessResponse } from "@/types/api";
 import type { AuthUser, AuthUserData, UpdateProfileInput } from "@/types/auth";
 import type { ChatThemeSettings } from "@/types/chat-theme";
 import type { PrivacySettings } from "@/types/privacy";
+import type { NotificationSettings } from "@/types/notification";
 
 type ProfileResponse = ApiSuccessResponse<AuthUserData>;
 
@@ -38,6 +39,17 @@ export const updateMyPrivacySettings = async (
   const { data } = await apiClient.patch<ProfileResponse>(
     "/users/me/privacy",
     privacySettings,
+  );
+
+  return data.data.user;
+};
+
+export const updateMyNotificationSettings = async (
+  notificationSettings: NotificationSettings,
+): Promise<AuthUser> => {
+  const { data } = await apiClient.patch<ProfileResponse>(
+    "/users/me/notifications",
+    notificationSettings,
   );
 
   return data.data.user;

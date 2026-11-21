@@ -12,6 +12,7 @@ interface LoginPageProps {
     next?: string;
     registered?: string;
     verified?: string;
+    reset?: string;
     email?: string;
   }>;
 }
@@ -29,6 +30,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
         initialEmail={parameters.email}
         registrationSucceeded={parameters.registered === "1"}
         verificationSucceeded={parameters.verified === "1"}
+        passwordResetSucceeded={parameters.reset === "1"}
       />
     </AuthShell>
   );
