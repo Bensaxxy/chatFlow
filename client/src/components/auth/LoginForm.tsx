@@ -89,7 +89,7 @@ export default function LoginForm({
       {registrationSucceeded && (
         <div
           role="status"
-          className="mb-6 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800"
+          className="mb-6 rounded-2xl border border-emerald-300/20 bg-emerald-300/10 px-4 py-3 text-sm text-emerald-100"
         >
           Your account was created successfully. You can now log in.
         </div>
@@ -99,13 +99,13 @@ export default function LoginForm({
         <div>
           <label
             htmlFor="email"
-            className="mb-2 block text-sm font-medium text-slate-700"
+            className="mb-2 block text-sm font-semibold text-slate-200"
           >
             Email address
           </label>
 
           <div className="relative">
-            <Mail className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
+            <Mail className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-500" />
 
             <input
               id="email"
@@ -114,29 +114,29 @@ export default function LoginForm({
               placeholder="you@example.com"
               aria-invalid={errors.email ? "true" : "false"}
               {...register("email")}
-              className={`w-full rounded-xl border bg-white py-3 pl-11 pr-4 text-slate-900 outline-none transition focus:ring-4 ${
+              className={`w-full rounded-2xl border bg-white/[0.06] py-3 pl-11 pr-4 text-base text-white outline-none transition placeholder:text-slate-500 focus:ring-4 sm:text-sm ${
                 errors.email
-                  ? "border-red-400 focus:border-red-500 focus:ring-red-100"
-                  : "border-slate-300 focus:border-cyan-500 focus:ring-cyan-100"
+                  ? "border-rose-400/80 focus:border-rose-300 focus:ring-rose-400/15"
+                  : "border-white/10 focus:border-cyan-300/70 focus:ring-cyan-300/15"
               }`}
             />
           </div>
 
           {errors.email && (
-            <p className="mt-2 text-sm text-red-600">{errors.email.message}</p>
+            <p className="mt-2 text-sm text-rose-300">{errors.email.message}</p>
           )}
         </div>
 
         <div>
           <label
             htmlFor="password"
-            className="mb-2 block text-sm font-medium text-slate-700"
+            className="mb-2 block text-sm font-semibold text-slate-200"
           >
             Password
           </label>
 
           <div className="relative">
-            <LockKeyhole className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
+            <LockKeyhole className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-500" />
 
             <input
               id="password"
@@ -145,10 +145,10 @@ export default function LoginForm({
               placeholder="Enter your password"
               aria-invalid={errors.password ? "true" : "false"}
               {...register("password")}
-              className={`w-full rounded-xl border bg-white py-3 pl-11 pr-12 text-slate-900 outline-none transition focus:ring-4 ${
+              className={`w-full rounded-2xl border bg-white/[0.06] py-3 pl-11 pr-12 text-base text-white outline-none transition placeholder:text-slate-500 focus:ring-4 sm:text-sm ${
                 errors.password
-                  ? "border-red-400 focus:border-red-500 focus:ring-red-100"
-                  : "border-slate-300 focus:border-cyan-500 focus:ring-cyan-100"
+                  ? "border-rose-400/80 focus:border-rose-300 focus:ring-rose-400/15"
+                  : "border-white/10 focus:border-cyan-300/70 focus:ring-cyan-300/15"
               }`}
             />
 
@@ -156,7 +156,7 @@ export default function LoginForm({
               type="button"
               onClick={() => setShowPassword((current) => !current)}
               aria-label={showPassword ? "Hide password" : "Show password"}
-              className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+              className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-1 text-slate-500 transition hover:bg-white/10 hover:text-slate-200"
             >
               {showPassword ? (
                 <EyeOff className="h-5 w-5" />
@@ -167,7 +167,7 @@ export default function LoginForm({
           </div>
 
           {errors.password && (
-            <p className="mt-2 text-sm text-red-600">
+            <p className="mt-2 text-sm text-rose-300">
               {errors.password.message}
             </p>
           )}
@@ -176,7 +176,7 @@ export default function LoginForm({
         <button
           type="submit"
           disabled={isSubmitting}
-          className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-cyan-600 px-4 py-3 font-semibold text-white transition hover:bg-cyan-700 disabled:cursor-not-allowed disabled:opacity-60"
+          className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-cyan-200 via-cyan-300 to-cyan-400 px-4 py-3 font-black text-slate-950 shadow-[0_18px_40px_-16px_rgba(34,211,238,0.9)] transition hover:-translate-y-0.5 hover:shadow-[0_24px_48px_-16px_rgba(34,211,238,0.95)] disabled:cursor-not-allowed disabled:opacity-60"
         >
           {isSubmitting && <LoaderCircle className="h-5 w-5 animate-spin" />}
 
@@ -184,11 +184,11 @@ export default function LoginForm({
         </button>
       </form>
 
-      <p className="mt-6 text-center text-sm text-slate-600">
+      <p className="mt-6 text-center text-sm text-slate-400">
         Don&apos;t have an account?{" "}
         <Link
           href="/register"
-          className="font-semibold text-cyan-700 hover:text-cyan-800"
+          className="font-bold text-cyan-300 transition hover:text-cyan-100"
         >
           Create an account
         </Link>

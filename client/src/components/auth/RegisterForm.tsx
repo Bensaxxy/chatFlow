@@ -83,17 +83,17 @@ export default function RegisterForm() {
 
     return (
       <div role="status" className="text-center">
-        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100">
-          <CheckCircle2 className="h-9 w-9 text-emerald-600" />
+        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-300/15">
+          <CheckCircle2 className="h-9 w-9 text-emerald-300" />
         </div>
 
-        <h2 className="mt-5 text-2xl font-bold text-slate-950">
+        <h2 className="mt-5 text-2xl font-black tracking-tight text-white">
           Account created!
         </h2>
 
-        <p className="mt-3 text-sm leading-6 text-slate-600">
+        <p className="mt-3 text-sm leading-6 text-slate-400">
           Your account for{" "}
-          <span className="font-semibold text-slate-800">
+          <span className="font-semibold text-slate-100">
             {registeredEmail}
           </span>{" "}
           was created successfully.
@@ -101,7 +101,7 @@ export default function RegisterForm() {
 
         <Link
           href={loginUrl}
-          className="mt-7 inline-flex w-full items-center justify-center rounded-xl bg-cyan-600 px-4 py-3 font-semibold text-white transition hover:bg-cyan-700"
+          className="mt-7 inline-flex min-h-12 w-full items-center justify-center rounded-2xl bg-gradient-to-r from-cyan-200 via-cyan-300 to-cyan-400 px-4 py-3 font-black text-slate-950 shadow-[0_18px_40px_-16px_rgba(34,211,238,0.9)] transition hover:-translate-y-0.5 hover:shadow-[0_24px_48px_-16px_rgba(34,211,238,0.95)]"
         >
           Continue to login
         </Link>
@@ -115,13 +115,13 @@ export default function RegisterForm() {
         <div>
           <label
             htmlFor="name"
-            className="mb-2 block text-sm font-medium text-slate-700"
+            className="mb-2 block text-sm font-semibold text-slate-200"
           >
             Full name
           </label>
 
           <div className="relative">
-            <UserRound className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
+            <UserRound className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-500" />
 
             <input
               id="name"
@@ -130,29 +130,29 @@ export default function RegisterForm() {
               placeholder="Enter your full name"
               aria-invalid={errors.name ? "true" : "false"}
               {...register("name")}
-              className={`w-full rounded-xl border bg-white py-3 pl-11 pr-4 text-slate-900 outline-none transition focus:ring-4 ${
+              className={`w-full rounded-2xl border bg-white/[0.06] py-3 pl-11 pr-4 text-base text-white outline-none transition placeholder:text-slate-500 focus:ring-4 sm:text-sm ${
                 errors.name
-                  ? "border-red-400 focus:border-red-500 focus:ring-red-100"
-                  : "border-slate-300 focus:border-cyan-500 focus:ring-cyan-100"
+                  ? "border-rose-400/80 focus:border-rose-300 focus:ring-rose-400/15"
+                  : "border-white/10 focus:border-cyan-300/70 focus:ring-cyan-300/15"
               }`}
             />
           </div>
 
           {errors.name && (
-            <p className="mt-2 text-sm text-red-600">{errors.name.message}</p>
+            <p className="mt-2 text-sm text-rose-300">{errors.name.message}</p>
           )}
         </div>
 
         <div>
           <label
             htmlFor="email"
-            className="mb-2 block text-sm font-medium text-slate-700"
+            className="mb-2 block text-sm font-semibold text-slate-200"
           >
             Email address
           </label>
 
           <div className="relative">
-            <Mail className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
+            <Mail className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-500" />
 
             <input
               id="email"
@@ -161,29 +161,29 @@ export default function RegisterForm() {
               placeholder="you@example.com"
               aria-invalid={errors.email ? "true" : "false"}
               {...register("email")}
-              className={`w-full rounded-xl border bg-white py-3 pl-11 pr-4 text-slate-900 outline-none transition focus:ring-4 ${
+              className={`w-full rounded-2xl border bg-white/[0.06] py-3 pl-11 pr-4 text-base text-white outline-none transition placeholder:text-slate-500 focus:ring-4 sm:text-sm ${
                 errors.email
-                  ? "border-red-400 focus:border-red-500 focus:ring-red-100"
-                  : "border-slate-300 focus:border-cyan-500 focus:ring-cyan-100"
+                  ? "border-rose-400/80 focus:border-rose-300 focus:ring-rose-400/15"
+                  : "border-white/10 focus:border-cyan-300/70 focus:ring-cyan-300/15"
               }`}
             />
           </div>
 
           {errors.email && (
-            <p className="mt-2 text-sm text-red-600">{errors.email.message}</p>
+            <p className="mt-2 text-sm text-rose-300">{errors.email.message}</p>
           )}
         </div>
 
         <div>
           <label
             htmlFor="password"
-            className="mb-2 block text-sm font-medium text-slate-700"
+            className="mb-2 block text-sm font-semibold text-slate-200"
           >
             Password
           </label>
 
           <div className="relative">
-            <LockKeyhole className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
+            <LockKeyhole className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-500" />
 
             <input
               id="password"
@@ -192,10 +192,10 @@ export default function RegisterForm() {
               placeholder="At least 8 characters"
               aria-invalid={errors.password ? "true" : "false"}
               {...register("password")}
-              className={`w-full rounded-xl border bg-white py-3 pl-11 pr-12 text-slate-900 outline-none transition focus:ring-4 ${
+              className={`w-full rounded-2xl border bg-white/[0.06] py-3 pl-11 pr-12 text-base text-white outline-none transition placeholder:text-slate-500 focus:ring-4 sm:text-sm ${
                 errors.password
-                  ? "border-red-400 focus:border-red-500 focus:ring-red-100"
-                  : "border-slate-300 focus:border-cyan-500 focus:ring-cyan-100"
+                  ? "border-rose-400/80 focus:border-rose-300 focus:ring-rose-400/15"
+                  : "border-white/10 focus:border-cyan-300/70 focus:ring-cyan-300/15"
               }`}
             />
 
@@ -203,7 +203,7 @@ export default function RegisterForm() {
               type="button"
               onClick={() => setShowPassword((current) => !current)}
               aria-label={showPassword ? "Hide password" : "Show password"}
-              className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+              className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-1 text-slate-500 transition hover:bg-white/10 hover:text-slate-200"
             >
               {showPassword ? (
                 <EyeOff className="h-5 w-5" />
@@ -214,7 +214,7 @@ export default function RegisterForm() {
           </div>
 
           {errors.password && (
-            <p className="mt-2 text-sm text-red-600">
+            <p className="mt-2 text-sm text-rose-300">
               {errors.password.message}
             </p>
           )}
@@ -223,13 +223,13 @@ export default function RegisterForm() {
         <div>
           <label
             htmlFor="confirmPassword"
-            className="mb-2 block text-sm font-medium text-slate-700"
+            className="mb-2 block text-sm font-semibold text-slate-200"
           >
             Confirm password
           </label>
 
           <div className="relative">
-            <LockKeyhole className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
+            <LockKeyhole className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-500" />
 
             <input
               id="confirmPassword"
@@ -238,16 +238,16 @@ export default function RegisterForm() {
               placeholder="Enter the password again"
               aria-invalid={errors.confirmPassword ? "true" : "false"}
               {...register("confirmPassword")}
-              className={`w-full rounded-xl border bg-white py-3 pl-11 pr-4 text-slate-900 outline-none transition focus:ring-4 ${
+              className={`w-full rounded-2xl border bg-white/[0.06] py-3 pl-11 pr-4 text-base text-white outline-none transition placeholder:text-slate-500 focus:ring-4 sm:text-sm ${
                 errors.confirmPassword
-                  ? "border-red-400 focus:border-red-500 focus:ring-red-100"
-                  : "border-slate-300 focus:border-cyan-500 focus:ring-cyan-100"
+                  ? "border-rose-400/80 focus:border-rose-300 focus:ring-rose-400/15"
+                  : "border-white/10 focus:border-cyan-300/70 focus:ring-cyan-300/15"
               }`}
             />
           </div>
 
           {errors.confirmPassword && (
-            <p className="mt-2 text-sm text-red-600">
+            <p className="mt-2 text-sm text-rose-300">
               {errors.confirmPassword.message}
             </p>
           )}
@@ -256,7 +256,7 @@ export default function RegisterForm() {
         <button
           type="submit"
           disabled={isSubmitting}
-          className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-cyan-600 px-4 py-3 font-semibold text-white transition hover:bg-cyan-700 disabled:cursor-not-allowed disabled:opacity-60"
+          className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-cyan-200 via-cyan-300 to-cyan-400 px-4 py-3 font-black text-slate-950 shadow-[0_18px_40px_-16px_rgba(34,211,238,0.9)] transition hover:-translate-y-0.5 hover:shadow-[0_24px_48px_-16px_rgba(34,211,238,0.95)] disabled:cursor-not-allowed disabled:opacity-60"
         >
           {isSubmitting && <LoaderCircle className="h-5 w-5 animate-spin" />}
 
@@ -264,11 +264,11 @@ export default function RegisterForm() {
         </button>
       </form>
 
-      <p className="mt-6 text-center text-sm text-slate-600">
+      <p className="mt-6 text-center text-sm text-slate-400">
         Already have an account?{" "}
         <Link
           href="/login"
-          className="font-semibold text-cyan-700 hover:text-cyan-800"
+          className="font-bold text-cyan-300 transition hover:text-cyan-100"
         >
           Login
         </Link>
