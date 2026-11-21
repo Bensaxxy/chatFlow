@@ -20,9 +20,11 @@ import {
 } from "@/services/auth.service";
 import {
   removeMyAvatar,
+  updateMyChatTheme,
   updateMyProfile,
   uploadMyAvatar,
 } from "@/services/profile.service";
+import type { ChatThemeSettings } from "@/types/chat-theme";
 import type {
   AuthUser,
   LoginInput,
@@ -50,6 +52,8 @@ interface AuthContextValue {
   updateAvatar: (file: File) => Promise<AuthUser>;
 
   removeAvatar: () => Promise<AuthUser>;
+
+  updateChatTheme: (theme: ChatThemeSettings) => Promise<AuthUser>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -139,6 +143,17 @@ export function AuthProvider({ children }: AuthProviderProps) {
     return updatedUser;
   }, []);
 
+  const updateChatTheme = useCallback(
+    async (theme: ChatThemeSettings): Promise<AuthUser> => {
+      const updatedUser = await updateMyChatTheme(theme);
+
+      setUser(updatedUser);
+
+      return updatedUser;
+    },
+    [],
+  );
+
   const changePassword = useCallback(
     async (input: ChangePasswordInput): Promise<string> => {
       const message = await changeUserPassword(input);
@@ -174,6 +189,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       updateProfile,
       updateAvatar,
       removeAvatar,
+      updateChatTheme,
       changePassword,
     }),
     [
@@ -186,6 +202,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       updateProfile,
       updateAvatar,
       removeAvatar,
+      updateChatTheme,
       changePassword,
     ],
   );

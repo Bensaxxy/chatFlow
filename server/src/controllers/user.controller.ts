@@ -5,6 +5,7 @@ import {
   getUserProfile,
   removeUserAvatar,
   updateUserAvatar,
+  updateUserChatTheme,
   updateUserProfile,
 } from "../services/profile.service";
 import {
@@ -14,7 +15,10 @@ import {
 } from "../services/user.service";
 import { AppError } from "../utils/app-error";
 import { asyncHandler } from "../utils/async-handler";
-import type { UpdateProfileInput } from "../validations/profile.validation";
+import type {
+  UpdateChatThemeInput,
+  UpdateProfileInput,
+} from "../validations/profile.validation";
 import { searchUsersSchema } from "../validations/user.validation";
 import { publicProfileParamsSchema } from "../validations/public-profile.validation";
 
@@ -71,6 +75,24 @@ export const updateMyProfile: RequestHandler = asyncHandler(
     response.status(200).json({
       success: true,
       message: "Profile updated successfully",
+      data: {
+        user,
+      },
+    });
+  },
+);
+
+export const updateMyChatTheme: RequestHandler = asyncHandler(
+  async (request, response) => {
+    const currentUserId = getAuthenticatedUserId(request.auth?.userId);
+
+    const input = request.body as UpdateChatThemeInput;
+
+    const user = await updateUserChatTheme(currentUserId, input);
+
+    response.status(200).json({
+      success: true,
+      message: "Chat theme updated successfully",
       data: {
         user,
       },

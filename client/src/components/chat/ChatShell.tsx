@@ -3,6 +3,7 @@
 import {
   LogOut,
   MessageCircleMore,
+  Palette,
   Search,
   UserRound,
 } from "lucide-react";
@@ -11,10 +12,12 @@ import { useState, type ReactNode } from "react";
 import { toast } from "react-toastify";
 
 import ConversationList from "./ConversationList";
+import ChatThemeDrawer from "./ChatThemeDrawer";
 import UserSearchResults from "./UserSearchResults";
 
 import ActionMenu from "@/components/ui/ActionMenu";
 import { useAuth } from "@/contexts/AuthContext";
+import { useChatTheme } from "@/contexts/ChatThemeContext";
 import { useSocket } from "@/contexts/SocketContext";
 import { getApiErrorMessage } from "@/lib/api/errors";
 
@@ -35,9 +38,11 @@ export default function ChatShell({ children }: ChatShellProps) {
   const pathname = usePathname();
 
   const { user, logout } = useAuth();
+  const { theme } = useChatTheme();
   const { isConnected } = useSocket();
 
   const [searchQuery, setSearchQuery] = useState("");
+  const [isThemeDrawerOpen, setIsThemeDrawerOpen] = useState(false);
 
   const conversationIsOpen = pathname !== "/chats";
 
@@ -59,19 +64,24 @@ export default function ChatShell({ children }: ChatShellProps) {
   };
 
   return (
-    <div className="flex h-dvh min-w-0 w-full overflow-hidden bg-slate-100">
+    <div
+      data-chat-appearance={theme.appearance}
+      data-chat-wallpaper={theme.wallpaper}
+      data-chat-bubble-color={theme.bubbleColor}
+      className="chat-theme flex h-dvh min-w-0 w-full overflow-hidden bg-[var(--chat-app)] text-[var(--chat-text)]"
+    >
       <aside
-        className={`w-full shrink-0 flex-col border-r border-slate-200 bg-white md:flex md:w-[380px] ${
+        className={`w-full shrink-0 flex-col border-r border-[var(--chat-border)] bg-[var(--chat-sidebar)] md:flex md:w-[380px] ${
           conversationIsOpen ? "hidden" : "flex"
         }`}
       >
-        <header className="relative flex min-h-16 items-center gap-3 border-b border-slate-200 px-4 py-2 sm:min-h-20 sm:py-3">
+        <header className="relative flex min-h-16 items-center gap-3 border-b border-[var(--chat-border)] px-4 py-2 sm:min-h-20 sm:py-3">
           <button
             type="button"
             onClick={handleOpenProfile}
             aria-label="Open profile"
             title="Open profile"
-            className="relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-cyan-100 font-semibold text-cyan-800 transition hover:ring-4 hover:ring-cyan-100"
+            className="relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[var(--chat-accent-soft)] font-semibold text-[var(--chat-accent)] transition hover:ring-4 hover:ring-[var(--chat-accent-soft)]"
           >
             {user?.avatarUrl ? (
               <img
@@ -87,11 +97,11 @@ export default function ChatShell({ children }: ChatShellProps) {
           </button>
 
           <div className="min-w-0 flex-1">
-            <p className="truncate font-semibold text-slate-950">
+            <p className="truncate font-semibold text-[var(--chat-text)]">
               {user?.name ?? "ChatFlow user"}
             </p>
 
-            <p className="truncate text-xs text-slate-500">{user?.email}</p>
+            <p className="truncate text-xs text-[var(--chat-muted)]">{user?.email}</p>
 
             <div className="mt-1 flex items-center gap-1.5">
               <span
@@ -100,7 +110,7 @@ export default function ChatShell({ children }: ChatShellProps) {
                 }`}
               />
 
-              <span className="text-[11px] text-slate-500">
+              <span className="text-[11px] text-[var(--chat-muted)]">
                 {isConnected ? "Connected" : "Reconnecting..."}
               </span>
             </div>
@@ -111,6 +121,12 @@ export default function ChatShell({ children }: ChatShellProps) {
             menuLabel="Account options"
             triggerClassName="h-11 w-11 hover:bg-slate-100"
             items={[
+              {
+                id: "theme",
+                label: "Chat theme",
+                icon: Palette,
+                onSelect: () => setIsThemeDrawerOpen(true),
+              },
               {
                 id: "profile",
                 label: "View profile",
@@ -129,9 +145,9 @@ export default function ChatShell({ children }: ChatShellProps) {
           />
         </header>
 
-        <div className="border-b border-slate-200 p-4">
+        <div className="border-b border-[var(--chat-border)] p-4">
           <div className="relative">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-[var(--chat-muted)]" />
 
             <input
               type="search"
@@ -139,21 +155,21 @@ export default function ChatShell({ children }: ChatShellProps) {
               onChange={(event) => setSearchQuery(event.target.value)}
               placeholder="Search people"
               aria-label="Search people"
-              className="w-full rounded-xl border border-slate-200 bg-slate-100 py-2.5 pl-10 pr-4 text-sm text-slate-900 outline-none transition placeholder:text-slate-500 focus:border-cyan-500 focus:bg-white focus:ring-4 focus:ring-cyan-100"
+              className="w-full rounded-xl border border-[var(--chat-border)] bg-[var(--chat-input)] py-2.5 pl-10 pr-4 text-sm text-[var(--chat-text)] outline-none transition placeholder:text-[var(--chat-muted)] focus:border-[var(--chat-accent)] focus:bg-[var(--chat-control)] focus:ring-4 focus:ring-[var(--chat-accent-soft)]"
             />
           </div>
         </div>
 
         <div className="flex items-center justify-between px-4 py-4">
           <div>
-            <h1 className="text-xl font-bold text-slate-950">Chats</h1>
+            <h1 className="text-xl font-bold text-[var(--chat-text)]">Chats</h1>
 
-            <p className="mt-0.5 text-xs text-slate-500">
+            <p className="mt-0.5 text-xs text-[var(--chat-muted)]">
               Your recent conversations
             </p>
           </div>
 
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-950 text-white">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--chat-sent)] text-white">
             <MessageCircleMore className="h-5 w-5" />
           </div>
         </div>
@@ -174,6 +190,11 @@ export default function ChatShell({ children }: ChatShellProps) {
       >
         {children}
       </main>
+
+      <ChatThemeDrawer
+        isOpen={isThemeDrawerOpen}
+        onClose={() => setIsThemeDrawerOpen(false)}
+      />
     </div>
   );
 }

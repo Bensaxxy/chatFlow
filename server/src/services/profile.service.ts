@@ -6,7 +6,10 @@ import {
 } from "../config/cloudinary";
 import { User } from "../models/user.model";
 import { AppError } from "../utils/app-error";
-import type { UpdateProfileInput } from "../validations/profile.validation";
+import type {
+  UpdateChatThemeInput,
+  UpdateProfileInput,
+} from "../validations/profile.validation";
 import { getSocketServer } from "../socket/socket.server";
 import { Conversation } from "../models/conversation.model";
 import { getDirectMessagingAccess } from "./user.service";
@@ -111,6 +114,30 @@ export const updateUserProfile = async (
   }
 
   await emitProfileUpdate(createProfileUpdatePayload(updatedUser));
+
+  return updatedUser;
+};
+
+export const updateUserChatTheme = async (
+  userId: string,
+  input: UpdateChatThemeInput,
+) => {
+  const updatedUser = await User.findByIdAndUpdate(
+    userId,
+    {
+      $set: {
+        chatTheme: input,
+      },
+    },
+    {
+      new: true,
+      runValidators: true,
+    },
+  );
+
+  if (!updatedUser) {
+    throw new AppError("User profile was not found", 404, "USER_NOT_FOUND");
+  }
 
   return updatedUser;
 };

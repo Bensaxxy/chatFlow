@@ -1,9 +1,12 @@
+import type { ChatThemeSettings } from "@/types/chat-theme";
+
 export interface AuthUser {
   _id: string;
   name: string;
   email: string;
   avatarUrl: string | null;
   bio: string;
+  chatTheme: ChatThemeSettings;
   lastSeenAt: string | null;
   createdAt: string;
   updatedAt: string;

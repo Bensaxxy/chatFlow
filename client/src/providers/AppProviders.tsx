@@ -6,6 +6,7 @@ import "react-toastify/dist/ReactToastify.css";
 
 import { AuthProvider } from "@/contexts/AuthContext";
 import { AudioCallProvider } from "@/contexts/AudioCallContext";
+import { ChatThemeProvider } from "@/contexts/ChatThemeContext";
 import { SocketProvider } from "@/contexts/SocketContext";
 
 interface AppProvidersProps {
@@ -15,19 +16,21 @@ interface AppProvidersProps {
 export default function AppProviders({ children }: AppProvidersProps) {
   return (
     <AuthProvider>
-      <SocketProvider>
-        <AudioCallProvider>{children}</AudioCallProvider>
+      <ChatThemeProvider>
+        <SocketProvider>
+          <AudioCallProvider>{children}</AudioCallProvider>
 
-        <ToastContainer
-          position="top-right"
-          autoClose={4000}
-          newestOnTop
-          closeOnClick
-          pauseOnHover
-          limit={3}
-          theme="colored"
-        />
-      </SocketProvider>
+          <ToastContainer
+            position="top-right"
+            autoClose={4000}
+            newestOnTop
+            closeOnClick
+            pauseOnHover
+            limit={3}
+            theme="colored"
+          />
+        </SocketProvider>
+      </ChatThemeProvider>
     </AuthProvider>
   );
 }

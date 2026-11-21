@@ -8,12 +8,16 @@ import {
   search,
   unblock,
   updateMyAvatar,
+  updateMyChatTheme,
   updateMyProfile,
 } from "../controllers/user.controller";
 import { authenticate } from "../middleware/auth.middleware";
 import { uploadAvatarImage } from "../middleware/avatar-upload.middleware";
 import { validateBody } from "../middleware/validate.middleware";
-import { updateProfileSchema } from "../validations/profile.validation";
+import {
+  updateChatThemeSchema,
+  updateProfileSchema,
+} from "../validations/profile.validation";
 
 const userRouter = Router();
 
@@ -26,6 +30,13 @@ userRouter.patch(
   authenticate,
   validateBody(updateProfileSchema),
   updateMyProfile,
+);
+
+userRouter.patch(
+  "/me/chat-theme",
+  authenticate,
+  validateBody(updateChatThemeSchema),
+  updateMyChatTheme,
 );
 
 userRouter.patch("/me/avatar", authenticate, uploadAvatarImage, updateMyAvatar);

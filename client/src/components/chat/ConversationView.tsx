@@ -1777,7 +1777,7 @@ export default function ConversationView({
     .join("|");
 
   return (
-    <section className="relative flex h-full min-w-0 w-full flex-col overflow-hidden bg-white">
+    <section className="relative flex h-full min-w-0 w-full flex-col overflow-hidden bg-[var(--chat-surface)]">
       <ConversationHeader
         displayName={displayName}
         avatarUrl={

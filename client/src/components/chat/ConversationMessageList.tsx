@@ -126,7 +126,7 @@ export default function ConversationMessageList({
       <div
         ref={messagesContainerRef}
         onScroll={onScroll}
-        className="h-full overflow-x-hidden overflow-y-auto bg-slate-50 px-3 py-5 sm:px-6"
+        className="chat-wallpaper h-full overflow-x-hidden overflow-y-auto px-3 py-5 sm:px-6"
       >
         {hasMore && (
           <div className="mb-5 text-center">
@@ -134,7 +134,7 @@ export default function ConversationMessageList({
               type="button"
               onClick={onLoadOlder}
               disabled={isLoadingOlder}
-              className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-medium text-slate-600 shadow-sm hover:bg-slate-50 disabled:opacity-60"
+              className="inline-flex items-center gap-2 rounded-full border border-[var(--chat-border)] bg-[var(--chat-control)] px-4 py-2 text-xs font-medium text-[var(--chat-muted)] shadow-sm transition hover:bg-[var(--chat-hover)] disabled:opacity-60"
             >
               {isLoadingOlder && (
                 <LoaderCircle className="h-4 w-4 animate-spin" />
@@ -147,11 +147,11 @@ export default function ConversationMessageList({
         {messages.length === 0 ? (
           <div className="flex h-full items-center justify-center text-center">
             <div>
-              <MessageCircleMore className="mx-auto h-12 w-12 text-slate-300" />
-              <p className="mt-4 font-medium text-slate-700">
+              <MessageCircleMore className="mx-auto h-12 w-12 text-[var(--chat-muted)] opacity-50" />
+              <p className="mt-4 font-medium text-[var(--chat-text)]">
                 No messages yet
               </p>
-              <p className="mt-1 text-sm text-slate-500">
+              <p className="mt-1 text-sm text-[var(--chat-muted)]">
                 Send the first message to {displayName}.
               </p>
             </div>
@@ -171,7 +171,7 @@ export default function ConversationMessageList({
                 <Fragment key={message._id}>
                   {showDateSeparator && (
                     <div className="my-2 flex justify-center">
-                      <span className="rounded-full bg-slate-200/80 px-3 py-1 text-[11px] font-medium text-slate-600">
+                      <span className="rounded-full bg-[var(--chat-date)]/90 px-3 py-1 text-[11px] font-medium text-[var(--chat-muted)] shadow-sm backdrop-blur">
                         {formatMessageDateLabel(message.createdAt)}
                       </span>
                     </div>
@@ -218,7 +218,7 @@ export default function ConversationMessageList({
 
       {showFloatingDate && floatingDate && (
         <div className="pointer-events-none absolute left-0 right-0 top-2 z-30 flex justify-center">
-          <span className="rounded-full border border-slate-200 bg-white/95 px-3 py-1 text-[11px] font-semibold text-slate-600 shadow-sm backdrop-blur">
+          <span className="rounded-full border border-[var(--chat-border)] bg-[var(--chat-control)]/95 px-3 py-1 text-[11px] font-semibold text-[var(--chat-muted)] shadow-sm backdrop-blur">
             {floatingDate}
           </span>
         </div>
@@ -228,13 +228,13 @@ export default function ConversationMessageList({
         <div
           role="status"
           aria-live="polite"
-          className="pointer-events-none absolute bottom-4 left-4 z-20 flex max-w-[calc(100%_-_6rem)] items-center gap-2 rounded-2xl rounded-bl-md border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600 shadow-sm"
+          className="pointer-events-none absolute bottom-4 left-4 z-20 flex max-w-[calc(100%_-_6rem)] items-center gap-2 rounded-2xl rounded-bl-md border border-[var(--chat-border)] bg-[var(--chat-received)] px-3 py-2 text-xs font-medium text-[var(--chat-received-text)] shadow-sm"
         >
           <span className="truncate">{displayName} is typing</span>
           <span aria-hidden="true" className="flex shrink-0 items-center gap-0.5">
-            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-cyan-600 [animation-delay:-0.3s]" />
-            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-cyan-600 [animation-delay:-0.15s]" />
-            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-cyan-600" />
+            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[var(--chat-accent)] [animation-delay:-0.3s]" />
+            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[var(--chat-accent)] [animation-delay:-0.15s]" />
+            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[var(--chat-accent)]" />
           </span>
         </div>
       )}
@@ -245,7 +245,7 @@ export default function ConversationMessageList({
           onClick={onScrollToBottom}
           aria-label="Jump to latest message"
           title="Jump to latest message"
-          className="absolute bottom-5 right-5 z-20 flex h-11 w-11 items-center justify-center rounded-full bg-cyan-600 text-white shadow-lg transition hover:bg-cyan-700 focus:outline-none focus:ring-4 focus:ring-cyan-200"
+          className="absolute bottom-5 right-5 z-20 flex h-11 w-11 items-center justify-center rounded-full bg-[var(--chat-sent)] text-white shadow-lg transition hover:bg-[var(--chat-sent-hover)] focus:outline-none focus:ring-4 focus:ring-[var(--chat-accent-soft)]"
         >
           <ArrowDown className="h-5 w-5" />
         </button>

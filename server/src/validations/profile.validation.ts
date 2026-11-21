@@ -20,3 +20,11 @@ export const updateProfileSchema = z
   });
 
 export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
+
+export const updateChatThemeSchema = z.object({
+  appearance: z.enum(["light", "dark"]),
+  wallpaper: z.enum(["paper", "aurora", "midnight", "blush", "mesh"]),
+  bubbleColor: z.enum(["cyan", "violet", "emerald", "rose", "amber"]),
+});
+
+export type UpdateChatThemeInput = z.infer<typeof updateChatThemeSchema>;

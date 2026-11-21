@@ -80,16 +80,16 @@ export default function ConversationComposer({
   return (
     <form
       onSubmit={onSubmit}
-      className="shrink-0 border-t border-slate-200 bg-white px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 sm:p-4"
+      className="shrink-0 border-t border-[var(--chat-border)] bg-[var(--chat-surface)] px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 text-[var(--chat-text)] sm:p-4"
     >
       {replyingToMessage && (
-        <div className="mb-3 flex items-center justify-between rounded-xl border-l-4 border-cyan-600 bg-cyan-50 px-4 py-2.5">
+        <div className="mb-3 flex items-center justify-between rounded-xl border-l-4 border-[var(--chat-accent)] bg-[var(--chat-accent-soft)] px-4 py-2.5">
           <div className="min-w-0">
-            <p className="text-xs font-semibold text-cyan-700">
+            <p className="text-xs font-semibold text-[var(--chat-accent)]">
               Replying to {replySenderName}
             </p>
 
-            <p className="mt-0.5 truncate text-xs text-slate-500">
+            <p className="mt-0.5 truncate text-xs text-[var(--chat-muted)]">
               {replyPreview}
             </p>
           </div>
@@ -99,7 +99,7 @@ export default function ConversationComposer({
             onClick={onCancelReplying}
             aria-label="Cancel reply"
             title="Cancel reply"
-            className="ml-3 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-slate-500 transition hover:bg-cyan-100 hover:text-slate-800"
+            className="ml-3 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[var(--chat-muted)] transition hover:bg-[var(--chat-control)] hover:text-[var(--chat-text)]"
           >
             <X className="h-4 w-4" />
           </button>
@@ -107,13 +107,13 @@ export default function ConversationComposer({
       )}
 
       {editingMessageId && (
-        <div className="mb-3 flex items-center justify-between rounded-xl border-l-4 border-cyan-600 bg-cyan-50 px-4 py-2.5">
+        <div className="mb-3 flex items-center justify-between rounded-xl border-l-4 border-[var(--chat-accent)] bg-[var(--chat-accent-soft)] px-4 py-2.5">
           <div className="min-w-0">
-            <p className="text-xs font-semibold text-cyan-700">
+            <p className="text-xs font-semibold text-[var(--chat-accent)]">
               Editing message
             </p>
 
-            <p className="truncate text-xs text-slate-500">
+            <p className="truncate text-xs text-[var(--chat-muted)]">
               Update the message and press the check button.
             </p>
           </div>
@@ -124,7 +124,7 @@ export default function ConversationComposer({
             disabled={isEditingMessage}
             aria-label="Cancel editing"
             title="Cancel editing"
-            className="ml-3 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-slate-500 transition hover:bg-cyan-100 hover:text-slate-800 disabled:opacity-50"
+            className="ml-3 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[var(--chat-muted)] transition hover:bg-[var(--chat-control)] hover:text-[var(--chat-text)] disabled:opacity-50"
           >
             <X className="h-4 w-4" />
           </button>
@@ -134,7 +134,7 @@ export default function ConversationComposer({
       {isMessagingDisabled ? (
         <div
           role="status"
-          className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-600"
+          className="flex items-center justify-between gap-3 rounded-xl border border-[var(--chat-border)] bg-[var(--chat-hover)] px-3 py-2.5 text-sm text-[var(--chat-muted)]"
         >
           <p>{messagingDisabledMessage}</p>
 
@@ -142,7 +142,7 @@ export default function ConversationComposer({
             <button
               type="button"
               onClick={onManageMessaging}
-              className="shrink-0 rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-cyan-700 shadow-sm ring-1 ring-slate-200 transition hover:bg-cyan-50"
+              className="shrink-0 rounded-lg bg-[var(--chat-control)] px-3 py-1.5 text-xs font-semibold text-[var(--chat-accent)] shadow-sm ring-1 ring-[var(--chat-border)] transition hover:bg-[var(--chat-accent-soft)]"
             >
               Manage
             </button>
@@ -184,7 +184,7 @@ export default function ConversationComposer({
                     : "Type a message"
               }
               aria-label={editingMessageId ? "Edit message" : "Message"}
-              className="scrollbar-hidden block min-h-10 max-h-32 min-w-0 flex-1 resize-none overflow-y-auto rounded-2xl border border-slate-300 bg-slate-100 px-3 py-2 text-base leading-5 text-slate-900 outline-none transition focus:border-cyan-500 focus:bg-white focus:ring-4 focus:ring-cyan-100 sm:px-4 sm:text-sm"
+              className="scrollbar-hidden block min-h-10 max-h-32 min-w-0 flex-1 resize-none overflow-y-auto rounded-2xl border border-[var(--chat-border)] bg-[var(--chat-input)] px-3 py-2 text-base leading-5 text-[var(--chat-text)] outline-none transition placeholder:text-[var(--chat-muted)] focus:border-[var(--chat-accent)] focus:bg-[var(--chat-control)] focus:ring-4 focus:ring-[var(--chat-accent-soft)] sm:px-4 sm:text-sm"
             />
           )}
 
@@ -196,7 +196,7 @@ export default function ConversationComposer({
                 editingMessageId ? "Save edited message" : "Send message"
               }
               title={editingMessageId ? "Save changes" : "Send message"}
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-cyan-600 text-white transition hover:bg-cyan-700 disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[var(--chat-sent)] text-white transition hover:bg-[var(--chat-sent-hover)] disabled:cursor-not-allowed disabled:opacity-50"
             >
               {isEditingMessage ? (
                 <LoaderCircle className="h-5 w-5 animate-spin" />

@@ -738,7 +738,7 @@ export default function ConversationList() {
 
   return (
     <>
-      <div className="divide-y divide-slate-100">
+      <div className="conversation-list divide-y divide-slate-100">
         {conversations.map((conversation) => {
         const otherParticipant = getOtherParticipant(conversation, user._id);
 

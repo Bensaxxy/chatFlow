@@ -1,5 +1,30 @@
 import { model, Schema, type InferSchemaType } from "mongoose";
 
+const chatThemeSchema = new Schema(
+  {
+    appearance: {
+      type: String,
+      enum: ["light", "dark"],
+      default: "light",
+    },
+
+    wallpaper: {
+      type: String,
+      enum: ["paper", "aurora", "midnight", "blush", "mesh"],
+      default: "paper",
+    },
+
+    bubbleColor: {
+      type: String,
+      enum: ["cyan", "violet", "emerald", "rose", "amber"],
+      default: "cyan",
+    },
+  },
+  {
+    _id: false,
+  },
+);
+
 const userSchema = new Schema(
   {
     name: {
@@ -41,6 +66,11 @@ const userSchema = new Schema(
       trim: true,
       maxlength: [160, "Bio cannot exceed 160 characters"],
       default: "",
+    },
+
+    chatTheme: {
+      type: chatThemeSchema,
+      default: () => ({}),
     },
 
     lastSeenAt: {

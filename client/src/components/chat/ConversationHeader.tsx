@@ -31,11 +31,11 @@ export default function ConversationHeader({
   onStartAudioCall,
 }: ConversationHeaderProps) {
   return (
-    <header className="flex h-16 shrink-0 items-center gap-2 border-b border-slate-200 px-2 sm:h-20 sm:gap-3 sm:px-6">
+    <header className="flex h-16 shrink-0 items-center gap-2 border-b border-[var(--chat-border)] bg-[var(--chat-surface)] px-2 text-[var(--chat-text)] sm:h-20 sm:gap-3 sm:px-6">
       <Link
         href="/chats"
         aria-label="Back to conversations"
-        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-slate-600 hover:bg-slate-100 md:hidden"
+        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[var(--chat-muted)] transition hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)] md:hidden"
       >
         <ArrowLeft className="h-5 w-5" />
       </Link>
@@ -65,14 +65,14 @@ export default function ConversationHeader({
       </button>
 
       <div className="min-w-0 flex-1">
-        <h1 className="truncate font-semibold text-slate-950">{displayName}</h1>
+        <h1 className="truncate font-semibold text-[var(--chat-text)]">{displayName}</h1>
 
         <p
           className={[
             "truncate text-xs",
             isOtherUserOnline
               ? "font-medium text-emerald-600"
-              : "text-slate-500",
+              : "text-[var(--chat-muted)]",
           ].join(" ")}
         >
           {isOtherUserOnline ? "Online" : statusText}
@@ -84,7 +84,7 @@ export default function ConversationHeader({
         onClick={onOpenMediaGallery}
         aria-label="Open shared media"
         title="Shared media"
-        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-slate-600 transition hover:bg-slate-100 hover:text-slate-950 sm:h-11 sm:w-11"
+        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[var(--chat-muted)] transition hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)] sm:h-11 sm:w-11"
       >
         <Images className="h-5 w-5" />
       </button>
@@ -95,7 +95,7 @@ export default function ConversationHeader({
           onClick={onStartAudioCall}
           aria-label="Audio calls coming soon"
           title="Audio calls coming soon"
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-slate-600 transition hover:bg-cyan-50 hover:text-cyan-700 sm:h-11 sm:w-11"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[var(--chat-muted)] transition hover:bg-[var(--chat-accent-soft)] hover:text-[var(--chat-accent)] sm:h-11 sm:w-11"
         >
           <PhoneCall className="h-5 w-5" />
         </button>
@@ -109,7 +109,7 @@ export default function ConversationHeader({
         aria-label="Search messages"
         aria-expanded={isMessageSearchOpen}
         title="Search messages"
-        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-slate-600 transition hover:bg-slate-100 hover:text-slate-950 sm:h-11 sm:w-11"
+        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[var(--chat-muted)] transition hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)] sm:h-11 sm:w-11"
       >
         <Search className="h-5 w-5" />
       </button>

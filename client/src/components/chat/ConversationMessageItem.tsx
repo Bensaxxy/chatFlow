@@ -227,8 +227,8 @@ export default function ConversationMessageItem({
           className={joinClasses(
             "z-20 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 transition",
             isSelected
-              ? "border-cyan-600 bg-cyan-600 text-white"
-              : "border-slate-300 bg-white text-transparent hover:border-cyan-400",
+              ? "border-[var(--chat-accent)] bg-[var(--chat-accent)] text-white"
+              : "border-[var(--chat-border)] bg-[var(--chat-control)] text-transparent hover:border-[var(--chat-accent)]",
             isMine && "order-first",
           )}
         >
@@ -240,8 +240,8 @@ export default function ConversationMessageItem({
         className={joinClasses(
           "relative min-w-0 max-w-[75%] rounded-2xl px-3 py-2 shadow-sm transition sm:max-w-[60%] lg:max-w-[55%]",
           isMine
-            ? "rounded-br-md bg-cyan-600 text-white"
-            : "rounded-bl-md border border-slate-200 bg-white text-slate-900",
+            ? "chat-message-sent rounded-br-md bg-[var(--chat-sent)] text-white"
+            : "chat-message-received rounded-bl-md border border-[var(--chat-border)] bg-[var(--chat-received)] text-[var(--chat-received-text)]",
           highlightedMessageId === message._id &&
             "ring-2 ring-amber-400 ring-offset-2",
         )}
@@ -264,8 +264,8 @@ export default function ConversationMessageItem({
               triggerClassName={joinClasses(
                 "h-7 w-7",
                 isMine
-                  ? "text-cyan-100 hover:bg-cyan-500 hover:text-white"
-                  : "text-slate-400 hover:bg-slate-100 hover:text-slate-700",
+                  ? "text-white/75 hover:bg-white/15 hover:text-white"
+                  : "text-[var(--chat-muted)] hover:bg-[var(--chat-hover)] hover:text-[var(--chat-text)]",
               )}
               items={messageMenuItems}
             />
@@ -276,7 +276,7 @@ export default function ConversationMessageItem({
           <div
             className={joinClasses(
               "mb-1 flex items-center gap-1 text-[11px] font-medium",
-              isMine ? "text-cyan-100" : "text-slate-500",
+              isMine ? "text-white/80" : "text-[var(--chat-muted)]",
             )}
           >
             <Forward className="h-3 w-3" />
@@ -289,8 +289,8 @@ export default function ConversationMessageItem({
             className={joinClasses(
               "mb-2 rounded-lg border-l-4 px-3 py-2",
               isMine
-                ? "border-cyan-200 bg-cyan-700/40"
-                : "border-cyan-500 bg-slate-100",
+                ? "border-white/60 bg-white/10"
+                : "border-[var(--chat-accent)] bg-[var(--chat-hover)]",
             )}
           >
             {message.replyTo.deletedForEveryoneAt ||
@@ -298,7 +298,7 @@ export default function ConversationMessageItem({
               <p
                 className={joinClasses(
                   "truncate text-xs italic",
-                  isMine ? "text-cyan-100" : "text-slate-500",
+                  isMine ? "text-white/80" : "text-[var(--chat-muted)]",
                 )}
               >
                 Original message is unavailable
@@ -308,7 +308,7 @@ export default function ConversationMessageItem({
                 <p
                   className={joinClasses(
                     "truncate text-xs font-semibold",
-                    isMine ? "text-cyan-100" : "text-cyan-700",
+                    isMine ? "text-white/80" : "text-[var(--chat-accent)]",
                   )}
                 >
                   {message.replyTo.sender._id === currentUser._id
@@ -332,7 +332,7 @@ export default function ConversationMessageItem({
                 <p
                   className={joinClasses(
                     "mt-0.5 truncate text-xs",
-                    isMine ? "text-cyan-50" : "text-slate-600",
+                    isMine ? "text-white/90" : "text-[var(--chat-muted)]",
                   )}
                 >
                   {message.replyTo.content ||
@@ -395,8 +395,8 @@ export default function ConversationMessageItem({
                 className={joinClasses(
                   "inline-flex h-7 items-center gap-1 rounded-full border px-2 text-xs transition disabled:opacity-50",
                   currentUserReaction?.emoji === emoji
-                    ? "border-cyan-500 bg-cyan-50 text-cyan-800"
-                    : "border-slate-200 bg-white text-slate-600 hover:border-slate-300",
+                    ? "border-[var(--chat-accent)] bg-[var(--chat-accent-soft)] text-[var(--chat-accent)]"
+                    : "border-[var(--chat-border)] bg-[var(--chat-control)] text-[var(--chat-muted)] hover:border-[var(--chat-muted)]",
                 )}
               >
                 <span>{emoji}</span>
@@ -409,7 +409,7 @@ export default function ConversationMessageItem({
         <div
           className={joinClasses(
             "mt-1 flex items-center justify-end gap-1.5 text-[10px]",
-            isMine ? "text-cyan-100" : "text-slate-400",
+            isMine ? "text-white/75" : "text-[var(--chat-muted)]",
           )}
         >
           {message.editedAt && !isDeletedForEveryone && (
@@ -443,7 +443,7 @@ export default function ConversationMessageItem({
             <span
               title={receiptLabel}
               aria-label={receiptLabel}
-              className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-white shadow-sm ring-1 ring-black/10"
+              className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-[var(--chat-control)] shadow-sm ring-1 ring-black/10"
             >
               {isReadByRecipient ? (
                 <CheckCheck
@@ -474,7 +474,7 @@ export default function ConversationMessageItem({
           aria-label="React to message"
           title="React to message"
           className={joinClasses(
-            "z-20 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm transition hover:border-cyan-300 hover:bg-cyan-50 hover:text-cyan-700 disabled:opacity-50",
+            "z-20 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[var(--chat-border)] bg-[var(--chat-control)] text-[var(--chat-muted)] shadow-sm transition hover:border-[var(--chat-accent)] hover:bg-[var(--chat-accent-soft)] hover:text-[var(--chat-accent)] disabled:opacity-50",
             isMine && "order-first",
           )}
         >
@@ -500,7 +500,7 @@ export default function ConversationMessageItem({
 
           <div
             className={joinClasses(
-              "absolute z-50 flex items-center gap-1 whitespace-nowrap rounded-full border border-slate-200 bg-white p-1.5 shadow-xl",
+              "absolute z-50 flex items-center gap-1 whitespace-nowrap rounded-full border border-[var(--chat-border)] bg-[var(--chat-control)] p-1.5 shadow-xl",
               isMine ? "right-10" : "left-10",
               menuOpensUpward ? "bottom-9" : "top-9",
             )}
@@ -513,9 +513,9 @@ export default function ConversationMessageItem({
                 onClick={() => onReaction(message, emoji)}
                 aria-label={"React with " + emoji}
                 className={joinClasses(
-                  "flex h-9 w-9 items-center justify-center rounded-full text-xl transition hover:scale-110 hover:bg-slate-100 disabled:opacity-50",
+                    "flex h-9 w-9 items-center justify-center rounded-full text-xl transition hover:scale-110 hover:bg-[var(--chat-hover)] disabled:opacity-50",
                   currentUserReaction?.emoji === emoji &&
-                    "bg-cyan-100 ring-2 ring-cyan-500",
+                    "bg-[var(--chat-accent-soft)] ring-2 ring-[var(--chat-accent)]",
                 )}
               >
                 {emoji}
