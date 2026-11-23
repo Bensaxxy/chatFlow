@@ -11,9 +11,11 @@ import {
 import type { ApiSuccessResponse } from "@/types/api";
 import type {
   AuthUser,
+  ChangePasswordInput,
   LoginInput,
   MobileAuthData,
   RegisterInput,
+  ResetPasswordInput,
   VerifyEmailInput,
 } from "@/types/auth";
 
@@ -92,6 +94,28 @@ export const requestMobilePasswordReset = async (
   );
 
   return data.message;
+};
+
+export const resetMobilePassword = async (
+  input: ResetPasswordInput,
+): Promise<string> => {
+  const { data } = await apiClient.post<MessageData>("/auth/reset-password", input);
+  return data.message;
+};
+
+export const changeMobilePassword = async (
+  input: ChangePasswordInput,
+): Promise<string> => {
+  const { data } = await apiClient.patch<MessageData>(
+    "/auth/change-password",
+    input,
+  );
+  return data.message;
+};
+
+export const getMobileCurrentUser = async (): Promise<AuthUser> => {
+  const { data } = await apiClient.get<ApiSuccessResponse<UserData>>("/auth/me");
+  return data.data.user;
 };
 
 export const logoutMobileUser = async (): Promise<void> => {

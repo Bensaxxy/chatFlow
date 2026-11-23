@@ -20,6 +20,7 @@ interface AuthContextValue {
   login: (input: LoginInput) => Promise<AuthUser>;
   logout: () => Promise<void>;
   refreshUserSession: () => Promise<AuthUser | null>;
+  updateCurrentUser: (nextUser: AuthUser) => void;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -102,6 +103,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   }, []);
 
+  const updateCurrentUser = useCallback((nextUser: AuthUser): void => {
+    setUser(nextUser);
+  }, []);
+
   const value = useMemo<AuthContextValue>(
     () => ({
       user,
@@ -110,8 +115,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
       login,
       logout,
       refreshUserSession,
+      updateCurrentUser,
     }),
-    [user, isAuthLoading, login, logout, refreshUserSession],
+    [user, isAuthLoading, login, logout, refreshUserSession, updateCurrentUser],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -1,6 +1,6 @@
 import { apiClient } from "@/lib/api/client";
 import type { ApiSuccessResponse } from "@/types/api";
-import type { Conversation } from "@/types/conversation";
+import type { Conversation, ConversationPreferences } from "@/types/conversation";
 
 interface ConversationsData {
   conversations: Conversation[];
@@ -8,6 +8,10 @@ interface ConversationsData {
 
 interface ConversationData {
   conversation: Conversation;
+}
+
+interface ConversationPreferencesData {
+  preferences: ConversationPreferences;
 }
 
 export const getMobileConversations = async (): Promise<Conversation[]> => {
@@ -37,4 +41,32 @@ export const createMobileDirectConversation = async (
   );
 
   return data.data.conversation;
+};
+
+export const setMobileConversationPinned = async (
+  conversationId: string,
+  isPinned: boolean,
+): Promise<ConversationPreferences> => {
+  const { data } = await apiClient.patch<
+    ApiSuccessResponse<ConversationPreferencesData>
+  >(`/conversations/${conversationId}/pin`, { isPinned });
+  return data.data.preferences;
+};
+
+export const markMobileConversationUnread = async (
+  conversationId: string,
+): Promise<ConversationPreferences> => {
+  const { data } = await apiClient.patch<
+    ApiSuccessResponse<ConversationPreferencesData>
+  >(`/conversations/${conversationId}/unread`);
+  return data.data.preferences;
+};
+
+export const clearMobileConversation = async (
+  conversationId: string,
+): Promise<ConversationPreferences> => {
+  const { data } = await apiClient.post<
+    ApiSuccessResponse<ConversationPreferencesData>
+  >(`/conversations/${conversationId}/clear`);
+  return data.data.preferences;
 };

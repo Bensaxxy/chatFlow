@@ -2,6 +2,7 @@ import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 
 import { AuthProvider } from "@/contexts/auth-context";
+import { SocketProvider } from "@/contexts/socket-context";
 
 function RootNavigator() {
   return (
@@ -40,7 +41,9 @@ function RootNavigator() {
 export default function RootLayout() {
   return (
     <AuthProvider>
-      <RootNavigator />
+      <SocketProvider>
+        <RootNavigator />
+      </SocketProvider>
     </AuthProvider>
   );
 }

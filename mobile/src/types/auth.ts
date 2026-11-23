@@ -1,9 +1,18 @@
+import type {
+  ChatThemeSettings,
+  NotificationSettings,
+  PrivacySettings,
+} from "@/types/settings";
+
 export interface AuthUser {
   _id: string;
   name: string;
   email: string;
   avatarUrl: string | null;
   bio: string;
+  chatTheme: ChatThemeSettings;
+  privacySettings: PrivacySettings;
+  notificationSettings: NotificationSettings;
   isEmailVerified: boolean;
   emailVerifiedAt: string | null;
   lastSeenAt: string | null;
@@ -25,6 +34,23 @@ export interface RegisterInput {
 export interface VerifyEmailInput {
   email: string;
   code: string;
+}
+
+export interface UpdateProfileInput {
+  name?: string;
+  bio?: string;
+}
+
+export interface ChangePasswordInput {
+  currentPassword: string;
+  newPassword: string;
+  confirmPassword: string;
+}
+
+export interface ResetPasswordInput {
+  token: string;
+  newPassword: string;
+  confirmPassword: string;
 }
 
 export interface MobileAuthData {

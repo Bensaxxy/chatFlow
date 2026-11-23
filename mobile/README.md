@@ -20,6 +20,14 @@ the app in Expo web, add the preview origin (for example
 `http://localhost:8081`) to `MOBILE_WEB_ORIGINS` in the API deployment as a
 comma-separated list, then redeploy the API.
 
+## Messaging features
+
+Mobile chat supports real-time messages and previews, images and documents,
+voice-note recording and playback, typing states, reactions, editing, deleting,
+and a jump-to-latest control for unread messages while reading older content.
+The first native build after these changes must be rebuilt so iOS and Android
+receive the new microphone and photo-library permission declarations.
+
 ## Run locally
 
 ```bash

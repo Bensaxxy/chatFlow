@@ -1,12 +1,15 @@
 import { Ionicons } from "@expo/vector-icons";
+import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
 import { useState } from "react";
 import {
   Alert,
+  ActivityIndicator,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -14,10 +17,20 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import UserAvatar from "@/components/common/user-avatar";
 import { useAuth } from "@/contexts/auth-context";
 import { getApiErrorMessage } from "@/lib/api/errors";
+import {
+  removeMobileAvatar,
+  updateMobileProfile,
+  uploadMobileAvatar,
+} from "@/services/profile.service";
 
 export default function ProfileScreen() {
-  const { user, logout } = useAuth();
+  const { user, logout, updateCurrentUser } = useAuth();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [name, setName] = useState(user?.name ?? "");
+  const [bio, setBio] = useState(user?.bio ?? "");
+  const [isSaving, setIsSaving] = useState(false);
+  const [isUpdatingAvatar, setIsUpdatingAvatar] = useState(false);
 
   if (!user) {
     return null;
@@ -33,6 +46,84 @@ export default function ProfileScreen() {
     } finally {
       setIsLoggingOut(false);
     }
+  };
+
+  const handleSaveProfile = async (): Promise<void> => {
+    const nextName = name.trim();
+    const nextBio = bio.trim();
+
+    if (nextName.length < 2) {
+      Alert.alert("Name needed", "Enter at least two characters for your name.");
+      return;
+    }
+
+    try {
+      setIsSaving(true);
+      const updatedUser = await updateMobileProfile({
+        name: nextName,
+        bio: nextBio,
+      });
+      updateCurrentUser(updatedUser);
+      setIsEditing(false);
+    } catch (error) {
+      Alert.alert("Could not update profile", getApiErrorMessage(error));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleSelectAvatar = async (): Promise<void> => {
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert("Photo access", "Allow photo access to update your profile picture.");
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"],
+        quality: 0.9,
+        allowsEditing: true,
+        aspect: [1, 1],
+      });
+      if (result.canceled) {
+        return;
+      }
+
+      const image = result.assets[0];
+      if (!image) {
+        return;
+      }
+
+      setIsUpdatingAvatar(true);
+      const updatedUser = await uploadMobileAvatar({
+        uri: image.uri,
+        fileName: image.fileName ?? `avatar-${Date.now()}.jpg`,
+        mimeType: image.mimeType ?? "image/jpeg",
+      });
+      updateCurrentUser(updatedUser);
+    } catch (error) {
+      Alert.alert("Could not update photo", getApiErrorMessage(error));
+    } finally {
+      setIsUpdatingAvatar(false);
+    }
+  };
+
+  const handleRemoveAvatar = (): void => {
+    Alert.alert("Remove profile picture?", "Your profile picture will be removed from ChatFlow.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Remove",
+        style: "destructive",
+        onPress: () => {
+          void removeMobileAvatar()
+            .then(updateCurrentUser)
+            .catch((error: unknown) => {
+              Alert.alert("Could not remove photo", getApiErrorMessage(error));
+            });
+        },
+      },
+    ]);
   };
 
   return (
@@ -53,10 +144,22 @@ export default function ProfileScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.hero}>
-          <UserAvatar name={user.name} avatarUrl={user.avatarUrl} size={94} />
-          <Text style={styles.name}>{user.name}</Text>
+          <Pressable onPress={() => void handleSelectAvatar()} disabled={isUpdatingAvatar} style={styles.avatarButton} accessibilityLabel="Change profile picture">
+            <UserAvatar name={user.name} avatarUrl={user.avatarUrl} size={94} />
+            <View style={styles.avatarEditBadge}>{isUpdatingAvatar ? <ActivityIndicator size="small" color="#ffffff" /> : <Ionicons name="camera" size={15} color="#ffffff" />}</View>
+          </Pressable>
+          {isEditing ? <TextInput value={name} onChangeText={setName} maxLength={60} style={styles.nameInput} placeholder="Your name" /> : <Text style={styles.name}>{user.name}</Text>}
           <Text style={styles.email}>{user.email}</Text>
-          {!!user.bio && <Text style={styles.bio}>{user.bio}</Text>}
+          {isEditing ? <TextInput value={bio} onChangeText={setBio} maxLength={160} multiline placeholder="Add a short bio" placeholderTextColor="#64748b" style={styles.bioInput} textAlign="center" /> : !!user.bio && <Text style={styles.bio}>{user.bio}</Text>}
+          {isEditing ? (
+            <View style={styles.editActions}>
+              <Pressable onPress={() => { setName(user.name); setBio(user.bio); setIsEditing(false); }} disabled={isSaving} style={styles.cancelEditButton}><Text style={styles.cancelEditText}>Cancel</Text></Pressable>
+              <Pressable onPress={() => void handleSaveProfile()} disabled={isSaving} style={styles.saveEditButton}>{isSaving ? <ActivityIndicator size="small" color="#ffffff" /> : <Text style={styles.saveEditText}>Save</Text>}</Pressable>
+            </View>
+          ) : <View style={styles.profileActions}>
+            <Pressable onPress={() => setIsEditing(true)} style={styles.editProfileButton}><Ionicons name="create-outline" size={17} color="#0e7490" /><Text style={styles.editProfileText}>Edit profile</Text></Pressable>
+            {user.avatarUrl && <Pressable onPress={handleRemoveAvatar} style={styles.removePhotoButton}><Ionicons name="trash-outline" size={17} color="#dc2626" /></Pressable>}
+          </View>}
         </View>
 
         <View style={styles.section}>
@@ -92,8 +195,8 @@ export default function ProfileScreen() {
         <View style={styles.notice}>
           <Ionicons name="phone-portrait-outline" size={21} color="#0e7490" />
           <Text style={styles.noticeText}>
-            Profile editing and privacy controls remain available in ChatFlow on
-            the web while the mobile settings experience is expanded.
+            Profile changes sync immediately across ChatFlow. Your existing
+            privacy, appearance and notification preferences are preserved here.
           </Text>
         </View>
 
@@ -158,6 +261,8 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     backgroundColor: "#ffffff",
   },
+  avatarButton: { position: "relative" },
+  avatarEditBadge: { position: "absolute", right: -2, bottom: -2, width: 30, height: 30, alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: "#ffffff", borderRadius: 15, backgroundColor: "#0891b2" },
   name: {
     marginTop: 16,
     color: "#0f172a",
@@ -165,6 +270,7 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     textAlign: "center",
   },
+  nameInput: { width: "100%", marginTop: 16, paddingHorizontal: 12, paddingVertical: 7, borderWidth: 1, borderColor: "#67e8f9", borderRadius: 12, color: "#0f172a", fontSize: 20, fontWeight: "900", textAlign: "center" },
   email: { marginTop: 5, color: "#64748b", fontSize: 14, textAlign: "center" },
   bio: {
     marginTop: 14,
@@ -173,6 +279,16 @@ const styles = StyleSheet.create({
     lineHeight: 21,
     textAlign: "center",
   },
+  bioInput: { width: "100%", minHeight: 58, marginTop: 14, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: "#bae6fd", borderRadius: 12, color: "#334155", fontSize: 14, lineHeight: 21 },
+  profileActions: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 16 },
+  editProfileButton: { minHeight: 38, flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 14, borderRadius: 12, backgroundColor: "#ecfeff" },
+  editProfileText: { color: "#0e7490", fontSize: 13, fontWeight: "800" },
+  removePhotoButton: { width: 38, height: 38, alignItems: "center", justifyContent: "center", borderRadius: 12, backgroundColor: "#fff1f2" },
+  editActions: { flexDirection: "row", gap: 8, marginTop: 14 },
+  cancelEditButton: { minHeight: 40, alignItems: "center", justifyContent: "center", paddingHorizontal: 16, borderRadius: 12, backgroundColor: "#f1f5f9" },
+  cancelEditText: { color: "#475569", fontSize: 13, fontWeight: "800" },
+  saveEditButton: { minWidth: 76, minHeight: 40, alignItems: "center", justifyContent: "center", paddingHorizontal: 16, borderRadius: 12, backgroundColor: "#0891b2" },
+  saveEditText: { color: "#ffffff", fontSize: 13, fontWeight: "900" },
   section: {
     marginTop: 18,
     overflow: "hidden",

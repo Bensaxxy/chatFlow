@@ -1,7 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   FlatList,
   Pressable,
@@ -14,31 +15,43 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import UserAvatar from "@/components/common/user-avatar";
 import { useAuth } from "@/contexts/auth-context";
+import { useSocket } from "@/contexts/socket-context";
 import { getApiErrorMessage } from "@/lib/api/errors";
 import {
   formatConversationTime,
   getConversationName,
   getConversationPeer,
 } from "@/lib/chat/presentation";
-import { getMobileConversations } from "@/services/conversation.service";
+import {
+  clearMobileConversation,
+  getMobileConversations,
+  markMobileConversationUnread,
+  setMobileConversationPinned,
+} from "@/services/conversation.service";
 import type { Conversation } from "@/types/conversation";
 
 export default function ChatsScreen() {
   const { user, logout } = useAuth();
+  const { socket } = useSocket();
 
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(true);
+  const [updatingConversationId, setUpdatingConversationId] = useState<string | null>(null);
 
-  const loadConversations = useCallback(async (): Promise<void> => {
+  const loadConversations = useCallback(async (silently = false): Promise<void> => {
     try {
-      setIsRefreshing(true);
+      if (!silently) {
+        setIsRefreshing(true);
+      }
       const nextConversations = await getMobileConversations();
       setConversations(nextConversations);
     } catch (error) {
       Alert.alert("Could not load chats", getApiErrorMessage(error));
     } finally {
-      setIsRefreshing(false);
+      if (!silently) {
+        setIsRefreshing(false);
+      }
     }
   }, []);
 
@@ -47,6 +60,22 @@ export default function ChatsScreen() {
       void loadConversations();
     }, [loadConversations]),
   );
+
+  useEffect(() => {
+    const refreshPreview = (): void => {
+      void loadConversations(true);
+    };
+
+    socket.on("conversation:updated", refreshPreview);
+    socket.on("message:updated", refreshPreview);
+    socket.on("message:deleted", refreshPreview);
+
+    return () => {
+      socket.off("conversation:updated", refreshPreview);
+      socket.off("message:updated", refreshPreview);
+      socket.off("message:deleted", refreshPreview);
+    };
+  }, [loadConversations, socket]);
 
   const handleLogout = async (): Promise<void> => {
     try {
@@ -57,6 +86,56 @@ export default function ChatsScreen() {
     } finally {
       setIsLoggingOut(false);
     }
+  };
+
+  const updateConversation = async (
+    conversationId: string,
+    action: () => Promise<unknown>,
+  ): Promise<void> => {
+    try {
+      setUpdatingConversationId(conversationId);
+      await action();
+      await loadConversations(true);
+    } catch (error) {
+      Alert.alert("Could not update chat", getApiErrorMessage(error));
+    } finally {
+      setUpdatingConversationId(null);
+    }
+  };
+
+  const showConversationOptions = (conversation: Conversation): void => {
+    const clearChat = (): void => {
+      Alert.alert("Clear this chat?", "Messages will be removed only from this device's view.", [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Clear chat",
+          style: "destructive",
+          onPress: () => void updateConversation(
+            conversation._id,
+            () => clearMobileConversation(conversation._id),
+          ),
+        },
+      ]);
+    };
+
+    Alert.alert("Chat options", undefined, [
+      {
+        text: conversation.isPinned ? "Unpin chat" : "Pin chat",
+        onPress: () => void updateConversation(
+          conversation._id,
+          () => setMobileConversationPinned(conversation._id, !conversation.isPinned),
+        ),
+      },
+      {
+        text: "Mark as unread",
+        onPress: () => void updateConversation(
+          conversation._id,
+          () => markMobileConversationUnread(conversation._id),
+        ),
+      },
+      { text: "Clear chat", style: "destructive", onPress: clearChat },
+      { text: "Cancel", style: "cancel" },
+    ]);
   };
 
   return (
@@ -138,6 +217,18 @@ export default function ChatsScreen() {
                   {!!item.unreadCount && <View style={styles.unreadBadge}><Text style={styles.unreadText}>{item.unreadCount > 99 ? "99+" : item.unreadCount}</Text></View>}
                 </View>
               </View>
+              <Pressable
+                onPress={(event) => {
+                  event.stopPropagation();
+                  showConversationOptions(item);
+                }}
+                disabled={updatingConversationId === item._id}
+                hitSlop={8}
+                style={styles.conversationMenuButton}
+                accessibilityLabel={`Chat options for ${name}`}
+              >
+                {updatingConversationId === item._id ? <ActivityIndicator size="small" color="#0891b2" /> : <Ionicons name="ellipsis-vertical" size={18} color="#64748b" />}
+              </Pressable>
             </Pressable>
           );
         }}
@@ -235,6 +326,15 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: "#f1f5f9",
+  },
+
+  conversationMenuButton: {
+    width: 30,
+    height: 38,
+    alignItems: "center",
+    justifyContent: "center",
+    marginLeft: 3,
+    borderRadius: 15,
   },
 
   conversationTopLine: {

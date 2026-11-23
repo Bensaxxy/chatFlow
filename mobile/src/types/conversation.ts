@@ -17,6 +17,12 @@ export interface ConversationLastMessage {
   deletedForEveryoneAt: string | null;
 }
 
+export interface ConversationPreferences {
+  isPinned: boolean;
+  isMarkedUnread: boolean;
+  clearedAt: string | null;
+}
+
 export interface Conversation {
   _id: string;
   type: "direct" | "group";
@@ -26,6 +32,8 @@ export interface Conversation {
   lastMessage: ConversationLastMessage | null;
   unreadCount?: number;
   isPinned?: boolean;
+  isMarkedUnread?: boolean;
+  clearedAt?: string | null;
   updatedAt: string;
 }
 
