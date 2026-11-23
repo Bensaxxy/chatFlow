@@ -3,7 +3,7 @@ import cors from "cors";
 import express from "express";
 import helmet from "helmet";
 
-import { env } from "./config/env";
+import { allowedClientOrigins, env } from "./config/env";
 import { errorHandler } from "./middleware/error.middleware";
 import { notFoundHandler } from "./middleware/not-found.middleware";
 import authRouter from "./routes/auth.routes";
@@ -18,7 +18,7 @@ app.use(helmet());
 
 app.use(
   cors({
-    origin: env.CLIENT_URL,
+    origin: allowedClientOrigins,
     credentials: true,
   }),
 );

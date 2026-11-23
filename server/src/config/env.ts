@@ -1,6 +1,12 @@
 import "dotenv/config";
 import { z } from "zod";
 
+const parseOrigins = (value: string | undefined): string[] =>
+  value
+    ?.split(",")
+    .map((origin) => origin.trim().replace(/\/+$/, ""))
+    .filter(Boolean) ?? [];
+
 const envSchema = z.object({
   NODE_ENV: z
     .enum(["development", "test", "production"])
@@ -9,6 +15,12 @@ const envSchema = z.object({
   PORT: z.coerce.number().int().positive().default(5000),
 
   CLIENT_URL: z.string().url().default("http://localhost:3000"),
+
+  /*
+   * Comma-separated web origins for the Expo mobile web preview or a hosted
+   * mobile web build. Native iOS/Android requests do not use browser CORS.
+   */
+  MOBILE_WEB_ORIGINS: z.string().optional().transform(parseOrigins),
 
   /*
    * JSON array of RTCIceServer entries. Keep TURN credentials on the API
@@ -132,3 +144,11 @@ if (!result.success) {
 }
 
 export const env = result.data;
+
+export const allowedClientOrigins = [
+  ...new Set([
+    env.CLIENT_URL.replace(/\/+$/, ""),
+    ...env.MOBILE_WEB_ORIGINS,
+    ...(env.NODE_ENV === "development" ? ["http://localhost:8081"] : []),
+  ]),
+];

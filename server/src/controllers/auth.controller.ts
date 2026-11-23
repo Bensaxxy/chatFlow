@@ -22,12 +22,16 @@ import { asyncHandler } from "../utils/async-handler";
 import type {
   ChangePasswordInput,
   LoginInput,
+  MobileLoginInput,
+  MobileLogoutInput,
+  MobileRefreshInput,
   RegisterInput,
   RequestPasswordResetInput,
   ResendVerificationInput,
   ResetPasswordInput,
   VerifyEmailInput,
 } from "../validations/auth.validation";
+import { createMobileSession, refreshMobileSession, revokeMobileSession } from "../services/mobile-auth.service";
 
 const getAuthenticatedUserId = (userId: string | undefined): string => {
   if (!userId) {
@@ -45,7 +49,8 @@ export const register: RequestHandler = asyncHandler(
 
     response.status(201).json({
       success: true,
-      message: "Account created successfully. Check your email for the verification code.",
+      message:
+        "Account created successfully. Check your email for the verification code.",
       data: {
         user,
       },
@@ -242,6 +247,63 @@ export const resetPassword: RequestHandler = asyncHandler(
     response.status(200).json({
       success: true,
       message: "Password reset successfully. You can now sign in.",
+    });
+  },
+);
+
+export const mobileLogin: RequestHandler = asyncHandler(
+  async (request, response) => {
+    const input = request.body as MobileLoginInput;
+
+    const user = await loginUser({
+      email: input.email,
+      password: input.password,
+    });
+
+    const tokens = await createMobileSession(
+      user._id.toString(),
+      user.sessionVersion,
+      {
+        deviceId: input.deviceId,
+        deviceName: input.deviceName,
+      },
+    );
+
+    response.status(200).json({
+      success: true,
+      message: "Mobile login successful",
+      data: {
+        user,
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+      },
+    });
+  },
+);
+
+export const mobileRefresh: RequestHandler = asyncHandler(
+  async (request, response) => {
+    const input = request.body as MobileRefreshInput;
+
+    const result = await refreshMobileSession(input);
+
+    response.status(200).json({
+      success: true,
+      message: "Mobile session refreshed successfully",
+      data: result,
+    });
+  },
+);
+
+export const mobileLogout: RequestHandler = asyncHandler(
+  async (request, response) => {
+    const input = request.body as MobileLogoutInput;
+
+    await revokeMobileSession(input.refreshToken);
+
+    response.status(200).json({
+      success: true,
+      message: "Mobile logout successful",
     });
   },
 );

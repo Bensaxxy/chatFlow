@@ -6,6 +6,9 @@ import {
   login,
   logout,
   me,
+  mobileLogin,
+  mobileLogout,
+  mobileRefresh,
   refresh,
   register,
   resendVerificationCode,
@@ -23,6 +26,9 @@ import {
   resendVerificationSchema,
   resetPasswordSchema,
   verifyEmailSchema,
+  mobileLoginSchema,
+  mobileRefreshSchema,
+  mobileLogoutSchema,
 } from "../validations/auth.validation";
 
 const authRouter = Router();
@@ -35,6 +41,20 @@ authRouter.post(
   "/resend-verification",
   validateBody(resendVerificationSchema),
   resendVerificationCode,
+);
+
+authRouter.post("/mobile/login", validateBody(mobileLoginSchema), mobileLogin);
+
+authRouter.post(
+  "/mobile/refresh",
+  validateBody(mobileRefreshSchema),
+  mobileRefresh,
+);
+
+authRouter.post(
+  "/mobile/logout",
+  validateBody(mobileLogoutSchema),
+  mobileLogout,
 );
 
 authRouter.post("/login", validateBody(loginSchema), login);

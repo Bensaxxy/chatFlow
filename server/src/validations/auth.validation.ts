@@ -101,3 +101,33 @@ export const resetPasswordSchema = z
   });
 
 export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
+
+export const mobileLoginSchema = loginSchema.extend({
+  deviceId: z
+    .string()
+    .trim()
+    .min(1, "Device ID is required")
+    .max(100, "Device ID is too long"),
+
+  deviceName: z
+    .string()
+    .trim()
+    .min(1, "Device name is required")
+    .max(100, "Device name is too long"),
+});
+
+export type MobileLoginInput = z.infer<typeof mobileLoginSchema>;
+
+export const mobileRefreshSchema = z.object({
+  refreshToken: z
+    .string()
+    .trim()
+    .min(1, "Refresh token is required")
+    .max(300, "Refresh token is invalid"),
+});
+
+export type MobileRefreshInput = z.infer<typeof mobileRefreshSchema>;
+
+export const mobileLogoutSchema = mobileRefreshSchema;
+
+export type MobileLogoutInput = z.infer<typeof mobileLogoutSchema>;

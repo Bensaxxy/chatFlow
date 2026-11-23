@@ -3,7 +3,7 @@ import { isValidObjectId } from "mongoose";
 import type { Server as HttpServer } from "node:http";
 import { Server } from "socket.io";
 
-import { env } from "../config/env";
+import { allowedClientOrigins } from "../config/env";
 import { Conversation } from "../models/conversation.model";
 import {
   completeCallHistory,
@@ -282,7 +282,7 @@ export const initializeSocketServer = (
     SocketData
   >(httpServer, {
     cors: {
-      origin: env.CLIENT_URL,
+      origin: allowedClientOrigins,
       credentials: true,
     },
 
