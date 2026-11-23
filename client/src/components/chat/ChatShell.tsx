@@ -22,6 +22,7 @@ import ConversationList from "./ConversationList";
 import UserSearchResults from "./UserSearchResults";
 
 import StatusComposerModal from "@/components/status/StatusComposerModal";
+import StatusRail from "@/components/status/StatusRail";
 import StatusStrip from "@/components/status/StatusStrip";
 import StatusViewer from "@/components/status/StatusViewer";
 import ActionMenu from "@/components/ui/ActionMenu";
@@ -150,6 +151,11 @@ export default function ChatShell({
       }
       className="chat-theme flex h-dvh min-w-0 w-full overflow-hidden bg-[var(--chat-app)] text-[var(--chat-text)]"
     >
+      <StatusRail
+        onCreateStatus={handleCreateStatus}
+        onOpenStatusGroup={handleOpenStatusGroup}
+      />
+
       <aside
         className={`w-full shrink-0 flex-col border-r border-[var(--chat-border)] bg-[var(--chat-sidebar)] md:flex md:w-[380px] ${
           conversationIsOpen
@@ -241,14 +247,12 @@ export default function ChatShell({
           />
         </header>
 
-        <StatusStrip
-          onCreateStatus={
-            handleCreateStatus
-          }
-          onOpenStatusGroup={
-            handleOpenStatusGroup
-          }
-        />
+        <div className="md:hidden">
+          <StatusStrip
+            onCreateStatus={handleCreateStatus}
+            onOpenStatusGroup={handleOpenStatusGroup}
+          />
+        </div>
 
         <div className="border-b border-[var(--chat-border)] p-4">
           <div className="relative">
