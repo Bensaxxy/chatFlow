@@ -361,6 +361,8 @@ export default function ConversationMessageItem({
                 message.attachment,
               )}
               isMine={isMine}
+              senderName={senderName}
+              senderAvatarUrl={senderAvatarUrl}
             />
           </div>
         )}

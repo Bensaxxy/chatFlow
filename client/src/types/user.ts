@@ -12,6 +12,7 @@ export interface PublicUserProfile {
   _id: string;
   name: string;
   avatarUrl: string | null;
+  coverPhotoUrl?: string | null;
   bio: string;
   lastSeenAt: string | null;
   createdAt: string;

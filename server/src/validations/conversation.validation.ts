@@ -10,6 +10,7 @@ export const createDirectConversationSchema = z.object({
 export const updateConversationPinSchema = z.object({
   isPinned: z.boolean(),
 });
+export const muteConversationSchema = z.object({ durationHours: z.union([z.literal(8), z.literal(168), z.literal("always")]) });
 
 export type CreateDirectConversationInput = z.infer<
   typeof createDirectConversationSchema

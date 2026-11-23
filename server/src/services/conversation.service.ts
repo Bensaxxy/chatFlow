@@ -8,6 +8,10 @@ import {
   getConversationPreference,
   getConversationPreferenceMap,
   markConversationUnread,
+  muteConversationForUser,
+  unmuteConversationForUser,
+  deleteConversationForUser,
+  restoreConversationForUser,
   setConversationPinned,
   type ConversationPreferences,
 } from "./conversation-preference.service";
@@ -127,6 +131,7 @@ export const createDirectConversation = async (
   }).populate("participants", participantFields);
 
   if (existingConversation) {
+    await restoreConversationForUser(currentUserId, existingConversation._id.toString());
     return {
       conversation: existingConversation,
       created: false,
@@ -280,8 +285,10 @@ export const getUserConversations = async (currentUserId: string) => {
     conversationIds,
   );
 
+  const visibleConversations = conversations.filter((conversation) => !preferencesByConversation.get(conversation._id.toString())?.deletedAt);
+
   const userConversations = await Promise.all(
-    conversations.map(async (conversation) => {
+    visibleConversations.map(async (conversation) => {
       const conversationId = conversation._id.toString();
       const preferences =
         preferencesByConversation.get(conversationId) ?? emptyPreferences();
@@ -342,6 +349,8 @@ export const getUserConversations = async (currentUserId: string) => {
         isPinned: preferences.isPinned,
         isMarkedUnread: preferences.isMarkedUnread,
         clearedAt: preferences.clearedAt,
+        mutedUntil: preferences.mutedUntil,
+        isMuted: preferences.isMuted,
       };
     }),
   );
@@ -356,6 +365,21 @@ export const getUserConversations = async (currentUserId: string) => {
       new Date((first as Record<string, unknown>).updatedAt as string).getTime()
     );
   });
+};
+
+export const muteUserConversation = async (conversationId: string, userId: string, durationHours: number | "always"): Promise<ConversationPreferences> => {
+  await ensureConversationMembership(conversationId, userId);
+  return muteConversationForUser(userId, conversationId, durationHours);
+};
+
+export const unmuteUserConversation = async (conversationId: string, userId: string): Promise<ConversationPreferences> => {
+  await ensureConversationMembership(conversationId, userId);
+  return unmuteConversationForUser(userId, conversationId);
+};
+
+export const deleteUserConversation = async (conversationId: string, userId: string): Promise<void> => {
+  await ensureConversationMembership(conversationId, userId);
+  await deleteConversationForUser(userId, conversationId);
 };
 
 export const getConversationById = async (
@@ -418,6 +442,8 @@ export const getConversationById = async (
     isPinned: preferences.isPinned,
     isMarkedUnread: preferences.isMarkedUnread,
     clearedAt: preferences.clearedAt,
+    mutedUntil: preferences.mutedUntil,
+    isMuted: preferences.isMuted,
   };
 };
 

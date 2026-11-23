@@ -7,6 +7,9 @@ import {
   listConversations,
   markConversationUnread,
   updateConversationPin,
+  muteConversation,
+  deleteConversation,
+  unmuteConversation,
 } from "../controllers/conversation.controller";
 import {
   createAttachmentMessage,
@@ -45,6 +48,10 @@ conversationRouter.post(
   validateBody(createDirectConversationSchema),
   createDirect,
 );
+
+conversationRouter.patch("/:conversationId/mute", authenticate, muteConversation);
+conversationRouter.patch("/:conversationId/unmute", authenticate, unmuteConversation);
+conversationRouter.delete("/:conversationId", authenticate, deleteConversation);
 
 conversationRouter.get("/:conversationId", authenticate, getConversation);
 

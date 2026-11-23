@@ -6,12 +6,14 @@ import {
   CalendarDays,
   CircleCheck,
   Clock3,
+  Download,
   LoaderCircle,
   LockKeyhole,
   MessageCircle,
   Pencil,
   ShieldCheck,
   UserRound,
+  X,
 } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -106,6 +108,16 @@ export default function PublicProfilePage() {
     useState(false);
 
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [expandedImage, setExpandedImage] = useState<{ src: string; alt: string } | null>(null);
+
+  useEffect(() => {
+    if (!expandedImage) return;
+    const closeOnEscape = (event: KeyboardEvent): void => {
+      if (event.key === "Escape") setExpandedImage(null);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [expandedImage]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -283,6 +295,11 @@ export default function PublicProfilePage() {
         <div className="mx-auto w-full max-w-4xl">
           <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-xl shadow-slate-900/5">
             <div className="relative h-28 overflow-hidden bg-gradient-to-br from-cyan-700 via-cyan-600 to-sky-500 sm:h-40">
+              {profile.coverPhotoUrl && (
+                <button type="button" onClick={() => setExpandedImage({ src: profile.coverPhotoUrl!, alt: `${profile.name}'s cover photo` })} aria-label="View cover photo" className="absolute inset-0 z-10 cursor-zoom-in">
+                  <img src={profile.coverPhotoUrl} alt="" className="h-full w-full object-cover" />
+                </button>
+              )}
               <div className="absolute -right-10 -top-20 h-56 w-56 rounded-full border-[28px] border-white/10" />
               <div className="absolute -bottom-24 left-1/3 h-48 w-48 rounded-full bg-cyan-300/20 blur-2xl" />
               <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-slate-950/10 to-transparent" />
@@ -291,16 +308,13 @@ export default function PublicProfilePage() {
             <div className="px-4 pb-5 sm:px-8 sm:pb-8">
               <div className="-mt-14 flex flex-col items-center sm:-mt-16 sm:items-start">
                 <div className="relative">
-                  <UserAvatar
-                    name={profile.name}
-                    avatarUrl={
-                      updatedProfile
-                        ? updatedProfile.avatarUrl
-                        : profile.avatarUrl
-                    }
-                    className="h-28 w-28 border-4 border-white text-2xl shadow-xl sm:h-32 sm:w-32 sm:text-3xl"
-                    fallbackClassName="bg-cyan-100 font-bold text-cyan-800"
-                  />
+                  {(updatedProfile ? updatedProfile.avatarUrl : profile.avatarUrl) ? (
+                    <button type="button" onClick={() => setExpandedImage({ src: (updatedProfile ? updatedProfile.avatarUrl : profile.avatarUrl)!, alt: `${profile.name}'s profile picture` })} aria-label="View profile picture" className="block cursor-zoom-in rounded-full focus:outline-none focus:ring-4 focus:ring-cyan-300">
+                      <UserAvatar name={profile.name} avatarUrl={updatedProfile ? updatedProfile.avatarUrl : profile.avatarUrl} className="h-28 w-28 border-4 border-white text-2xl shadow-xl sm:h-32 sm:w-32 sm:text-3xl" fallbackClassName="bg-cyan-100 font-bold text-cyan-800" />
+                    </button>
+                  ) : (
+                    <UserAvatar name={profile.name} avatarUrl={null} className="h-28 w-28 border-4 border-white text-2xl shadow-xl sm:h-32 sm:w-32 sm:text-3xl" fallbackClassName="bg-cyan-100 font-bold text-cyan-800" />
+                  )}
 
                   {isOnline && (
                     <span
@@ -489,6 +503,16 @@ export default function PublicProfilePage() {
         onConfirm={() => void handleBlockToggle()}
         onClose={() => setIsBlockConfirmModalOpen(false)}
       />
+      {expandedImage && (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center bg-slate-950/85 p-4 backdrop-blur-sm" onClick={() => setExpandedImage(null)}>
+          <button type="button" aria-label="Close image" className="absolute inset-0 cursor-zoom-out" />
+          <div className="absolute right-5 top-5 z-20 flex items-center gap-2">
+            <a href={expandedImage.src} download aria-label="Export image" title="Export image" onClick={(event) => event.stopPropagation()} className="flex h-11 w-11 items-center justify-center rounded-full bg-white/15 text-white backdrop-blur transition hover:bg-white/25"><Download className="h-5 w-5" /></a>
+            <button type="button" aria-label="Close image viewer" title="Close" onClick={(event) => { event.stopPropagation(); setExpandedImage(null); }} className="flex h-11 w-11 items-center justify-center rounded-full bg-white/15 text-white backdrop-blur transition hover:bg-white/25"><X className="h-5 w-5" /></button>
+          </div>
+          <img src={expandedImage.src} alt={expandedImage.alt} className="relative z-10 max-h-[90dvh] max-w-[92vw] rounded-xl object-contain shadow-2xl" />
+        </div>
+      )}
     </section>
   );
 }

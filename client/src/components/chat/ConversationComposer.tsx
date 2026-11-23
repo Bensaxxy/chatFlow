@@ -3,6 +3,8 @@
 import { Check, LoaderCircle, SendHorizontal, X } from "lucide-react";
 import {
   useLayoutEffect,
+  useCallback,
+  useRef,
   useState,
   type ChangeEvent,
   type FormEvent,
@@ -35,7 +37,11 @@ interface ConversationComposerProps {
     content: string,
     replyToMessageId: string | null,
   ) => void;
-  onVoiceNoteQueued: (file: File, replyToMessageId: string | null) => void;
+  onVoiceNoteQueued: (
+    file: File,
+    replyToMessageId: string | null,
+    waveform: number[],
+  ) => void;
 }
 
 export default function ConversationComposer({
@@ -57,6 +63,10 @@ export default function ConversationComposer({
 }: ConversationComposerProps) {
   const [voiceNoteStatus, setVoiceNoteStatus] =
     useState<VoiceNoteStatus>("idle");
+  const attachmentHandlerRef = useRef<((file: File) => void) | null>(null);
+  const registerAttachmentHandler = useCallback((handler: (file: File) => void) => {
+    attachmentHandlerRef.current = handler;
+  }, []);
   const isRecordingVoiceNote = voiceNoteStatus === "recording";
 
   useLayoutEffect(() => {
@@ -187,6 +197,7 @@ export default function ConversationComposer({
                 isEditingMessage || editingMessageId !== null
               }
               onAttachmentQueued={onAttachmentQueued}
+              onRegisterFileHandler={registerAttachmentHandler}
             />
           )}
 
@@ -196,6 +207,23 @@ export default function ConversationComposer({
               value={messageText}
               onChange={onMessageChange}
               onKeyDown={handleMessageKeyDown}
+              onPaste={(event) => {
+                const file = Array.from(event.clipboardData.files).find((item) => item.type.startsWith("image/"));
+                if (file && attachmentHandlerRef.current) {
+                  event.preventDefault();
+                  attachmentHandlerRef.current(file);
+                }
+              }}
+              onDragOver={(event) => {
+                if (Array.from(event.dataTransfer.items).some((item) => item.kind === "file")) event.preventDefault();
+              }}
+              onDrop={(event) => {
+                const file = Array.from(event.dataTransfer.files).find((item) => item.type.startsWith("image/"));
+                if (file && attachmentHandlerRef.current) {
+                  event.preventDefault();
+                  attachmentHandlerRef.current(file);
+                }
+              }}
               maxLength={5000}
               rows={1}
               placeholder={

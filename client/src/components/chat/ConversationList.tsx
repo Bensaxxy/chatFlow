@@ -3,15 +3,18 @@
 import {
   AlertCircle,
   Ban,
+  BellOff,
   Eraser,
   Mail,
   MessageCircleMore,
   Pin,
   PinOff,
   ShieldCheck,
+  VolumeX,
+  Trash2,
 } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "react-toastify";
 
@@ -28,9 +31,12 @@ import {
 } from "@/lib/chat/conversation-cache";
 import {
   clearConversation,
+  deleteConversation,
   getConversations,
   markConversationUnread,
   setConversationPinned,
+  muteConversation,
+  unmuteConversation,
 } from "@/services/conversation.service";
 import { blockUser, unblockUser } from "@/services/user.service";
 import type {
@@ -102,6 +108,7 @@ interface ConfirmationRequest {
 
 export default function ConversationList() {
   const pathname = usePathname();
+  const router = useRouter();
   const { user } = useAuth();
 
   const { socket, isConnected, onlineUserIds, updatedProfiles } = useSocket();
@@ -122,6 +129,7 @@ export default function ConversationList() {
   const [openMenuConversationId, setOpenMenuConversationId] = useState<
     string | null
   >(null);
+  const [menuOpenedAt, setMenuOpenedAt] = useState(0);
   const [actionConversationId, setActionConversationId] = useState<
     string | null
   >(null);
@@ -185,6 +193,24 @@ export default function ConversationList() {
 
     return () => controller.abort();
   }, [reloadKey]);
+
+  useEffect(() => {
+    const now = Date.now();
+    const nextExpiry = conversations.reduce<number | null>((nearest, conversation) => {
+      if (!conversation.isMuted || !conversation.mutedUntil) return nearest;
+      const expiry = new Date(conversation.mutedUntil).getTime();
+      if (expiry <= now) return nearest;
+      return nearest === null || expiry < nearest ? expiry : nearest;
+    }, null);
+
+    if (nextExpiry === null) return;
+
+    const timer = window.setTimeout(
+      () => setMenuOpenedAt(Date.now()),
+      Math.max(0, nextExpiry - now),
+    );
+    return () => window.clearTimeout(timer);
+  }, [conversations]);
 
   useEffect(() => {
     if (!isConnected || !currentUserId) return;
@@ -363,6 +389,8 @@ export default function ConversationList() {
       isPinned: boolean;
       isMarkedUnread: boolean;
       clearedAt: string | null;
+      mutedUntil: string | null;
+      isMuted: boolean;
     }): void => {
       setConversations((current) =>
         sortConversations(
@@ -382,6 +410,8 @@ export default function ConversationList() {
               isPinned: payload.isPinned,
               isMarkedUnread: payload.isMarkedUnread,
               clearedAt: payload.clearedAt,
+              mutedUntil: payload.mutedUntil,
+              isMuted: payload.isMuted,
               unreadCount: payload.clearedAt
                 ? 0
                 : payload.isMarkedUnread
@@ -530,6 +560,8 @@ export default function ConversationList() {
             isPinned: preferences.isPinned,
             isMarkedUnread: preferences.isMarkedUnread,
             clearedAt: preferences.clearedAt,
+            mutedUntil: preferences.mutedUntil,
+            isMuted: preferences.isMuted,
             unreadCount: preferences.clearedAt
               ? 0
               : preferences.isMarkedUnread
@@ -540,6 +572,23 @@ export default function ConversationList() {
             }),
           };
         }),
+      ),
+    );
+  };
+
+  const applyConversationMutePreferences = (
+    conversationId: string,
+    preferences: ConversationPreferences,
+  ): void => {
+    setConversations((current) =>
+      current.map((conversation) =>
+        conversation._id === conversationId
+          ? {
+              ...conversation,
+              mutedUntil: preferences.mutedUntil,
+              isMuted: preferences.isMuted,
+            }
+          : conversation,
       ),
     );
   };
@@ -603,6 +652,45 @@ export default function ConversationList() {
     }
   };
 
+  const handleMuteConversation = async (conversationId: string, duration: 8 | 168 | "always"): Promise<void> => {
+    setActionConversationId(conversationId);
+    try {
+      const preferences = await muteConversation(conversationId, duration);
+      applyConversationMutePreferences(conversationId, preferences);
+      toast.success(`Chat muted${duration === "always" ? "" : ` for ${duration === 168 ? "1 week" : `${duration} hours`}`}`);
+    } catch (error) {
+      toast.error(getApiErrorMessage(error));
+    } finally {
+      setActionConversationId(null);
+    }
+  };
+
+  const handleUnmuteConversation = async (conversationId: string): Promise<void> => {
+    setActionConversationId(conversationId);
+    try {
+      applyConversationMutePreferences(conversationId, await unmuteConversation(conversationId));
+      toast.success("Chat unmuted");
+    } catch (error) {
+      toast.error(getApiErrorMessage(error));
+    } finally {
+      setActionConversationId(null);
+    }
+  };
+
+  const handleDeleteConversation = async (conversationId: string): Promise<void> => {
+    setActionConversationId(conversationId);
+    try {
+      await deleteConversation(conversationId);
+      setConversations((current) => current.filter((item) => item._id !== conversationId));
+      if (pathname === `/chats/${conversationId}`) router.push("/chats");
+      toast.success("Chat deleted for you");
+    } catch (error) {
+      toast.error(getApiErrorMessage(error));
+    } finally {
+      setActionConversationId(null);
+    }
+  };
+
   const handleBlockConversationUser = async (
     conversationId: string,
     otherUserId: string,
@@ -645,6 +733,15 @@ export default function ConversationList() {
         "Messages will be removed from your view only. The other person will keep their copy.",
       confirmLabel: "Clear chat",
       onConfirm: () => handleClearConversation(conversationId),
+    });
+  };
+
+  const requestDeleteConversation = (conversationId: string): void => {
+    setConfirmationRequest({
+      title: "Delete conversation?",
+      description: "Are you sure you want to delete this chat?",
+      confirmLabel: "Delete chat",
+      onConfirm: () => handleDeleteConversation(conversationId),
     });
   };
 
@@ -754,7 +851,11 @@ export default function ConversationList() {
 
         const hasUnread = unreadCount > 0;
 
-        const isPinned = Boolean(conversation.isPinned);
+            const isPinned = Boolean(conversation.isPinned);
+            const muteIsActive = Boolean(conversation.isMuted && (!conversation.mutedUntil || new Date(conversation.mutedUntil).getTime() > menuOpenedAt));
+            const mutedUntilLabel = conversation.mutedUntil
+              ? `Muted until ${new Date(conversation.mutedUntil).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}`
+              : "Notifications muted indefinitely";
 
         const isMenuOpen = openMenuConversationId === conversation._id;
 
@@ -915,16 +1016,18 @@ export default function ConversationList() {
             </Link>
 
             <div className="absolute right-1.5 top-1.5">
-              <ActionMenu
+                <ActionMenu
                 open={isMenuOpen}
                 onOpenChange={(isOpen) =>
-                  setOpenMenuConversationId(
-                    isOpen ? conversation._id : null,
-                  )
+                  {
+                    if (isOpen) setMenuOpenedAt(Date.now());
+                    setOpenMenuConversationId(isOpen ? conversation._id : null);
+                  }
                 }
                 isLoading={isActionWorking}
                 label={`Open actions for ${displayName}`}
                 menuLabel={`Actions for ${displayName}`}
+                menuClassName="w-64"
                 items={[
                   {
                     id: "pin",
@@ -934,6 +1037,13 @@ export default function ConversationList() {
                       void handlePinConversation(conversation._id, isPinned);
                     },
                   },
+                  ...(muteIsActive
+                    ? [{ id: "unmute", label: "Unmute notifications", description: mutedUntilLabel, icon: VolumeX, onSelect: () => void handleUnmuteConversation(conversation._id) }]
+                    : [{ id: "mute", label: "Mute Notifications", icon: VolumeX, onSelect: () => undefined, submenu: [
+                        { id: "mute-8", label: "8 hours", icon: VolumeX, onSelect: () => void handleMuteConversation(conversation._id, 8) },
+                        { id: "mute-week", label: "1 week", icon: VolumeX, onSelect: () => void handleMuteConversation(conversation._id, 168) },
+                        { id: "mute-always", label: "Always", icon: VolumeX, onSelect: () => void handleMuteConversation(conversation._id, "always") },
+                      ] }]),
                   {
                     id: "unread",
                     label: "Mark as unread",
@@ -948,6 +1058,7 @@ export default function ConversationList() {
                     icon: Eraser,
                     onSelect: () => requestClearConversation(conversation._id),
                   },
+                  { id: "delete", label: "Delete conversation", icon: Trash2, tone: "danger", dividerBefore: true, onSelect: () => requestDeleteConversation(conversation._id) },
                   ...(conversation.type === "direct" && otherParticipant
                     ? [
                         {
@@ -971,6 +1082,11 @@ export default function ConversationList() {
                     : []),
                 ]}
               />
+              {muteIsActive && (
+                <span title={mutedUntilLabel} aria-label="Notifications muted" className="pointer-events-none absolute right-[13px] top-[34px] text-[var(--chat-muted)]">
+                  <BellOff className="h-3.5 w-3.5" strokeWidth={1.8} />
+                </span>
+              )}
             </div>
           </div>
         );

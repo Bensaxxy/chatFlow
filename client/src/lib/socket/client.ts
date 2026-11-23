@@ -39,6 +39,8 @@ interface ServerToClientEvents {
     isPinned: boolean;
     isMarkedUnread: boolean;
     clearedAt: string | null;
+    mutedUntil: string | null;
+    isMuted: boolean;
   }) => void;
 
   "typing:update": (payload: {
