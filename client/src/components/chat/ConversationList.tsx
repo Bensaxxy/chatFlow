@@ -889,14 +889,20 @@ export default function ConversationList({
         return (
           <div
             key={conversation._id}
-            className={`group relative flex items-center gap-3 px-4 py-2.5 pr-12 transition ${
+            className="group relative flex items-center gap-3 px-4 py-2.5 pr-12"
+          >
+            <Link
+              href={`/chats/${conversation._id}`}
+              onClick={() => setOpenMenuConversationId(null)}
+              aria-label={`Open conversation with ${displayName}`}
+              className={`absolute inset-0 z-0 transition ${
                 isActive
                   ? "bg-cyan-50"
                   : hasUnread
                     ? "bg-white hover:bg-cyan-50/50"
                     : "hover:bg-slate-50"
               }`}
-          >
+            />
               {hasParticipantStatus ? (
                 <button
                   type="button"
@@ -907,7 +913,7 @@ export default function ConversationList({
                       ? `${displayName} has an unviewed status`
                       : `View ${displayName}'s status again`
                   }
-                  className={`relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full p-[3px] transition hover:scale-105 focus:outline-none focus:ring-2 focus:ring-[var(--chat-accent)] focus:ring-offset-2 focus:ring-offset-[var(--chat-sidebar)] ${
+                  className={`relative z-10 flex h-11 w-11 shrink-0 items-center justify-center rounded-full p-[3px] transition hover:scale-105 focus:outline-none focus:ring-2 focus:ring-[var(--chat-accent)] focus:ring-offset-2 focus:ring-offset-[var(--chat-sidebar)] ${
                     hasUnviewedParticipantStatus
                       ? "bg-[var(--chat-accent)] shadow-[0_0_0_2px_var(--chat-accent-soft)]"
                       : "bg-[var(--chat-muted)]/55"
@@ -933,12 +939,7 @@ export default function ConversationList({
                   )}
                 </button>
               ) : (
-                <Link
-                  href={`/chats/${conversation._id}`}
-                  onClick={() => setOpenMenuConversationId(null)}
-                  aria-label={`Open conversation with ${displayName}`}
-                  className="relative h-11 w-11 shrink-0"
-                >
+                <div className="pointer-events-none relative z-10 h-11 w-11 shrink-0">
                   <UserAvatar
                     name={displayName}
                     avatarUrl={
@@ -959,15 +960,10 @@ export default function ConversationList({
                       className="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full border-2 border-[var(--chat-sidebar)] bg-emerald-500 shadow-sm"
                     />
                   )}
-                </Link>
+                </div>
               )}
 
-              <Link
-                href={`/chats/${conversation._id}`}
-                onClick={() => setOpenMenuConversationId(null)}
-                className="min-w-0 flex-1"
-              >
-              <div className="min-w-0">
+              <div className="pointer-events-none relative z-10 min-w-0 flex-1">
                 <div className="flex items-start gap-2">
                   <p
                     className={`min-w-0 flex-1 truncate text-slate-950 ${
@@ -1034,9 +1030,8 @@ export default function ConversationList({
                   )}
                 </div>
               </div>
-              </Link>
 
-            <div className="absolute right-1.5 top-1.5">
+            <div className="absolute right-1.5 top-1.5 z-20">
               <ActionMenu
                 open={isMenuOpen}
                 onOpenChange={(isOpen) =>
