@@ -141,3 +141,59 @@ export const deleteMessageAttachmentFromCloudinary = async (
     invalidate: true,
   });
 };
+
+interface UploadStatusPhotoOptions {
+  buffer: Buffer;
+  publicId: string;
+}
+
+export const uploadStatusPhotoToCloudinary = ({
+  buffer,
+  publicId,
+}: UploadStatusPhotoOptions): Promise<UploadApiResponse> =>
+  new Promise((resolve, reject) => {
+    const uploadStream = cloudinary.uploader.upload_stream(
+      {
+        folder: "chatflow/status-photos",
+        public_id: publicId,
+        resource_type: "image",
+        type: "upload",
+
+        transformation: [
+          {
+            width: 1440,
+            height: 1920,
+            crop: "limit",
+          },
+          {
+            quality: "auto",
+            fetch_format: "auto",
+          },
+        ],
+      },
+      (error, result) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+
+        if (!result) {
+          reject(new Error("Cloudinary did not return a status upload result"));
+          return;
+        }
+
+        resolve(result);
+      },
+    );
+
+    uploadStream.end(buffer);
+  });
+
+export const deleteStatusPhotoFromCloudinary = async (
+  publicId: string,
+): Promise<void> => {
+  await cloudinary.uploader.destroy(publicId, {
+    resource_type: "image",
+    invalidate: true,
+  });
+};

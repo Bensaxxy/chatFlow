@@ -11,6 +11,7 @@ import userRouter from "./routes/user.routes";
 import conversationRouter from "./routes/conversation.routes";
 import callRouter from "./routes/call.routes";
 import pushNotificationRouter from "./routes/push-notification.routes";
+import statusRouter from "./routes/status.routes";
 
 const app = express();
 
@@ -39,6 +40,7 @@ app.use("/api/users", userRouter);
 app.use("/api/conversations", conversationRouter);
 app.use("/api/calls", callRouter);
 app.use("/api/push", pushNotificationRouter);
+app.use("/api/statuses", statusRouter);
 
 app.use(notFoundHandler);
 app.use(errorHandler);
