@@ -295,7 +295,9 @@ export default function ChatShell({
               query={searchQuery}
             />
           ) : (
-            <ConversationList />
+            <ConversationList
+              onOpenStatusGroup={handleOpenStatusGroup}
+            />
           )}
         </div>
       </aside>

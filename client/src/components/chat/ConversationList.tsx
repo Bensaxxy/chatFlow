@@ -21,6 +21,7 @@ import ActionMenu from "@/components/ui/ActionMenu";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSocket } from "@/contexts/SocketContext";
+import { useStatuses } from "@/contexts/StatusContext";
 import { getApiErrorMessage } from "@/lib/api/errors";
 import {
   invalidateConversationCache,
@@ -28,6 +29,7 @@ import {
 } from "@/lib/chat/conversation-cache";
 import {
   clearConversation,
+  getConversationById,
   getConversations,
   markConversationUnread,
   setConversationPinned,
@@ -39,6 +41,7 @@ import type {
   ConversationPreferences,
 } from "@/types/conversation";
 import type { ChatMessage, MessageDeletedPayload } from "@/types/message";
+import type { StatusGroup } from "@/types/status";
 import {
   getAllConversationDrafts,
   subscribeToConversationDrafts,
@@ -100,9 +103,16 @@ interface ConfirmationRequest {
   onConfirm: () => Promise<void>;
 }
 
-export default function ConversationList() {
+interface ConversationListProps {
+  onOpenStatusGroup: (group: StatusGroup) => void;
+}
+
+export default function ConversationList({
+  onOpenStatusGroup,
+}: ConversationListProps) {
   const pathname = usePathname();
   const { user } = useAuth();
+  const { statusGroups } = useStatuses();
 
   const { socket, isConnected, onlineUserIds, updatedProfiles } = useSocket();
 
@@ -189,6 +199,8 @@ export default function ConversationList() {
   useEffect(() => {
     if (!isConnected || !currentUserId) return;
 
+    let isSubscribed = true;
+
     const clearTypingConversation = (conversationId: string): void => {
       const timeoutId = typingTimeoutsRef.current.get(conversationId);
 
@@ -232,7 +244,57 @@ export default function ConversationList() {
           (conversation) => conversation._id === conversationId,
         );
 
-        if (!existingConversation) return current;
+        if (!existingConversation) {
+          /*
+           * A status reply can create the first direct conversation between
+           * two people. The socket correctly announces its first message,
+           * but there is no list item to update yet. Fetch and insert the
+           * conversation so that reply is immediately discoverable.
+           */
+          void getConversationById(conversationId)
+            .then((conversation) => {
+              if (!isSubscribed) {
+                return;
+              }
+
+              const conversationIsOpen =
+                pathname === `/chats/${conversationId}`;
+
+              setConversations((latestConversations) => {
+                const existingIndex = latestConversations.findIndex(
+                  (currentConversation) =>
+                    currentConversation._id === conversationId,
+                );
+
+                const unreadCount =
+                  incrementUnread && !conversationIsOpen
+                    ? Math.max(1, conversation.unreadCount ?? 0)
+                    : (conversation.unreadCount ?? 0);
+
+                const nextConversation: Conversation = {
+                  ...(existingIndex >= 0
+                    ? latestConversations[existingIndex]
+                    : conversation),
+                  lastMessage: normalizeMessage(message),
+                  updatedAt,
+                  unreadCount,
+                };
+
+                return sortConversations([
+                  nextConversation,
+                  ...latestConversations.filter(
+                    (currentConversation) =>
+                      currentConversation._id !== conversationId,
+                  ),
+                ]);
+              });
+            })
+            .catch(() => {
+              /* A later refresh will recover if the conversation was removed. */
+            });
+
+          return current;
+        }
 
         const conversationIsOpen = pathname === `/chats/${conversationId}`;
 
@@ -407,6 +469,8 @@ export default function ConversationList() {
     socket.on("conversation:preferences-updated", handlePreferencesUpdate);
 
     return () => {
+      isSubscribed = false;
+
       socket.off("conversation:updated", handleConversationUpdate);
 
       socket.off("conversation:read", handleConversationRead);
@@ -737,6 +801,19 @@ export default function ConversationList() {
         {conversations.map((conversation) => {
         const otherParticipant = getOtherParticipant(conversation, user._id);
 
+        const otherParticipantStatusGroup =
+          conversation.type === "direct" && otherParticipant
+            ? statusGroups.find(
+                (group) => group.author._id === otherParticipant._id,
+              )
+            : undefined;
+
+        const hasParticipantStatus = Boolean(otherParticipantStatusGroup);
+
+        const hasUnviewedParticipantStatus = Boolean(
+          otherParticipantStatusGroup?.hasUnviewedStatuses,
+        );
+
         const updatedOtherProfile = otherParticipant
           ? updatedProfiles.get(otherParticipant._id)
           : undefined;
@@ -810,42 +887,87 @@ export default function ConversationList() {
             : "Start the conversation";
 
         return (
-          <div key={conversation._id} className="group relative">
-            <Link
-              href={`/chats/${conversation._id}`}
-              onClick={() => setOpenMenuConversationId(null)}
-              className={`flex items-center gap-3 px-4 py-2.5 pr-12 transition ${
+          <div
+            key={conversation._id}
+            className={`group relative flex items-center gap-3 px-4 py-2.5 pr-12 transition ${
                 isActive
                   ? "bg-cyan-50"
                   : hasUnread
                     ? "bg-white hover:bg-cyan-50/50"
                     : "hover:bg-slate-50"
               }`}
-            >
-              <div className="relative h-11 w-11 shrink-0">
-                <UserAvatar
-                  name={displayName}
-                  avatarUrl={
-                    conversation.type === "direct"
-                      ? updatedOtherProfile
+          >
+              {hasParticipantStatus ? (
+                <button
+                  type="button"
+                  onClick={() => onOpenStatusGroup(otherParticipantStatusGroup!)}
+                  aria-label={`View ${displayName}'s status`}
+                  title={
+                    hasUnviewedParticipantStatus
+                      ? `${displayName} has an unviewed status`
+                      : `View ${displayName}'s status again`
+                  }
+                  className={`relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full p-[3px] transition hover:scale-105 focus:outline-none focus:ring-2 focus:ring-[var(--chat-accent)] focus:ring-offset-2 focus:ring-offset-[var(--chat-sidebar)] ${
+                    hasUnviewedParticipantStatus
+                      ? "bg-[var(--chat-accent)] shadow-[0_0_0_2px_var(--chat-accent-soft)]"
+                      : "bg-[var(--chat-muted)]/55"
+                  }`}
+                >
+                  <UserAvatar
+                    name={displayName}
+                    avatarUrl={
+                      updatedOtherProfile
                         ? updatedOtherProfile.avatarUrl
                         : otherParticipant?.avatarUrl
-                      : null
-                  }
-                  className="h-full w-full"
-                  fallbackClassName="bg-cyan-100 font-semibold text-cyan-800"
-                />
-
-                {isOtherUserOnline && (
-                  <span
-                    title="Online"
-                    aria-label="Online"
-                    className="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full border-2 border-white bg-emerald-500 shadow-sm"
+                    }
+                    className="h-full w-full"
+                    fallbackClassName="bg-cyan-100 font-semibold text-cyan-800"
                   />
-                )}
-              </div>
 
-              <div className="min-w-0 flex-1">
+                  {isOtherUserOnline && (
+                    <span
+                      title="Online"
+                      aria-label="Online"
+                      className="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full border-2 border-[var(--chat-sidebar)] bg-emerald-500 shadow-sm"
+                    />
+                  )}
+                </button>
+              ) : (
+                <Link
+                  href={`/chats/${conversation._id}`}
+                  onClick={() => setOpenMenuConversationId(null)}
+                  aria-label={`Open conversation with ${displayName}`}
+                  className="relative h-11 w-11 shrink-0"
+                >
+                  <UserAvatar
+                    name={displayName}
+                    avatarUrl={
+                      conversation.type === "direct"
+                        ? updatedOtherProfile
+                          ? updatedOtherProfile.avatarUrl
+                          : otherParticipant?.avatarUrl
+                        : null
+                    }
+                    className="h-full w-full"
+                    fallbackClassName="bg-cyan-100 font-semibold text-cyan-800"
+                  />
+
+                  {isOtherUserOnline && (
+                    <span
+                      title="Online"
+                      aria-label="Online"
+                      className="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full border-2 border-[var(--chat-sidebar)] bg-emerald-500 shadow-sm"
+                    />
+                  )}
+                </Link>
+              )}
+
+              <Link
+                href={`/chats/${conversation._id}`}
+                onClick={() => setOpenMenuConversationId(null)}
+                className="min-w-0 flex-1"
+              >
+              <div className="min-w-0">
                 <div className="flex items-start gap-2">
                   <p
                     className={`min-w-0 flex-1 truncate text-slate-950 ${
@@ -912,7 +1034,7 @@ export default function ConversationList() {
                   )}
                 </div>
               </div>
-            </Link>
+              </Link>
 
             <div className="absolute right-1.5 top-1.5">
               <ActionMenu
