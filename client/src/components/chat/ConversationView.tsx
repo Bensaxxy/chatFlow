@@ -11,6 +11,7 @@ import {
   useState,
   type ChangeEvent,
   type FormEvent,
+  type SetStateAction,
 } from "react";
 import { toast } from "react-toastify";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -373,16 +374,74 @@ export default function ConversationView({
     enabled: Boolean(currentUserId),
     staleTime: 20_000,
   });
-  const initialCache =
-    conversationQuery.data ??
-    queryClient.getQueryData<ConversationCacheEntry>(conversationCacheKey);
+  const conversation = conversationQuery.data?.conversation ?? null;
+  const messages = useMemo(
+    () => conversationQuery.data?.messages ?? [],
+    [conversationQuery.data?.messages],
+  );
+  const nextCursor = conversationQuery.data?.nextCursor ?? null;
+  const hasMore = conversationQuery.data?.hasMore ?? false;
+  const isLoading = conversationQuery.isPending;
+  const errorMessage =
+    conversationQuery.isError && !conversationQuery.data
+      ? getApiErrorMessage(conversationQuery.error)
+      : null;
 
-  const [conversation, setConversation] = useState<Conversation | null>(
-    () => initialCache?.conversation ?? null,
+  const setMessages = useCallback(
+    (updater: SetStateAction<ChatMessage[]>): void => {
+      queryClient.setQueryData<ConversationCacheEntry>(
+        conversationCacheKey,
+        (cached) => {
+          if (!cached) return cached;
+          return {
+            ...cached,
+            messages:
+              typeof updater === "function"
+                ? updater(cached.messages)
+                : updater,
+          };
+        },
+      );
+    },
+    [queryClient, conversationCacheKey],
   );
 
-  const [messages, setMessages] = useState<ChatMessage[]>(
-    () => initialCache?.messages ?? [],
+  const setNextCursor = useCallback(
+    (updater: SetStateAction<string | null>): void => {
+      queryClient.setQueryData<ConversationCacheEntry>(
+        conversationCacheKey,
+        (cached) =>
+          cached
+            ? {
+                ...cached,
+                nextCursor:
+                  typeof updater === "function"
+                    ? updater(cached.nextCursor)
+                    : updater,
+              }
+            : cached,
+      );
+    },
+    [queryClient, conversationCacheKey],
+  );
+
+  const setHasMore = useCallback(
+    (updater: SetStateAction<boolean>): void => {
+      queryClient.setQueryData<ConversationCacheEntry>(
+        conversationCacheKey,
+        (cached) =>
+          cached
+            ? {
+                ...cached,
+                hasMore:
+                  typeof updater === "function"
+                    ? updater(cached.hasMore)
+                    : updater,
+              }
+            : cached,
+      );
+    },
+    [queryClient, conversationCacheKey],
   );
 
   const [messageText, setMessageText] = useState("");
@@ -400,17 +459,7 @@ export default function ConversationView({
     restoreCurrentDraft();
   }, [restoreCurrentDraft]);
 
-  const [nextCursor, setNextCursor] = useState<string | null>(
-    () => initialCache?.nextCursor ?? null,
-  );
-
-  const [hasMore, setHasMore] = useState(() => initialCache?.hasMore ?? false);
-
-  const [isLoading, setIsLoading] = useState(() => initialCache === undefined);
-
   const [isLoadingOlder, setIsLoadingOlder] = useState(false);
-
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const [isOtherUserTyping, setIsOtherUserTyping] = useState(false);
 
@@ -568,49 +617,11 @@ export default function ConversationView({
   }, []);
 
   useEffect(() => {
-    if (conversationQuery.data) {
-      setConversation(conversationQuery.data.conversation);
-      setMessages(conversationQuery.data.messages);
-      setNextCursor(conversationQuery.data.nextCursor);
-      setHasMore(conversationQuery.data.hasMore);
-      setErrorMessage(null);
-      setIsLoading(false);
-    } else if (conversationQuery.isError && !conversationQuery.data) {
-      setErrorMessage(getApiErrorMessage(conversationQuery.error));
-      setIsLoading(false);
-    } else if (conversationQuery.isPending) {
-      setIsLoading(true);
-    }
-  }, [conversationQuery.data, conversationQuery.error, conversationQuery.isError, conversationQuery.isPending]);
-
-  useEffect(() => {
     if (!currentUserId) return;
     void markConversationRead(conversationId).catch((readError) => {
       console.error("Could not mark conversation as read:", readError);
     });
   }, [conversationId, currentUserId]);
-
-  useEffect(() => {
-    if (!currentUserId || !conversation || isLoading) {
-      return;
-    }
-
-    queryClient.setQueryData<ConversationCacheEntry>(conversationCacheKey, {
-      conversation,
-      messages,
-      nextCursor,
-      hasMore,
-    });
-  }, [
-    currentUserId,
-    conversationCacheKey,
-    conversation,
-    messages,
-    nextCursor,
-    hasMore,
-    isLoading,
-    queryClient,
-  ]);
 
   const stopTyping = useCallback((): void => {
     if (typingTimeoutRef.current !== null) {
@@ -841,7 +852,18 @@ export default function ConversationView({
         socket.emit("conversation:leave", conversationId);
       }
     };
-  }, [socket, isConnected, conversationId, currentUserId, stopTyping, queryClient, conversationCacheKey]);
+  }, [
+    socket,
+    isConnected,
+    conversationId,
+    currentUserId,
+    stopTyping,
+    queryClient,
+    conversationCacheKey,
+    setMessages,
+    setNextCursor,
+    setHasMore,
+  ]);
 
   useEffect(() => {
     if (!isLoading) {
