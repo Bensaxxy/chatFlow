@@ -8,6 +8,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   View,
@@ -15,13 +16,17 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import UserAvatar from "@/components/common/user-avatar";
+import AppTabBar from "@/components/common/app-tab-bar";
 import { useAuth } from "@/contexts/auth-context";
 import { getApiErrorMessage } from "@/lib/api/errors";
 import {
   removeMobileAvatar,
+  updateMobileNotificationSettings,
+  updateMobilePrivacySettings,
   updateMobileProfile,
   uploadMobileAvatar,
 } from "@/services/profile.service";
+import type { NotificationSound } from "@/types/settings";
 
 export default function ProfileScreen() {
   const { user, logout, updateCurrentUser } = useAuth();
@@ -31,6 +36,7 @@ export default function ProfileScreen() {
   const [bio, setBio] = useState(user?.bio ?? "");
   const [isSaving, setIsSaving] = useState(false);
   const [isUpdatingAvatar, setIsUpdatingAvatar] = useState(false);
+  const [updatingPreference, setUpdatingPreference] = useState<string | null>(null);
 
   if (!user) {
     return null;
@@ -126,17 +132,61 @@ export default function ProfileScreen() {
     ]);
   };
 
+  const updatePrivacy = async (
+    field: "profilePhotoVisibility" | "lastSeenVisibility" | "readReceipts",
+    value: "everyone" | "nobody" | boolean,
+  ): Promise<void> => {
+    try {
+      setUpdatingPreference(field);
+      const updatedUser = await updateMobilePrivacySettings({
+        ...user.privacySettings,
+        [field]: value,
+      });
+      updateCurrentUser(updatedUser);
+    } catch (error) {
+      Alert.alert("Could not update privacy", getApiErrorMessage(error));
+    } finally {
+      setUpdatingPreference(null);
+    }
+  };
+
+  const updateNotifications = async (
+    field: "emailNotifications" | "vibration" | "messageSound",
+    value: boolean | NotificationSound,
+  ): Promise<void> => {
+    try {
+      setUpdatingPreference(field);
+      const updatedUser = await updateMobileNotificationSettings({
+        ...user.notificationSettings,
+        [field]: value,
+      });
+      updateCurrentUser(updatedUser);
+    } catch (error) {
+      Alert.alert("Could not update alerts", getApiErrorMessage(error));
+    } finally {
+      setUpdatingPreference(null);
+    }
+  };
+
+  const chooseMessageSound = (): void => {
+    const sounds: NotificationSound[] = ["chime", "pulse", "pop", "none"];
+
+    Alert.alert(
+      "Message sound",
+      "Choose the alert sound for incoming messages.",
+      [
+        ...sounds.map((sound) => ({
+          text: sound === "none" ? "No sound" : sound[0].toUpperCase() + sound.slice(1),
+          onPress: () => void updateNotifications("messageSound", sound),
+        })),
+        { text: "Cancel", style: "cancel" as const },
+      ],
+    );
+  };
+
   return (
     <SafeAreaView style={styles.safeArea} edges={["top", "left", "right"]}>
       <View style={styles.header}>
-        <Pressable
-          onPress={() => router.back()}
-          style={styles.backButton}
-          hitSlop={10}
-          accessibilityLabel="Back to chats"
-        >
-          <Ionicons name="arrow-back" size={23} color="#0f172a" />
-        </Pressable>
         <Text style={styles.title}>Profile</Text>
       </View>
       <ScrollView
@@ -192,6 +242,104 @@ export default function ProfileScreen() {
           </View>
         </View>
 
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Privacy</Text>
+          <View style={styles.settingRow}>
+            <View style={styles.detailIcon}>
+              <Ionicons name="image-outline" size={20} color="#0e7490" />
+            </View>
+            <View style={styles.detailText}>
+              <Text style={styles.detailValue}>Profile photo</Text>
+              <Text style={styles.detailLabel}>Show it to people you chat with</Text>
+            </View>
+            <Switch
+              value={user.privacySettings.profilePhotoVisibility === "everyone"}
+              disabled={updatingPreference === "profilePhotoVisibility"}
+              onValueChange={(value) => void updatePrivacy("profilePhotoVisibility", value ? "everyone" : "nobody")}
+              trackColor={{ false: "#cbd5e1", true: "#67e8f9" }}
+              thumbColor={user.privacySettings.profilePhotoVisibility === "everyone" ? "#0891b2" : "#f8fafc"}
+            />
+          </View>
+          <View style={styles.settingRow}>
+            <View style={styles.detailIcon}>
+              <Ionicons name="time-outline" size={20} color="#0e7490" />
+            </View>
+            <View style={styles.detailText}>
+              <Text style={styles.detailValue}>Last seen and online</Text>
+              <Text style={styles.detailLabel}>Let people see when you are active</Text>
+            </View>
+            <Switch
+              value={user.privacySettings.lastSeenVisibility === "everyone"}
+              disabled={updatingPreference === "lastSeenVisibility"}
+              onValueChange={(value) => void updatePrivacy("lastSeenVisibility", value ? "everyone" : "nobody")}
+              trackColor={{ false: "#cbd5e1", true: "#67e8f9" }}
+              thumbColor={user.privacySettings.lastSeenVisibility === "everyone" ? "#0891b2" : "#f8fafc"}
+            />
+          </View>
+          <View style={styles.settingRow}>
+            <View style={styles.detailIcon}>
+              <Ionicons name="checkmark-done-outline" size={20} color="#0e7490" />
+            </View>
+            <View style={styles.detailText}>
+              <Text style={styles.detailValue}>Read receipts</Text>
+              <Text style={styles.detailLabel}>Show when messages have been read</Text>
+            </View>
+            <Switch
+              value={user.privacySettings.readReceipts}
+              disabled={updatingPreference === "readReceipts"}
+              onValueChange={(value) => void updatePrivacy("readReceipts", value)}
+              trackColor={{ false: "#cbd5e1", true: "#67e8f9" }}
+              thumbColor={user.privacySettings.readReceipts ? "#0891b2" : "#f8fafc"}
+            />
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Message alerts</Text>
+          <Pressable onPress={chooseMessageSound} disabled={updatingPreference === "messageSound"} style={styles.settingRow}>
+            <View style={styles.detailIcon}>
+              <Ionicons name="volume-high-outline" size={20} color="#0e7490" />
+            </View>
+            <View style={styles.detailText}>
+              <Text style={styles.detailValue}>Alert sound</Text>
+              <Text style={styles.detailLabel}>{user.notificationSettings.messageSound === "none" ? "No sound" : user.notificationSettings.messageSound[0].toUpperCase() + user.notificationSettings.messageSound.slice(1)}</Text>
+            </View>
+            {updatingPreference === "messageSound" ? <ActivityIndicator size="small" color="#0891b2" /> : <Ionicons name="chevron-forward" size={20} color="#94a3b8" />}
+          </Pressable>
+          <View style={styles.settingRow}>
+            <View style={styles.detailIcon}>
+              <Ionicons name="mail-outline" size={20} color="#0e7490" />
+            </View>
+            <View style={styles.detailText}>
+              <Text style={styles.detailValue}>Email notifications</Text>
+              <Text style={styles.detailLabel}>Receive important alerts by email</Text>
+            </View>
+            <Switch
+              value={user.notificationSettings.emailNotifications}
+              disabled={updatingPreference === "emailNotifications"}
+              onValueChange={(value) => void updateNotifications("emailNotifications", value)}
+              trackColor={{ false: "#cbd5e1", true: "#67e8f9" }}
+              thumbColor={user.notificationSettings.emailNotifications ? "#0891b2" : "#f8fafc"}
+            />
+          </View>
+          <View style={styles.settingRow}>
+            <View style={styles.detailIcon}>
+              <Ionicons name="phone-portrait-outline" size={20} color="#0e7490" />
+            </View>
+            <View style={styles.detailText}>
+              <Text style={styles.detailValue}>Vibration</Text>
+              <Text style={styles.detailLabel}>Vibrate for incoming messages</Text>
+            </View>
+            <Switch
+              value={user.notificationSettings.vibration}
+              disabled={updatingPreference === "vibration"}
+              onValueChange={(value) => void updateNotifications("vibration", value)}
+              trackColor={{ false: "#cbd5e1", true: "#67e8f9" }}
+              thumbColor={user.notificationSettings.vibration ? "#0891b2" : "#f8fafc"}
+            />
+          </View>
+        </View>
+
         <View style={styles.notice}>
           <Ionicons name="phone-portrait-outline" size={21} color="#0e7490" />
           <Text style={styles.noticeText}>
@@ -228,6 +376,8 @@ export default function ProfileScreen() {
           </Text>
         </Pressable>
       </ScrollView>
+
+      <AppTabBar activeTab="profile" />
     </SafeAreaView>
   );
 }
@@ -238,18 +388,10 @@ const styles = StyleSheet.create({
     minHeight: 64,
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
     paddingHorizontal: 14,
     borderBottomWidth: 1,
     borderBottomColor: "#e2e8f0",
     backgroundColor: "#ffffff",
-  },
-  backButton: {
-    width: 38,
-    height: 40,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 20,
   },
   title: { color: "#0f172a", fontSize: 18, fontWeight: "900" },
   content: { padding: 18, paddingBottom: 36 },
@@ -311,6 +453,16 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingHorizontal: 18,
     paddingVertical: 14,
+    borderTopWidth: 1,
+    borderTopColor: "#f1f5f9",
+  },
+  settingRow: {
+    minHeight: 70,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
     borderTopWidth: 1,
     borderTopColor: "#f1f5f9",
   },

@@ -333,6 +333,135 @@ body {
   background-color: var(--chat-hover);
 }
 
+/* Status composer and viewer are rendered in portals, outside .chat-theme. */
+.status-themed {
+  --status-surface: #ffffff;
+  --status-control: #f8fafc;
+  --status-input: #f1f5f9;
+  --status-text: #0f172a;
+  --status-muted: #64748b;
+  --status-border: #e2e8f0;
+  --status-hover: #f1f5f9;
+  --status-accent: #0891b2;
+  --status-accent-soft: #cffafe;
+  color-scheme: light;
+}
+
+.status-themed[data-chat-appearance="dark"] {
+  --status-surface: #111827;
+  --status-control: #1e293b;
+  --status-input: #1e293b;
+  --status-text: #f8fafc;
+  --status-muted: #94a3b8;
+  --status-border: #334155;
+  --status-hover: #334155;
+  --status-accent-soft: rgba(8, 145, 178, 0.18);
+  color-scheme: dark;
+}
+
+.status-themed[data-chat-bubble-color="violet"] {
+  --status-accent: #7c3aed;
+  --status-accent-soft: #ede9fe;
+}
+
+.status-themed[data-chat-bubble-color="emerald"] {
+  --status-accent: #059669;
+  --status-accent-soft: #d1fae5;
+}
+
+.status-themed[data-chat-bubble-color="rose"] {
+  --status-accent: #e11d48;
+  --status-accent-soft: #ffe4e6;
+}
+
+.status-themed[data-chat-bubble-color="amber"] {
+  --status-accent: #d97706;
+  --status-accent-soft: #fef3c7;
+}
+
+.status-themed[data-chat-appearance="dark"][data-chat-bubble-color="violet"] {
+  --status-accent-soft: rgba(124, 58, 237, 0.2);
+}
+
+.status-themed[data-chat-appearance="dark"][data-chat-bubble-color="emerald"] {
+  --status-accent-soft: rgba(5, 150, 105, 0.2);
+}
+
+.status-themed[data-chat-appearance="dark"][data-chat-bubble-color="rose"] {
+  --status-accent-soft: rgba(225, 29, 72, 0.2);
+}
+
+.status-themed[data-chat-appearance="dark"][data-chat-bubble-color="amber"] {
+  --status-accent-soft: rgba(217, 119, 6, 0.2);
+}
+
+.status-composer-themed :is(.bg-white, .bg-white\/90) {
+  background-color: var(--status-surface);
+}
+
+.status-composer-themed :is(.bg-slate-50, .bg-slate-100) {
+  background-color: var(--status-control);
+}
+
+.status-composer-themed :is(.border-slate-100, .border-slate-200, .border-slate-300) {
+  border-color: var(--status-border);
+}
+
+.status-composer-themed :is(.text-slate-950, .text-slate-900, .text-slate-800, .text-slate-700, .text-slate-600) {
+  color: var(--status-text);
+}
+
+.status-composer-themed :is(.text-slate-500, .text-slate-400, .text-slate-300) {
+  color: var(--status-muted);
+}
+
+.status-composer-themed :is(.bg-cyan-50, .bg-cyan-100) {
+  background-color: var(--status-accent-soft);
+}
+
+.status-composer-themed :is(.text-cyan-600, .text-cyan-700, .text-cyan-800) {
+  color: var(--status-accent);
+}
+
+.status-composer-themed :is(input, textarea) {
+  border-color: var(--status-border);
+  background-color: var(--status-input);
+  color: var(--status-text);
+}
+
+.status-composer-themed :is(input, textarea)::placeholder {
+  color: var(--status-muted);
+}
+
+.status-composer-themed :is(.hover\:bg-slate-50, .hover\:bg-slate-100):hover {
+  background-color: var(--status-hover);
+}
+
+.status-composer-themed :is(.hover\:text-slate-700, .hover\:text-slate-800, .hover\:text-slate-900):hover {
+  color: var(--status-text);
+}
+
+.status-viewer-themed[data-chat-appearance="dark"] .status-viewer-panel {
+  background-color: var(--status-surface);
+  color: var(--status-text);
+}
+
+.status-viewer-themed[data-chat-appearance="dark"] .status-viewer-panel :is(.border-slate-100, .border-slate-200, .border-slate-300, .divide-slate-100) {
+  border-color: var(--status-border);
+}
+
+.status-viewer-themed[data-chat-appearance="dark"] .status-viewer-panel :is(.text-slate-950, .text-slate-900, .text-slate-800, .text-slate-700, .text-slate-600) {
+  color: var(--status-text);
+}
+
+.status-viewer-themed[data-chat-appearance="dark"] .status-viewer-panel :is(.text-slate-500, .text-slate-400, .text-slate-300) {
+  color: var(--status-muted);
+}
+
+.status-viewer-themed[data-chat-appearance="dark"] .status-viewer-panel .bg-slate-100 {
+  background-color: var(--status-control);
+}
+
 .chat-wallpaper {
   background-color: var(--chat-canvas);
 }

@@ -191,6 +191,34 @@ interface ServerToClientEvents {
     endedByUserId: string | null;
     reason: AudioCallEndReason;
   }) => void;
+
+  "status:new": (payload: { statusId: string; authorId: string }) => void;
+
+  "status:viewed": (payload: {
+    statusId: string;
+    viewerId: string;
+    viewedAt: string;
+  }) => void;
+
+  "status:reaction": (payload: {
+    statusId: string;
+    userId: string;
+    emoji: string | null;
+    reactedAt: string;
+  }) => void;
+
+  "status:deleted": (payload: { statusId: string; authorId: string }) => void;
+
+  "friendship:changed": (payload: {
+    action:
+      | "request_received"
+      | "request_accepted"
+      | "request_declined"
+      | "request_cancelled"
+      | "friend_removed";
+    friendshipId: string;
+    userId: string;
+  }) => void;
 }
 
 interface ClientToServerEvents {
@@ -633,10 +661,7 @@ export const initializeSocketServer = (
           return;
         }
 
-        if (
-          activeCalls.has(payload.callId) ||
-          activeCallByUserId.has(userId)
-        ) {
+        if (activeCalls.has(payload.callId) || activeCallByUserId.has(userId)) {
           acknowledge({
             success: false,
             message: "You already have an active call",
@@ -951,7 +976,10 @@ export const initializeSocketServer = (
         !call ||
         call.conversationId !== payload.conversationId
       ) {
-        acknowledge({ success: false, message: "This call is no longer available" });
+        acknowledge({
+          success: false,
+          message: "This call is no longer available",
+        });
         return;
       }
 
@@ -968,7 +996,10 @@ export const initializeSocketServer = (
         }
         call.recipientSocketId = socket.id;
       } else {
-        acknowledge({ success: false, message: "This call is no longer available" });
+        acknowledge({
+          success: false,
+          message: "This call is no longer available",
+        });
         return;
       }
 
@@ -993,9 +1024,10 @@ export const initializeSocketServer = (
             activeCall.recipientSocketId === socket.id));
 
       if (socketOwnsActiveCall) {
-        const timeoutKey = activeCall.callerId === userId
-          ? "callerDisconnectTimeout"
-          : "recipientDisconnectTimeout";
+        const timeoutKey =
+          activeCall.callerId === userId
+            ? "callerDisconnectTimeout"
+            : "recipientDisconnectTimeout";
 
         activeCall[timeoutKey] = setTimeout(() => {
           const currentCall = activeCalls.get(activeCall.callId);
@@ -1059,7 +1091,10 @@ export const initializeSocketServer = (
           });
         })
         .catch((error) => {
-          console.error(`Could not update last seen for user ${userId}:`, error);
+          console.error(
+            `Could not update last seen for user ${userId}:`,
+            error,
+          );
         });
     });
   });

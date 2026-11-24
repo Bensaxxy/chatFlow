@@ -1,5 +1,9 @@
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import {
+  SafeAreaProvider,
+  initialWindowMetrics,
+} from "react-native-safe-area-context";
 
 import { AuthProvider } from "@/contexts/auth-context";
 import { SocketProvider } from "@/contexts/socket-context";
@@ -40,10 +44,12 @@ function RootNavigator() {
 
 export default function RootLayout() {
   return (
-    <AuthProvider>
-      <SocketProvider>
-        <RootNavigator />
-      </SocketProvider>
-    </AuthProvider>
+    <SafeAreaProvider initialMetrics={initialWindowMetrics}>
+      <AuthProvider>
+        <SocketProvider>
+          <RootNavigator />
+        </SocketProvider>
+      </AuthProvider>
+    </SafeAreaProvider>
   );
 }

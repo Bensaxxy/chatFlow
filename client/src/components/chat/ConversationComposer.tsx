@@ -181,15 +181,6 @@ export default function ConversationComposer({
         </div>
       ) : (
         <div className="flex min-w-0 items-end gap-1 sm:gap-2">
-          {!editingMessageId && (
-            <VoiceNoteRecorder
-              replyToMessageId={replyingToMessage?._id ?? null}
-              disabled={isEditingMessage}
-              onVoiceNoteQueued={onVoiceNoteQueued}
-              onStatusChange={setVoiceNoteStatus}
-            />
-          )}
-
           {!isRecordingVoiceNote && (
             <MessageAttachmentUploader
               replyToMessageId={replyingToMessage?._id ?? null}
@@ -238,7 +229,15 @@ export default function ConversationComposer({
             />
           )}
 
-          {!isRecordingVoiceNote && (
+          {!editingMessageId &&
+          (isRecordingVoiceNote || !messageText.trim()) ? (
+            <VoiceNoteRecorder
+              replyToMessageId={replyingToMessage?._id ?? null}
+              disabled={isEditingMessage}
+              onVoiceNoteQueued={onVoiceNoteQueued}
+              onStatusChange={setVoiceNoteStatus}
+            />
+          ) : !isRecordingVoiceNote ? (
             <button
               type="submit"
               disabled={!messageText.trim() || isEditingMessage}
@@ -256,7 +255,7 @@ export default function ConversationComposer({
                 <SendHorizontal className="h-5 w-5" />
               )}
             </button>
-          )}
+          ) : null}
         </div>
       )}
     </form>

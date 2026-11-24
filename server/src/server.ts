@@ -5,8 +5,10 @@ import { connectDatabase, disconnectDatabase } from "./config/database";
 import { env } from "./config/env";
 import { verifyEmailDeliveryProvider } from "./services/email.service";
 import { initializeSocketServer } from "./socket/socket.server";
+import { startStatusCleanupJob } from "./services/status-cleanup.service";
 
 let server: Server | undefined;
+let stopStatusCleanupJob: (() => void) | undefined;
 
 const checkEmailTransport = async (): Promise<void> => {
   try {
@@ -32,6 +34,9 @@ const checkEmailTransport = async (): Promise<void> => {
 const startServer = async (): Promise<void> => {
   try {
     await connectDatabase();
+
+    stopStatusCleanupJob = startStatusCleanupJob();
+
     void checkEmailTransport();
 
     const httpServer = createServer(app);
@@ -52,6 +57,9 @@ const startServer = async (): Promise<void> => {
 
 const shutdown = async (signal: string): Promise<void> => {
   console.log(`${signal} received. Shutting down...`);
+
+  stopStatusCleanupJob?.();
+  stopStatusCleanupJob = undefined;
 
   if (server) {
     await new Promise<void>((resolve, reject) => {

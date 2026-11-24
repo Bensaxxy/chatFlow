@@ -10,6 +10,13 @@ import type {
   WebRtcIceCandidatePayload,
   WebRtcSessionDescriptionPayload,
 } from "@/types/call";
+import {
+  StatusDeletedPayload,
+  StatusNewPayload,
+  StatusReactionPayload,
+  StatusViewedPayload,
+} from "@/types/status";
+import { FriendshipChangedPayload } from "@/types/friend";
 
 export interface SocketResult {
   success: boolean;
@@ -100,6 +107,15 @@ interface ServerToClientEvents {
     endedByUserId: string | null;
     reason: AudioCallEndReason;
   }) => void;
+
+  "status:new": (payload: StatusNewPayload) => void;
+
+  "status:viewed": (payload: StatusViewedPayload) => void;
+
+  "status:reaction": (payload: StatusReactionPayload) => void;
+
+  "status:deleted": (payload: StatusDeletedPayload) => void;
+  "friendship:changed": (payload: FriendshipChangedPayload) => void;
 }
 
 interface ClientToServerEvents {

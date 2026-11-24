@@ -4,11 +4,12 @@ import type { ReactNode } from "react";
 import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
-import { AuthProvider } from "@/contexts/AuthContext";
+import MessageNotificationFeedback from "@/components/shared/MessageNotificationFeedback";
 import { AudioCallProvider } from "@/contexts/AudioCallContext";
+import { AuthProvider } from "@/contexts/AuthContext";
 import { ChatThemeProvider } from "@/contexts/ChatThemeContext";
 import { SocketProvider } from "@/contexts/SocketContext";
-import MessageNotificationFeedback from "@/components/shared/MessageNotificationFeedback";
+import { StatusProvider } from "@/contexts/StatusContext";
 import QueryProvider from "@/providers/QueryProvider";
 
 interface AppProvidersProps {
@@ -21,7 +22,9 @@ export default function AppProviders({ children }: AppProvidersProps) {
       <AuthProvider>
         <ChatThemeProvider>
           <SocketProvider>
-            <AudioCallProvider>{children}</AudioCallProvider>
+            <StatusProvider>
+              <AudioCallProvider>{children}</AudioCallProvider>
+            </StatusProvider>
             <MessageNotificationFeedback />
 
             <ToastContainer

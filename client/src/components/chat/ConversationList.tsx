@@ -15,7 +15,14 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState, type SetStateAction } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type SetStateAction,
+} from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "react-toastify";
 
@@ -25,6 +32,7 @@ import ActionMenu from "@/components/ui/ActionMenu";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSocket } from "@/contexts/SocketContext";
+import { useStatuses } from "@/contexts/StatusContext";
 import { getApiErrorMessage } from "@/lib/api/errors";
 import { queryKeys } from "@/lib/query/query-keys";
 import {
@@ -33,6 +41,7 @@ import {
 } from "@/lib/query/conversation-cache";
 import {
   clearConversation,
+  getConversationById,
   deleteConversation,
   getConversations,
   markConversationUnread,
@@ -47,6 +56,7 @@ import type {
   ConversationPreferences,
 } from "@/types/conversation";
 import type { ChatMessage, MessageDeletedPayload } from "@/types/message";
+import type { StatusGroup } from "@/types/status";
 import {
   getAllConversationDrafts,
   subscribeToConversationDrafts,
@@ -87,17 +97,14 @@ const normalizeMessage = (message: ChatMessage): ChatMessage => ({
   deletedFor: Array.isArray(message.deletedFor) ? message.deletedFor : [],
 });
 
-const sortConversations = (
-  conversations: Conversation[],
-): Conversation[] =>
+const sortConversations = (conversations: Conversation[]): Conversation[] =>
   [...conversations].sort((first, second) => {
     if (Boolean(first.isPinned) !== Boolean(second.isPinned)) {
       return first.isPinned ? -1 : 1;
     }
 
     return (
-      new Date(second.updatedAt).getTime() -
-      new Date(first.updatedAt).getTime()
+      new Date(second.updatedAt).getTime() - new Date(first.updatedAt).getTime()
     );
   });
 
@@ -108,24 +115,38 @@ interface ConfirmationRequest {
   onConfirm: () => Promise<void>;
 }
 
-export default function ConversationList() {
+interface ConversationListProps {
+  onOpenStatusGroup: (group: StatusGroup) => void;
+}
+
+export default function ConversationList({
+  onOpenStatusGroup,
+}: ConversationListProps) {
   const pathname = usePathname();
   const router = useRouter();
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const { statusGroups } = useStatuses();
 
   const { socket, isConnected, onlineUserIds, updatedProfiles } = useSocket();
 
   const currentUserId = user?._id;
 
-  const conversationsQueryKey = queryKeys.conversations(currentUserId ?? "");
+  const conversationsQueryKey = useMemo(
+    () => queryKeys.conversations(currentUserId ?? ""),
+    [currentUserId],
+  );
   const conversationsQuery = useQuery({
     queryKey: conversationsQueryKey,
-    queryFn: async ({ signal }) => sortConversations(await getConversations(signal)),
+    queryFn: async ({ signal }) =>
+      sortConversations(await getConversations(signal)),
     enabled: Boolean(currentUserId),
     staleTime: 20_000,
   });
-  const conversations = conversationsQuery.data ?? [];
+  const conversations = useMemo(
+    () => conversationsQuery.data ?? [],
+    [conversationsQuery.data],
+  );
   const setConversations = useCallback(
     (updater: SetStateAction<Conversation[]>) =>
       queryClient.setQueryData<Conversation[]>(
@@ -196,12 +217,15 @@ export default function ConversationList() {
 
   useEffect(() => {
     const now = Date.now();
-    const nextExpiry = conversations.reduce<number | null>((nearest, conversation) => {
-      if (!conversation.isMuted || !conversation.mutedUntil) return nearest;
-      const expiry = new Date(conversation.mutedUntil).getTime();
-      if (expiry <= now) return nearest;
-      return nearest === null || expiry < nearest ? expiry : nearest;
-    }, null);
+    const nextExpiry = conversations.reduce<number | null>(
+      (nearest, conversation) => {
+        if (!conversation.isMuted || !conversation.mutedUntil) return nearest;
+        const expiry = new Date(conversation.mutedUntil).getTime();
+        if (expiry <= now) return nearest;
+        return nearest === null || expiry < nearest ? expiry : nearest;
+      },
+      null,
+    );
 
     if (nextExpiry === null) return;
 
@@ -214,6 +238,8 @@ export default function ConversationList() {
 
   useEffect(() => {
     if (!isConnected || !currentUserId) return;
+
+    let isSubscribed = true;
 
     const clearTypingConversation = (conversationId: string): void => {
       const timeoutId = typingTimeoutsRef.current.get(conversationId);
@@ -258,7 +284,57 @@ export default function ConversationList() {
           (conversation) => conversation._id === conversationId,
         );
 
-        if (!existingConversation) return current;
+        if (!existingConversation) {
+          /*
+           * A status reply can create the first direct conversation between
+           * two people. The socket correctly announces its first message,
+           * but there is no list item to update yet. Fetch and insert the
+           * conversation so that reply is immediately discoverable.
+           */
+          void getConversationById(conversationId)
+            .then((conversation) => {
+              if (!isSubscribed) {
+                return;
+              }
+
+              const conversationIsOpen =
+                pathname === `/chats/${conversationId}`;
+
+              setConversations((latestConversations) => {
+                const existingIndex = latestConversations.findIndex(
+                  (currentConversation) =>
+                    currentConversation._id === conversationId,
+                );
+
+                const unreadCount =
+                  incrementUnread && !conversationIsOpen
+                    ? Math.max(1, conversation.unreadCount ?? 0)
+                    : (conversation.unreadCount ?? 0);
+
+                const nextConversation: Conversation = {
+                  ...(existingIndex >= 0
+                    ? latestConversations[existingIndex]
+                    : conversation),
+                  lastMessage: normalizeMessage(message),
+                  updatedAt,
+                  unreadCount,
+                };
+
+                return sortConversations([
+                  nextConversation,
+                  ...latestConversations.filter(
+                    (currentConversation) =>
+                      currentConversation._id !== conversationId,
+                  ),
+                ]);
+              });
+            })
+            .catch(() => {
+              /* A later refresh will recover if the conversation was removed. */
+            });
+
+          return current;
+        }
 
         const conversationIsOpen = pathname === `/chats/${conversationId}`;
 
@@ -471,6 +547,8 @@ export default function ConversationList() {
     socket.on("conversation:preferences-updated", handlePreferencesUpdate);
 
     return () => {
+      isSubscribed = false;
+
       socket.off("conversation:updated", handleConversationUpdate);
 
       socket.off("conversation:read", handleConversationRead);
@@ -481,7 +559,7 @@ export default function ConversationList() {
 
       socket.off("conversation:preferences-updated", handlePreferencesUpdate);
     };
-  }, [socket, isConnected, pathname, currentUserId, queryClient]);
+  }, [socket, isConnected, pathname, currentUserId, queryClient, setConversations]);
 
   useEffect(() => {
     if (!isConnected || !currentUserId) return;
@@ -734,12 +812,17 @@ export default function ConversationList() {
     }
   };
 
-  const handleMuteConversation = async (conversationId: string, duration: 8 | 168 | "always"): Promise<void> => {
+  const handleMuteConversation = async (
+    conversationId: string,
+    duration: 8 | 168 | "always",
+  ): Promise<void> => {
     setActionConversationId(conversationId);
     try {
       const preferences = await muteConversation(conversationId, duration);
       applyConversationMutePreferences(conversationId, preferences);
-      toast.success(`Chat muted${duration === "always" ? "" : ` for ${duration === 168 ? "1 week" : `${duration} hours`}`}`);
+      toast.success(
+        `Chat muted${duration === "always" ? "" : ` for ${duration === 168 ? "1 week" : `${duration} hours`}`}`,
+      );
     } catch (error) {
       toast.error(getApiErrorMessage(error));
     } finally {
@@ -747,10 +830,15 @@ export default function ConversationList() {
     }
   };
 
-  const handleUnmuteConversation = async (conversationId: string): Promise<void> => {
+  const handleUnmuteConversation = async (
+    conversationId: string,
+  ): Promise<void> => {
     setActionConversationId(conversationId);
     try {
-      applyConversationMutePreferences(conversationId, await unmuteConversation(conversationId));
+      applyConversationMutePreferences(
+        conversationId,
+        await unmuteConversation(conversationId),
+      );
       toast.success("Chat unmuted");
     } catch (error) {
       toast.error(getApiErrorMessage(error));
@@ -759,13 +847,20 @@ export default function ConversationList() {
     }
   };
 
-  const handleDeleteConversation = async (conversationId: string): Promise<void> => {
+  const handleDeleteConversation = async (
+    conversationId: string,
+  ): Promise<void> => {
     setActionConversationId(conversationId);
     try {
       await deleteConversation(conversationId);
-      setConversations((current) => current.filter((item) => item._id !== conversationId));
+      setConversations((current) =>
+        current.filter((item) => item._id !== conversationId),
+      );
       queryClient.removeQueries({
-        queryKey: queryKeys.conversationMessages(currentUserId ?? "", conversationId),
+        queryKey: queryKeys.conversationMessages(
+          currentUserId ?? "",
+          conversationId,
+        ),
         exact: true,
       });
       if (pathname === `/chats/${conversationId}`) router.push("/chats");
@@ -848,11 +943,7 @@ export default function ConversationList() {
         : "They will no longer be able to message or call you.",
       confirmLabel: actionLabel,
       onConfirm: () =>
-        handleBlockConversationUser(
-          conversationId,
-          otherUserId,
-          isBlocked,
-        ),
+        handleBlockConversationUser(conversationId, otherUserId, isBlocked),
     });
   };
 
@@ -921,121 +1012,184 @@ export default function ConversationList() {
     <>
       <div className="conversation-list divide-y divide-slate-100">
         {conversations.map((conversation) => {
-        const otherParticipant = getOtherParticipant(conversation, user._id);
+          const otherParticipant = getOtherParticipant(conversation, user._id);
 
-        const updatedOtherProfile = otherParticipant
-          ? updatedProfiles.get(otherParticipant._id)
-          : undefined;
+          const otherParticipantStatusGroup =
+            conversation.type === "direct" && otherParticipant
+              ? statusGroups.find(
+                  (group) => group.author._id === otherParticipant._id,
+                )
+              : undefined;
 
-        const displayName =
-          conversation.type === "group"
-            ? (conversation.name ?? "Unnamed group")
-            : (updatedOtherProfile?.name ??
-              otherParticipant?.name ??
-              "Unknown user");
+          const hasParticipantStatus = Boolean(otherParticipantStatusGroup);
 
-        const isActive = pathname === `/chats/${conversation._id}`;
+          const hasUnviewedParticipantStatus = Boolean(
+            otherParticipantStatusGroup?.hasUnviewedStatuses,
+          );
 
-        const unreadCount = isActive ? 0 : (conversation.unreadCount ?? 0);
+          const updatedOtherProfile = otherParticipant
+            ? updatedProfiles.get(otherParticipant._id)
+            : undefined;
 
-        const hasUnread = unreadCount > 0;
+          const displayName =
+            conversation.type === "group"
+              ? (conversation.name ?? "Unnamed group")
+              : (updatedOtherProfile?.name ??
+                otherParticipant?.name ??
+                "Unknown user");
 
-            const isPinned = Boolean(conversation.isPinned);
-            const muteIsActive = Boolean(conversation.isMuted && (!conversation.mutedUntil || new Date(conversation.mutedUntil).getTime() > menuOpenedAt));
-            const mutedUntilLabel = conversation.mutedUntil
-              ? `Muted until ${new Date(conversation.mutedUntil).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}`
-              : "Notifications muted indefinitely";
+          const isActive = pathname === `/chats/${conversation._id}`;
 
-        const isMenuOpen = openMenuConversationId === conversation._id;
+          const unreadCount = isActive ? 0 : (conversation.unreadCount ?? 0);
 
-        const isActionWorking = actionConversationId === conversation._id;
+          const hasUnread = unreadCount > 0;
 
-        const isOtherUserOnline =
-          conversation.type === "direct" &&
-          Boolean(otherParticipant && onlineUserIds.has(otherParticipant._id));
+          const isPinned = Boolean(conversation.isPinned);
+          const muteIsActive = Boolean(
+            conversation.isMuted &&
+            (!conversation.mutedUntil ||
+              new Date(conversation.mutedUntil).getTime() > menuOpenedAt),
+          );
+          const mutedUntilLabel = conversation.mutedUntil
+            ? `Muted until ${new Date(conversation.mutedUntil).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}`
+            : "Notifications muted indefinitely";
 
-        const isParticipantTyping = typingConversationIds.has(conversation._id);
+          const isMenuOpen = openMenuConversationId === conversation._id;
 
-        const lastMessage = conversation.lastMessage;
+          const isActionWorking = actionConversationId === conversation._id;
 
-        const deletedFor = Array.isArray(lastMessage?.deletedFor)
-          ? lastMessage.deletedFor
-          : [];
+          const isOtherUserOnline =
+            conversation.type === "direct" &&
+            Boolean(
+              otherParticipant && onlineUserIds.has(otherParticipant._id),
+            );
 
-        const senderId = lastMessage?.sender?._id;
+          const isParticipantTyping = typingConversationIds.has(
+            conversation._id,
+          );
 
-        const content =
-          lastMessage?.content ||
-          (lastMessage?.type === "image"
-            ? "📷 Image"
-            : lastMessage?.type === "audio"
-              ? "🎤 Voice note"
-              : lastMessage?.attachment?.fileName || "File");
+          const lastMessage = conversation.lastMessage;
 
-        const draftText = conversationDrafts.get(conversation._id) ?? "";
+          const deletedFor = Array.isArray(lastMessage?.deletedFor)
+            ? lastMessage.deletedFor
+            : [];
 
-        const hasDraft =
-          Boolean(draftText.trim()) && !isActive;
+          const senderId = lastMessage?.sender?._id;
 
-        const isBlockedByCurrentUser = Boolean(
-          conversation.directMessagingAccess?.isBlockedByCurrentUser,
-        );
+          const content =
+            lastMessage?.content ||
+            (lastMessage?.type === "image"
+              ? "📷 Image"
+              : lastMessage?.type === "audio"
+                ? "🎤 Voice note"
+                : lastMessage?.attachment?.fileName || "File");
 
-        const isMessagingUnavailable =
-          conversation.type === "direct" &&
-          conversation.directMessagingAccess?.canMessage === false;
+          const draftText = conversationDrafts.get(conversation._id) ?? "";
 
-        const messagePreview = isBlockedByCurrentUser
-          ? "You blocked this user"
-          : isMessagingUnavailable
-            ? "Messaging unavailable"
-            : hasDraft
-          ? draftText.trim()
-          : lastMessage
-            ? deletedFor.includes(user._id)
-              ? "Message deleted for you"
-              : lastMessage.deletedForEveryoneAt
-                ? "This message was deleted"
-                : `${senderId === user._id ? "You: " : ""}${content}`
-            : "Start the conversation";
+          const hasDraft = Boolean(draftText.trim()) && !isActive;
 
-        return (
-          <div key={conversation._id} className="group relative">
-            <Link
-              href={`/chats/${conversation._id}`}
-              onClick={() => setOpenMenuConversationId(null)}
-              className={`flex items-center gap-3 px-4 py-2.5 pr-12 transition ${
-                isActive
-                  ? "bg-cyan-50"
-                  : hasUnread
-                    ? "bg-white hover:bg-cyan-50/50"
-                    : "hover:bg-slate-50"
-              }`}
+          const isBlockedByCurrentUser = Boolean(
+            conversation.directMessagingAccess?.isBlockedByCurrentUser,
+          );
+
+          const isMessagingUnavailable =
+            conversation.type === "direct" &&
+            conversation.directMessagingAccess?.canMessage === false;
+
+          const messagePreview = isBlockedByCurrentUser
+            ? "You blocked this user"
+            : isMessagingUnavailable
+              ? "Messaging unavailable"
+              : hasDraft
+                ? draftText.trim()
+                : lastMessage
+                  ? deletedFor.includes(user._id)
+                    ? "Message deleted for you"
+                    : lastMessage.deletedForEveryoneAt
+                      ? "This message was deleted"
+                      : `${senderId === user._id ? "You: " : ""}${content}`
+                  : "Start the conversation";
+
+          return (
+            <div
+              key={conversation._id}
+              className="group relative flex items-center gap-3 px-4 py-2.5 pr-12"
             >
-              <div className="relative h-11 w-11 shrink-0">
-                <UserAvatar
-                  name={displayName}
-                  avatarUrl={
-                    conversation.type === "direct"
-                      ? updatedOtherProfile
+              <Link
+                href={`/chats/${conversation._id}`}
+                onClick={() => setOpenMenuConversationId(null)}
+                aria-label={`Open conversation with ${displayName}`}
+                className={`absolute inset-0 z-0 transition ${
+                  isActive
+                    ? "bg-cyan-50"
+                    : hasUnread
+                      ? "bg-white hover:bg-cyan-50/50"
+                      : "hover:bg-slate-50"
+                }`}
+              />
+              {hasParticipantStatus ? (
+                <button
+                  type="button"
+                  onClick={() =>
+                    onOpenStatusGroup(otherParticipantStatusGroup!)
+                  }
+                  aria-label={`View ${displayName}'s status`}
+                  title={
+                    hasUnviewedParticipantStatus
+                      ? `${displayName} has an unviewed status`
+                      : `View ${displayName}'s status again`
+                  }
+                  className={`relative z-10 flex h-11 w-11 shrink-0 items-center justify-center rounded-full p-[3px] transition hover:scale-105 focus:outline-none focus:ring-2 focus:ring-[var(--chat-accent)] focus:ring-offset-2 focus:ring-offset-[var(--chat-sidebar)] ${
+                    hasUnviewedParticipantStatus
+                      ? "bg-[var(--chat-accent)] shadow-[0_0_0_2px_var(--chat-accent-soft)]"
+                      : "bg-[var(--chat-muted)]/55"
+                  }`}
+                >
+                  <UserAvatar
+                    name={displayName}
+                    avatarUrl={
+                      updatedOtherProfile
                         ? updatedOtherProfile.avatarUrl
                         : otherParticipant?.avatarUrl
-                      : null
-                  }
-                  className="h-full w-full"
-                  fallbackClassName="bg-cyan-100 font-semibold text-cyan-800"
-                />
-
-                {isOtherUserOnline && (
-                  <span
-                    title="Online"
-                    aria-label="Online"
-                    className="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full border-2 border-white bg-emerald-500 shadow-sm"
+                    }
+                    className="h-full w-full"
+                    fallbackClassName="bg-cyan-100 font-semibold text-cyan-800"
                   />
-                )}
-              </div>
 
-              <div className="min-w-0 flex-1">
+                  {isOtherUserOnline && (
+                    <span
+                      title="Online"
+                      aria-label="Online"
+                      className="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full border-2 border-[var(--chat-sidebar)] bg-emerald-500 shadow-sm"
+                    />
+                  )}
+                </button>
+              ) : (
+                <div className="pointer-events-none relative z-10 h-11 w-11 shrink-0">
+                  <UserAvatar
+                    name={displayName}
+                    avatarUrl={
+                      conversation.type === "direct"
+                        ? updatedOtherProfile
+                          ? updatedOtherProfile.avatarUrl
+                          : otherParticipant?.avatarUrl
+                        : null
+                    }
+                    className="h-full w-full"
+                    fallbackClassName="bg-cyan-100 font-semibold text-cyan-800"
+                  />
+
+                  {isOtherUserOnline && (
+                    <span
+                      title="Online"
+                      aria-label="Online"
+                      className="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full border-2 border-[var(--chat-sidebar)] bg-emerald-500 shadow-sm"
+                    />
+                  )}
+                </div>
+              )}
+
+              <div className="pointer-events-none relative z-10 min-w-0 flex-1">
                 <div className="flex items-start gap-2">
                   <p
                     className={`min-w-0 flex-1 truncate text-slate-950 ${
@@ -1087,7 +1241,9 @@ export default function ConversationList() {
                       </span>
                     ) : hasDraft ? (
                       <>
-                        <span className="font-semibold text-red-500">Draft:</span>{" "}
+                        <span className="font-semibold text-red-500">
+                          Draft:
+                        </span>{" "}
                         <span>{messagePreview}</span>
                       </>
                     ) : (
@@ -1102,83 +1258,137 @@ export default function ConversationList() {
                   )}
                 </div>
               </div>
-            </Link>
 
-            <div className="absolute right-1.5 top-1.5">
+              <div className="absolute right-1.5 top-1.5 z-20">
                 <ActionMenu
-                open={isMenuOpen}
-                onOpenChange={(isOpen) =>
-                  {
+                  open={isMenuOpen}
+                  onOpenChange={(isOpen) => {
                     if (isOpen) setMenuOpenedAt(Date.now());
                     setOpenMenuConversationId(isOpen ? conversation._id : null);
-                  }
-                }
-                isLoading={isActionWorking}
-                label={`Open actions for ${displayName}`}
-                menuLabel={`Actions for ${displayName}`}
-                menuClassName="w-64"
-                items={[
-                  {
-                    id: "pin",
-                    label: isPinned ? "Unpin chat" : "Pin chat",
-                    icon: isPinned ? PinOff : Pin,
-                    onSelect: () => {
-                      void handlePinConversation(conversation._id, isPinned);
+                  }}
+                  isLoading={isActionWorking}
+                  label={`Open actions for ${displayName}`}
+                  menuLabel={`Actions for ${displayName}`}
+                  menuClassName="w-64"
+                  items={[
+                    {
+                      id: "pin",
+                      label: isPinned ? "Unpin chat" : "Pin chat",
+                      icon: isPinned ? PinOff : Pin,
+                      onSelect: () => {
+                        void handlePinConversation(conversation._id, isPinned);
+                      },
                     },
-                  },
-                  ...(muteIsActive
-                    ? [{ id: "unmute", label: "Unmute notifications", description: mutedUntilLabel, icon: VolumeX, onSelect: () => void handleUnmuteConversation(conversation._id) }]
-                    : [{ id: "mute", label: "Mute Notifications", icon: VolumeX, onSelect: () => undefined, submenu: [
-                        { id: "mute-8", label: "8 hours", icon: VolumeX, onSelect: () => void handleMuteConversation(conversation._id, 8) },
-                        { id: "mute-week", label: "1 week", icon: VolumeX, onSelect: () => void handleMuteConversation(conversation._id, 168) },
-                        { id: "mute-always", label: "Always", icon: VolumeX, onSelect: () => void handleMuteConversation(conversation._id, "always") },
-                      ] }]),
-                  {
-                    id: "unread",
-                    label: "Mark as unread",
-                    icon: Mail,
-                    onSelect: () => {
-                      void handleMarkConversationUnread(conversation._id);
+                    ...(muteIsActive
+                      ? [
+                          {
+                            id: "unmute",
+                            label: "Unmute notifications",
+                            description: mutedUntilLabel,
+                            icon: VolumeX,
+                            onSelect: () =>
+                              void handleUnmuteConversation(conversation._id),
+                          },
+                        ]
+                      : [
+                          {
+                            id: "mute",
+                            label: "Mute Notifications",
+                            icon: VolumeX,
+                            onSelect: () => undefined,
+                            submenu: [
+                              {
+                                id: "mute-8",
+                                label: "8 hours",
+                                icon: VolumeX,
+                                onSelect: () =>
+                                  void handleMuteConversation(
+                                    conversation._id,
+                                    8,
+                                  ),
+                              },
+                              {
+                                id: "mute-week",
+                                label: "1 week",
+                                icon: VolumeX,
+                                onSelect: () =>
+                                  void handleMuteConversation(
+                                    conversation._id,
+                                    168,
+                                  ),
+                              },
+                              {
+                                id: "mute-always",
+                                label: "Always",
+                                icon: VolumeX,
+                                onSelect: () =>
+                                  void handleMuteConversation(
+                                    conversation._id,
+                                    "always",
+                                  ),
+                              },
+                            ],
+                          },
+                        ]),
+                    {
+                      id: "unread",
+                      label: "Mark as unread",
+                      icon: Mail,
+                      onSelect: () => {
+                        void handleMarkConversationUnread(conversation._id);
+                      },
                     },
-                  },
-                  {
-                    id: "clear",
-                    label: "Clear chat",
-                    icon: Eraser,
-                    onSelect: () => requestClearConversation(conversation._id),
-                  },
-                  { id: "delete", label: "Delete conversation", icon: Trash2, tone: "danger", dividerBefore: true, onSelect: () => requestDeleteConversation(conversation._id) },
-                  ...(conversation.type === "direct" && otherParticipant
-                    ? [
-                        {
-                          id: "block",
-                          label: isBlockedByCurrentUser
-                            ? "Unblock user"
-                            : "Block user",
-                          icon: isBlockedByCurrentUser ? ShieldCheck : Ban,
-                          tone: isBlockedByCurrentUser
-                            ? ("success" as const)
-                            : ("danger" as const),
-                          dividerBefore: true,
-                          onSelect: () =>
-                            requestBlockConversationUser(
-                              conversation._id,
-                              otherParticipant._id,
-                              isBlockedByCurrentUser,
-                            ),
-                        },
-                      ]
-                    : []),
-                ]}
-              />
-              {muteIsActive && (
-                <span title={mutedUntilLabel} aria-label="Notifications muted" className="pointer-events-none absolute right-[13px] top-[34px] text-[var(--chat-muted)]">
-                  <BellOff className="h-3.5 w-3.5" strokeWidth={1.8} />
-                </span>
-              )}
+                    {
+                      id: "clear",
+                      label: "Clear chat",
+                      icon: Eraser,
+                      onSelect: () =>
+                        requestClearConversation(conversation._id),
+                    },
+                    {
+                      id: "delete",
+                      label: "Delete conversation",
+                      icon: Trash2,
+                      tone: "danger",
+                      dividerBefore: true,
+                      onSelect: () =>
+                        requestDeleteConversation(conversation._id),
+                    },
+                    ...(conversation.type === "direct" && otherParticipant
+                      ? [
+                          {
+                            id: "block",
+                            label: isBlockedByCurrentUser
+                              ? "Unblock user"
+                              : "Block user",
+                            icon: isBlockedByCurrentUser ? ShieldCheck : Ban,
+                            tone: isBlockedByCurrentUser
+                              ? ("success" as const)
+                              : ("danger" as const),
+                            dividerBefore: true,
+                            onSelect: () =>
+                              requestBlockConversationUser(
+                                conversation._id,
+                                otherParticipant._id,
+                                isBlockedByCurrentUser,
+                              ),
+                          },
+                        ]
+                      : []),
+                  ]}
+                />
+                {muteIsActive && (
+                  <span
+                    title={mutedUntilLabel}
+                    aria-label="Notifications muted"
+                    className="pointer-events-none absolute right-[13px] top-[34px] text-[var(--chat-muted)]"
+                  >
+                    <BellOff className="h-3.5 w-3.5" strokeWidth={1.8} />
+                  </span>
+                )}
+              </div>
             </div>
-          </div>
-        );
+          );
         })}
       </div>
 
