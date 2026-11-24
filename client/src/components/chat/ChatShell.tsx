@@ -23,6 +23,7 @@ import UserSearchResults from "./UserSearchResults";
 
 import StatusComposerModal from "@/components/status/StatusComposerModal";
 import StatusRail from "@/components/status/StatusRail";
+import StatusSidebar from "@/components/status/StatusSidebar";
 import StatusStrip from "@/components/status/StatusStrip";
 import StatusViewer from "@/components/status/StatusViewer";
 import ActionMenu from "@/components/ui/ActionMenu";
@@ -36,6 +37,8 @@ import type { StatusGroup } from "@/types/status";
 interface ChatShellProps {
   children: ReactNode;
 }
+
+type SidebarView = "chats" | "statuses";
 
 const getInitials = (
   name: string,
@@ -63,6 +66,11 @@ export default function ChatShell({
     searchQuery,
     setSearchQuery,
   ] = useState("");
+
+  const [
+    sidebarView,
+    setSidebarView,
+  ] = useState<SidebarView>("chats");
 
   const [
     isThemeDrawerOpen,
@@ -94,6 +102,16 @@ export default function ChatShell({
       setSelectedStatusGroup(null);
       setIsStatusComposerOpen(true);
     };
+
+  const handleShowChats = (): void => {
+    setSearchQuery("");
+    setSidebarView("chats");
+  };
+
+  const handleShowStatuses = (): void => {
+    setSearchQuery("");
+    setSidebarView("statuses");
+  };
 
   const handleOpenStatusGroup = (
     group: StatusGroup,
@@ -152,8 +170,10 @@ export default function ChatShell({
       className="chat-theme flex h-dvh min-w-0 w-full overflow-hidden bg-[var(--chat-app)] text-[var(--chat-text)]"
     >
       <StatusRail
+        activeView={sidebarView}
         onCreateStatus={handleCreateStatus}
-        onOpenStatusGroup={handleOpenStatusGroup}
+        onShowChats={handleShowChats}
+        onShowStatuses={handleShowStatuses}
       />
 
       <aside
@@ -247,59 +267,62 @@ export default function ChatShell({
           />
         </header>
 
-        <div className="md:hidden">
-          <StatusStrip
+        {sidebarView === "statuses" ? (
+          <StatusSidebar
             onCreateStatus={handleCreateStatus}
             onOpenStatusGroup={handleOpenStatusGroup}
           />
-        </div>
+        ) : (
+          <>
+            <div className="md:hidden">
+              <StatusStrip
+                onCreateStatus={handleCreateStatus}
+                onOpenStatusGroup={handleOpenStatusGroup}
+              />
+            </div>
 
-        <div className="border-b border-[var(--chat-border)] p-4">
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-[var(--chat-muted)]" />
+            <div className="border-b border-[var(--chat-border)] p-4">
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-[var(--chat-muted)]" />
 
-            <input
-              type="search"
-              value={searchQuery}
-              onChange={(event) =>
-                setSearchQuery(
-                  event.target.value,
-                )
-              }
-              placeholder="Search people"
-              aria-label="Search people"
-              className="w-full rounded-xl border border-[var(--chat-border)] bg-[var(--chat-input)] py-2.5 pl-10 pr-4 text-sm text-[var(--chat-text)] outline-none transition placeholder:text-[var(--chat-muted)] focus:border-[var(--chat-accent)] focus:bg-[var(--chat-control)] focus:ring-4 focus:ring-[var(--chat-accent-soft)]"
-            />
-          </div>
-        </div>
+                <input
+                  type="search"
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  placeholder="Search people"
+                  aria-label="Search people"
+                  className="w-full rounded-xl border border-[var(--chat-border)] bg-[var(--chat-input)] py-2.5 pl-10 pr-4 text-sm text-[var(--chat-text)] outline-none transition placeholder:text-[var(--chat-muted)] focus:border-[var(--chat-accent)] focus:bg-[var(--chat-control)] focus:ring-4 focus:ring-[var(--chat-accent-soft)]"
+                />
+              </div>
+            </div>
 
-        <div className="flex items-center justify-between px-4 py-4">
-          <div>
-            <h1 className="text-xl font-bold text-[var(--chat-text)]">
-              Chats
-            </h1>
+            <div className="flex items-center justify-between px-4 py-4">
+              <div>
+                <h1 className="text-xl font-bold text-[var(--chat-text)]">
+                  Chats
+                </h1>
 
-            <p className="mt-0.5 text-xs text-[var(--chat-muted)]">
-              Your recent conversations
-            </p>
-          </div>
+                <p className="mt-0.5 text-xs text-[var(--chat-muted)]">
+                  Your recent conversations
+                </p>
+              </div>
 
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--chat-sent)] text-white">
-            <MessageCircleMore className="h-5 w-5" />
-          </div>
-        </div>
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--chat-sent)] text-white">
+                <MessageCircleMore className="h-5 w-5" />
+              </div>
+            </div>
 
-        <div className="chat-scrollbar min-h-0 flex-1 overflow-y-auto">
-          {searchQuery.trim() ? (
-            <UserSearchResults
-              query={searchQuery}
-            />
-          ) : (
-            <ConversationList
-              onOpenStatusGroup={handleOpenStatusGroup}
-            />
-          )}
-        </div>
+            <div className="chat-scrollbar min-h-0 flex-1 overflow-y-auto">
+              {searchQuery.trim() ? (
+                <UserSearchResults query={searchQuery} />
+              ) : (
+                <ConversationList
+                  onOpenStatusGroup={handleOpenStatusGroup}
+                />
+              )}
+            </div>
+          </>
+        )}
       </aside>
 
       <main
