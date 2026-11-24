@@ -208,6 +208,17 @@ interface ServerToClientEvents {
   }) => void;
 
   "status:deleted": (payload: { statusId: string; authorId: string }) => void;
+
+  "friendship:changed": (payload: {
+    action:
+      | "request_received"
+      | "request_accepted"
+      | "request_declined"
+      | "request_cancelled"
+      | "friend_removed";
+    friendshipId: string;
+    userId: string;
+  }) => void;
 }
 
 interface ClientToServerEvents {

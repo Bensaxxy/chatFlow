@@ -109,6 +109,11 @@ export const createDirectConversation = async (
     );
   }
 
+  /*
+   * Messaging and friendship are independent. A direct conversation is
+   * allowed for any non-blocked user; only an accepted friendship appears
+   * in the Friends list.
+   */
   const directMessagingAccess = await getDirectMessagingAccess(
     currentUserId,
     participantId,
@@ -126,9 +131,23 @@ export const createDirectConversation = async (
 
   const directKey = getDirectKey(currentUserId, participantId);
 
+  /*
+   * Direct keys were added after some conversations already existed. Looking
+   * up the two-person direct conversation by its participants first keeps a
+   * friendship acceptance from opening a second, empty chat and hiding the
+   * message history in the original one.
+   */
   const existingConversation = await Conversation.findOne({
-    directKey,
-  }).populate("participants", participantFields);
+    type: "direct",
+    participants: {
+      $all: [currentUserId, participantId],
+      $size: 2,
+    },
+  })
+    .sort({
+      createdAt: 1,
+    })
+    .populate("participants", participantFields);
 
   if (existingConversation) {
     await restoreConversationForUser(currentUserId, existingConversation._id.toString());

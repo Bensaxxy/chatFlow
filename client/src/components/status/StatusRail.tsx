@@ -1,17 +1,18 @@
 "use client";
 
-import { Plus } from "lucide-react";
+import { Plus, UsersRound } from "lucide-react";
 
 import UserAvatar from "@/components/chat/UserAvatar";
 import { useAuth } from "@/contexts/AuthContext";
 import { useStatuses } from "@/contexts/StatusContext";
 
-type SidebarView = "chats" | "statuses";
+type SidebarView = "chats" | "statuses" | "friends";
 
 interface StatusRailProps {
   activeView: SidebarView;
   onCreateStatus: () => void;
   onShowChats: () => void;
+  onShowFriends: () => void;
   onShowStatuses: () => void;
 }
 
@@ -19,6 +20,7 @@ export default function StatusRail({
   activeView,
   onCreateStatus,
   onShowChats,
+  onShowFriends,
   onShowStatuses,
 }: StatusRailProps) {
   const { user } = useAuth();
@@ -92,12 +94,32 @@ export default function StatusRail({
         </span>
       </div>
 
+      <div className="mt-4 flex w-full flex-col items-center">
+        <button
+          type="button"
+          onClick={onShowFriends}
+          aria-label="Find friends"
+          aria-current={activeView === "friends" ? "page" : undefined}
+          title="Find friends"
+          className={`flex h-10 w-10 items-center justify-center rounded-2xl border transition focus:outline-none focus:ring-2 focus:ring-[var(--chat-accent)] focus:ring-offset-2 focus:ring-offset-[var(--chat-sidebar)] ${
+            activeView === "friends"
+              ? "border-[var(--chat-accent)]/25 bg-[var(--chat-accent-soft)] text-[var(--chat-accent)] shadow-sm"
+              : "border-transparent text-[var(--chat-muted)] hover:border-[var(--chat-border)] hover:bg-[var(--chat-hover)] hover:text-[var(--chat-accent)]"
+          }`}
+        >
+          <UsersRound className="h-4.5 w-4.5" />
+        </button>
+        <span className="mt-1.5 text-[9px] font-semibold text-[var(--chat-muted)]">
+          People
+        </span>
+      </div>
+
       <button
         type="button"
         onClick={onCreateStatus}
         aria-label="Create a status"
         title="New status"
-        className="mt-3 flex h-8 w-8 items-center justify-center rounded-xl border border-[var(--chat-border)] bg-[var(--chat-control)] text-[var(--chat-accent)] shadow-sm transition hover:scale-105 hover:border-[var(--chat-accent)]/30 hover:bg-[var(--chat-accent-soft)] focus:outline-none focus:ring-2 focus:ring-[var(--chat-accent)] focus:ring-offset-2 focus:ring-offset-[var(--chat-sidebar)]"
+        className="mt-4 flex h-8 w-8 items-center justify-center rounded-xl border border-[var(--chat-border)] bg-[var(--chat-control)] text-[var(--chat-accent)] shadow-sm transition hover:scale-105 hover:border-[var(--chat-accent)]/30 hover:bg-[var(--chat-accent-soft)] focus:outline-none focus:ring-2 focus:ring-[var(--chat-accent)] focus:ring-offset-2 focus:ring-offset-[var(--chat-sidebar)]"
       >
         <Plus className="h-4 w-4" />
       </button>

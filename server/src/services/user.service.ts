@@ -1,6 +1,7 @@
 import { User } from "../models/user.model";
 import { AppError } from "../utils/app-error";
 import type { SearchUsersInput } from "../validations/user.validation";
+import { Friendship } from "../models/friendship.model";
 
 const escapeRegularExpression = (value: string): string => {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -9,6 +10,10 @@ const escapeRegularExpression = (value: string): string => {
 export interface DirectMessagingAccess {
   isBlockedByCurrentUser: boolean;
   canMessage: boolean;
+}
+
+export interface BlockUserResult extends DirectMessagingAccess {
+  removedFriendshipId: string | null;
 }
 
 export type PrivacyVisibility = "everyone" | "nobody";
@@ -26,11 +31,18 @@ interface PrivacyAwareUser {
   privacySettings?: Partial<UserPrivacySettings> | null;
 }
 
+const createFriendshipPairKey = (
+  firstUserId: string,
+  secondUserId: string,
+): string => [firstUserId, secondUserId].sort().join(":");
+
 export const getPrivacySettings = (
   privacySettings?: Partial<UserPrivacySettings> | null,
 ): UserPrivacySettings => ({
   profilePhotoVisibility:
-    privacySettings?.profilePhotoVisibility === "nobody" ? "nobody" : "everyone",
+    privacySettings?.profilePhotoVisibility === "nobody"
+      ? "nobody"
+      : "everyone",
   lastSeenVisibility:
     privacySettings?.lastSeenVisibility === "nobody" ? "nobody" : "everyone",
   readReceipts: privacySettings?.readReceipts !== false,
@@ -41,7 +53,8 @@ export const canViewProfilePhoto = (
   viewerId: string,
 ): boolean =>
   user._id.toString() === viewerId ||
-  getPrivacySettings(user.privacySettings).profilePhotoVisibility === "everyone";
+  getPrivacySettings(user.privacySettings).profilePhotoVisibility ===
+    "everyone";
 
 export const canViewPresence = (
   user: Pick<PrivacyAwareUser, "_id" | "privacySettings">,
@@ -58,8 +71,12 @@ export const createViewerSafeUser = (
 
   return {
     ...safeUser,
-    avatarUrl: canViewProfilePhoto(user, viewerId) ? user.avatarUrl ?? null : null,
-    lastSeenAt: canViewPresence(user, viewerId) ? user.lastSeenAt ?? null : null,
+    avatarUrl: canViewProfilePhoto(user, viewerId)
+      ? (user.avatarUrl ?? null)
+      : null,
+    lastSeenAt: canViewPresence(user, viewerId)
+      ? (user.lastSeenAt ?? null)
+      : null,
   };
 };
 
@@ -132,7 +149,7 @@ export const assertDirectMessagingAllowed = async (
 export const blockUser = async (
   currentUserId: string,
   userId: string,
-): Promise<DirectMessagingAccess> => {
+): Promise<BlockUserResult> => {
   if (currentUserId === userId) {
     throw new AppError(
       "You cannot block yourself",
@@ -159,7 +176,16 @@ export const blockUser = async (
     },
   });
 
-  return getDirectMessagingAccess(currentUserId, userId);
+  const removedFriendship = await Friendship.findOneAndDelete({
+    pairKey: createFriendshipPairKey(currentUserId, userId),
+  });
+
+  const access = await getDirectMessagingAccess(currentUserId, userId);
+
+  return {
+    ...access,
+    removedFriendshipId: removedFriendship?._id.toString() ?? null,
+  };
 };
 
 export const unblockUser = async (

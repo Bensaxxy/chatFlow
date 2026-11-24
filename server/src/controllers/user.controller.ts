@@ -10,11 +10,7 @@ import {
   updateUserPrivacySettings,
   updateUserProfile,
 } from "../services/profile.service";
-import {
-  blockUser,
-  searchUsers,
-  unblockUser,
-} from "../services/user.service";
+import { blockUser, searchUsers, unblockUser } from "../services/user.service";
 import { AppError } from "../utils/app-error";
 import { asyncHandler } from "../utils/async-handler";
 import type {
@@ -25,6 +21,7 @@ import type {
 } from "../validations/profile.validation";
 import { searchUsersSchema } from "../validations/user.validation";
 import { publicProfileParamsSchema } from "../validations/public-profile.validation";
+import { getSocketServer } from "../socket/socket.server";
 
 const getAuthenticatedUserId = (userId: string | undefined): string => {
   if (!userId) {
@@ -200,14 +197,42 @@ export const getPublicProfile: RequestHandler = asyncHandler(
 
 export const block: RequestHandler = asyncHandler(async (request, response) => {
   const currentUserId = getAuthenticatedUserId(request.auth?.userId);
+
   const { userId } = publicProfileParamsSchema.parse(request.params);
-  const blockStatus = await blockUser(currentUserId, userId);
+
+  const result = await blockUser(currentUserId, userId);
+
+  if (result.removedFriendshipId) {
+    const payloadForCurrentUser = {
+      action: "friend_removed" as const,
+      friendshipId: result.removedFriendshipId,
+      userId,
+    };
+
+    const payloadForBlockedUser = {
+      action: "friend_removed" as const,
+      friendshipId: result.removedFriendshipId,
+      userId: currentUserId,
+    };
+
+    getSocketServer()
+      .to(`user:${currentUserId}`)
+      .emit("friendship:changed", payloadForCurrentUser);
+
+    getSocketServer()
+      .to(`user:${userId}`)
+      .emit("friendship:changed", payloadForBlockedUser);
+  }
 
   response.status(200).json({
     success: true,
     message: "User blocked successfully",
     data: {
-      blockStatus,
+      blockStatus: {
+        isBlockedByCurrentUser: result.isBlockedByCurrentUser,
+
+        canMessage: result.canMessage,
+      },
     },
   });
 });
