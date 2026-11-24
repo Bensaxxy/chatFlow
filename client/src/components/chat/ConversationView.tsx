@@ -30,6 +30,7 @@ import { getApiErrorMessage } from "@/lib/api/errors";
 import type { ConversationCacheEntry } from "@/lib/query/conversation-cache";
 import { queryKeys } from "@/lib/query/query-keys";
 import { getConversationById } from "@/services/conversation.service";
+import { getPublicUserProfile } from "@/services/user.service";
 import {
   deleteConversationMessage,
   editConversationMessage,
@@ -1796,6 +1797,16 @@ export default function ConversationView({
 
   const otherParticipantId = otherParticipant?._id;
 
+  const prefetchOtherProfile = (): void => {
+    if (!otherParticipantId) return;
+
+    void queryClient.prefetchQuery({
+      queryKey: queryKeys.publicProfile(otherParticipantId),
+      queryFn: ({ signal }) => getPublicUserProfile(otherParticipantId, signal),
+      staleTime: 60_000,
+    });
+  };
+
   const isOtherUserOnline =
     isDirectConversation &&
     Boolean(otherParticipantId && onlineUserIds.has(otherParticipantId));
@@ -1835,7 +1846,7 @@ export default function ConversationView({
               null)
             : null
         }
-        canViewProfile={Boolean(otherParticipantId)}
+        profileHref={otherParticipantId ? `/users/${otherParticipantId}` : null}
         isOtherUserOnline={isOtherUserOnline}
         statusText={
           isDirectConversation
@@ -1843,11 +1854,7 @@ export default function ConversationView({
             : "Group conversation"
         }
         isMessageSearchOpen={isMessageSearchOpen}
-        onViewProfile={() => {
-          if (otherParticipantId) {
-            router.push(`/users/${otherParticipantId}`);
-          }
-        }}
+        onPrefetchProfile={prefetchOtherProfile}
         onOpenSearch={openMessageSearch}
         onOpenMediaGallery={openMediaGallery}
       />
