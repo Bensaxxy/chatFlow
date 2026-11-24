@@ -6,14 +6,16 @@ import {
   FileText,
   ImageIcon,
   Maximize2,
+  Mic,
   Pause,
   Play,
   Video,
   Volume2,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import AttachmentPreviewDialog from "@/components/chat/AttachmentPreviewDialog";
+import UserAvatar from "@/components/chat/UserAvatar";
 import type { MessageAttachment } from "@/types/message";
 
 interface MessageAttachmentContentProps {
@@ -21,6 +23,8 @@ interface MessageAttachmentContentProps {
   messageType: "image" | "file" | "audio" | "video";
   isMine?: boolean;
   compact?: boolean;
+  senderName?: string;
+  senderAvatarUrl?: string | null;
 }
 
 const formatFileSize = (bytes: number): string => {
@@ -78,31 +82,180 @@ const joinClasses = (
   ...classNames: Array<string | false | null | undefined>
 ): string => classNames.filter(Boolean).join(" ");
 
+const MIN_WAVEFORM_WIDTH = 120;
+const MAX_WAVEFORM_WIDTH = 240;
+const WAVEFORM_BAR_WIDTH = 2;
+const WAVEFORM_BAR_GAP = 2;
+const WAVEFORM_TRACK_INSET = 5;
+
+// Only one voice note plays at a time (same as WhatsApp / Telegram).
+let activeVoiceNote: HTMLAudioElement | null = null;
+
+// Longer notes get a longer waveform, up to a cap. It shrinks to fit the
+// bubble on narrow screens (see the ResizeObserver below).
+const getWaveformWidth = (duration: number): number =>
+  Math.min(
+    MAX_WAVEFORM_WIDTH,
+    Math.max(MIN_WAVEFORM_WIDTH, 100 + duration * 5),
+  );
+
+// The stored waveform has up to 96 real samples. Fit it to however many bars
+// the bubble can actually show, averaging when there are fewer bars than
+// samples and picking the nearest sample when there are more.
+const resampleWaveform = (samples: number[], count: number): number[] => {
+  if (!samples.length || count <= 0) {
+    return [];
+  }
+
+  return Array.from({ length: count }, (_, index) => {
+    const start = (index * samples.length) / count;
+    const end = ((index + 1) * samples.length) / count;
+
+    if (end - start <= 1) {
+      return samples[
+        Math.min(samples.length - 1, Math.floor((start + end) / 2))
+      ];
+    }
+
+    let sum = 0;
+    let weight = 0;
+
+    for (let s = Math.floor(start); s < Math.ceil(end); s += 1) {
+      const overlap = Math.min(end, s + 1) - Math.max(start, s);
+
+      sum += samples[s] * overlap;
+      weight += overlap;
+    }
+
+    return weight > 0 ? sum / weight : 0;
+  });
+};
+
 interface VoiceNotePlayerProps {
   src: string;
   initialDuration: number | null | undefined;
   isMine: boolean;
+  waveform?: number[];
 }
 
 function VoiceNotePlayer({
   src,
   initialDuration,
   isMine,
+  waveform,
 }: VoiceNotePlayerProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const waveformRef = useRef<HTMLDivElement | null>(null);
+  const isProbingDurationRef = useRef(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [loadedDuration, setLoadedDuration] = useState<number | null>(null);
-  const duration = initialDuration ?? loadedDuration ?? 0;
+  const [measuredWidth, setMeasuredWidth] = useState<number | null>(null);
+
+  const duration =
+    loadedDuration ??
+    (initialDuration && initialDuration > 0 ? initialDuration : 0);
   const maximum = Math.max(duration, 1);
+  const progress = duration > 0 ? Math.min(currentTime / duration, 1) : 0;
+  const waveformWidth = getWaveformWidth(duration);
+
+  const trackWidth = Math.max(
+    0,
+    (measuredWidth ?? waveformWidth) - WAVEFORM_TRACK_INSET * 2,
+  );
+  const barCount = Math.max(
+    8,
+    Math.floor(
+      (trackWidth + WAVEFORM_BAR_GAP) / (WAVEFORM_BAR_WIDTH + WAVEFORM_BAR_GAP),
+    ),
+  );
+  const bars = useMemo(
+    () => (waveform?.length ? resampleWaveform(waveform, barCount) : []),
+    [waveform, barCount],
+  );
+
+  // Keep the bar count in sync with the real rendered width.
+  useEffect(() => {
+    const element = waveformRef.current;
+
+    if (!element || typeof ResizeObserver === "undefined") {
+      return;
+    }
+
+    const observer = new ResizeObserver(([entry]) => {
+      setMeasuredWidth(entry.contentRect.width);
+    });
+
+    observer.observe(element);
+
+    return () => observer.disconnect();
+  }, []);
+
+  // `timeupdate` only fires ~4 times a second, which makes the progress dot
+  // jump. While playing, read the clock every frame instead.
+  useEffect(() => {
+    if (!isPlaying) {
+      return;
+    }
+
+    let frame = 0;
+
+    const tick = () => {
+      const audio = audioRef.current;
+
+      if (audio && !isProbingDurationRef.current) {
+        setCurrentTime(audio.currentTime);
+      }
+
+      frame = requestAnimationFrame(tick);
+    };
+
+    frame = requestAnimationFrame(tick);
+
+    return () => cancelAnimationFrame(frame);
+  }, [isPlaying]);
 
   useEffect(() => {
     const audio = audioRef.current;
 
     return () => {
       audio?.pause();
+
+      if (activeVoiceNote === audio) {
+        activeVoiceNote = null;
+      }
     };
   }, []);
+
+  const handleDurationChange = (audio: HTMLAudioElement) => {
+    if (Number.isFinite(audio.duration) && audio.duration > 0) {
+      setLoadedDuration(audio.duration);
+    }
+  };
+
+  const handleLoadedMetadata = (audio: HTMLAudioElement) => {
+    handleDurationChange(audio);
+
+    // Browser-recorded WebM files have no duration header, so the element
+    // reports Infinity. If the server did not give us a duration either,
+    // seek to the end once so the browser works out the real length.
+    if (
+      audio.duration === Infinity &&
+      !(initialDuration && initialDuration > 0)
+    ) {
+      isProbingDurationRef.current = true;
+
+      const restore = () => {
+        audio.removeEventListener("timeupdate", restore);
+        isProbingDurationRef.current = false;
+        audio.currentTime = 0;
+        setCurrentTime(0);
+      };
+
+      audio.addEventListener("timeupdate", restore);
+      audio.currentTime = Number.MAX_SAFE_INTEGER;
+    }
+  };
 
   const togglePlayback = async () => {
     const audio = audioRef.current;
@@ -112,9 +265,14 @@ function VoiceNotePlayer({
     }
 
     if (audio.paused) {
+      if (activeVoiceNote && activeVoiceNote !== audio) {
+        activeVoiceNote.pause();
+      }
+
+      activeVoiceNote = audio;
+
       try {
         await audio.play();
-        setIsPlaying(true);
       } catch {
         setIsPlaying(false);
       }
@@ -123,7 +281,6 @@ function VoiceNotePlayer({
     }
 
     audio.pause();
-    setIsPlaying(false);
   };
 
   const seek = (value: number) => {
@@ -137,24 +294,35 @@ function VoiceNotePlayer({
     setCurrentTime(value);
   };
 
+  // Like WhatsApp: show the total length until playback starts, then show the
+  // elapsed time (and keep it when paused).
+  const timeLabel = formatAudioDuration(
+    currentTime > 0 ? Math.floor(currentTime) : duration,
+  );
+
   return (
-    <div className="mt-2 flex min-w-0 items-center gap-2">
+    <div className="flex h-10 min-w-0 items-center gap-2.5">
       <audio
         ref={audioRef}
         className="hidden"
         preload="metadata"
         src={src}
-        onLoadedMetadata={(event) => {
-          const durationFromPlayer = event.currentTarget.duration;
-
-          if (Number.isFinite(durationFromPlayer)) {
-            setLoadedDuration(durationFromPlayer);
+        onLoadedMetadata={(event) => handleLoadedMetadata(event.currentTarget)}
+        onDurationChange={(event) => handleDurationChange(event.currentTarget)}
+        onTimeUpdate={(event) => {
+          if (!isProbingDurationRef.current) {
+            setCurrentTime(event.currentTarget.currentTime);
           }
         }}
-        onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)}
         onPause={() => setIsPlaying(false)}
         onPlay={() => setIsPlaying(true)}
         onEnded={() => {
+          const audio = audioRef.current;
+
+          if (audio) {
+            audio.currentTime = 0;
+          }
+
           setCurrentTime(0);
           setIsPlaying(false);
         }}
@@ -166,41 +334,115 @@ function VoiceNotePlayer({
         aria-label={isPlaying ? "Pause voice note" : "Play voice note"}
         title={isPlaying ? "Pause voice note" : "Play voice note"}
         className={joinClasses(
-          "flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2",
+          "group flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2",
           isMine
-            ? "bg-cyan-500 text-white hover:bg-cyan-400 focus-visible:ring-cyan-200 focus-visible:ring-offset-cyan-700"
-            : "bg-cyan-100 text-cyan-700 hover:bg-cyan-200 focus-visible:ring-cyan-500 focus-visible:ring-offset-slate-50",
+            ? "focus-visible:ring-cyan-200 focus-visible:ring-offset-cyan-700"
+            : "focus-visible:ring-cyan-500 focus-visible:ring-offset-slate-50",
         )}
       >
-        {isPlaying ? (
-          <Pause className="h-4 w-4 fill-current" />
-        ) : (
-          <Play className="h-4 w-4 fill-current" />
-        )}
+        <span
+          className={joinClasses(
+            "flex h-8 w-8 items-center justify-center rounded-full transition",
+            isMine
+              ? "bg-cyan-500 text-white group-hover:bg-cyan-400"
+              : "bg-cyan-100 text-cyan-700 group-hover:bg-cyan-200",
+          )}
+        >
+          {isPlaying ? (
+            <Pause className="h-4 w-4 fill-current" />
+          ) : (
+            <Play className="ml-0.5 h-4 w-4 fill-current" />
+          )}
+        </span>
       </button>
 
-      <input
-        type="range"
-        min="0"
-        max={maximum}
-        step="0.1"
-        value={Math.min(currentTime, maximum)}
-        onChange={(event) => seek(Number(event.target.value))}
-        aria-label="Voice note playback position"
-        className={joinClasses(
-          "h-2 min-w-0 flex-1 cursor-pointer accent-cyan-600",
-          isMine && "accent-white",
-        )}
-      />
-
-      <span
-        className={joinClasses(
-          "w-9 shrink-0 text-right text-xs tabular-nums",
-          isMine ? "text-cyan-100" : "text-slate-500",
-        )}
+      <div
+        className="relative h-10 min-w-0 max-w-full"
+        style={{ width: `${waveformWidth}px` }}
       >
-        {formatAudioDuration(duration)}
-      </span>
+        <div
+          ref={waveformRef}
+          className="absolute inset-x-0 top-1/2 flex h-8 -translate-y-1/2 items-center rounded focus-within:outline-none focus-within:ring-2 focus-within:ring-cyan-500/70"
+        >
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-y-0 flex items-center"
+            style={{
+              left: WAVEFORM_TRACK_INSET,
+              right: WAVEFORM_TRACK_INSET,
+            }}
+          >
+            {bars.length ? (
+              <div className="flex h-full w-full items-center justify-between">
+                {bars.map((sample, index) => (
+                  <span
+                    key={index}
+                    className={joinClasses(
+                      "shrink-0 rounded-full transition-colors duration-100",
+                      (index + 0.5) / bars.length <= progress
+                        ? isMine
+                          ? "bg-cyan-100"
+                          : "bg-cyan-600"
+                        : isMine
+                          ? "bg-cyan-900/45"
+                          : "bg-slate-300",
+                    )}
+                    style={{
+                      width: WAVEFORM_BAR_WIDTH,
+                      height: `${Math.max(3, 3 + Math.min(1, sample) * 24)}px`,
+                    }}
+                  />
+                ))}
+              </div>
+            ) : (
+              // Fallback when the waveform could not be generated.
+              <div
+                className={joinClasses(
+                  "h-1 w-full rounded-full",
+                  isMine ? "bg-cyan-900/45" : "bg-slate-300",
+                )}
+              >
+                <div
+                  className={joinClasses(
+                    "h-full rounded-full",
+                    isMine ? "bg-cyan-100" : "bg-cyan-600",
+                  )}
+                  style={{ width: `${progress * 100}%` }}
+                />
+              </div>
+            )}
+
+            <span
+              className={joinClasses(
+                "absolute top-1/2 z-[1] h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full shadow-sm",
+                isMine ? "bg-cyan-100" : "bg-cyan-500",
+              )}
+              style={{ left: `${progress * 100}%` }}
+            />
+          </div>
+
+          <input
+            type="range"
+            min="0"
+            max={maximum}
+            step="0.05"
+            value={Math.min(currentTime, maximum)}
+            onChange={(event) => seek(Number(event.target.value))}
+            aria-label="Voice note playback position"
+            aria-valuetext={`${formatAudioDuration(currentTime)} of ${formatAudioDuration(duration)}`}
+            className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
+          />
+        </div>
+
+        <span
+          className={joinClasses(
+            "absolute left-0 top-full z-10 mt-0.5 block text-[11px] leading-3 tabular-nums",
+            isMine ? "text-cyan-100" : "text-slate-500",
+          )}
+        >
+          {timeLabel}
+        </span>
+      </div>
     </div>
   );
 }
@@ -210,6 +452,8 @@ export default function MessageAttachmentContent({
   messageType,
   isMine = false,
   compact = false,
+  senderName,
+  senderAvatarUrl,
 }: MessageAttachmentContentProps) {
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
 
@@ -262,43 +506,52 @@ export default function MessageAttachmentContent({
     return (
       <div
         className={joinClasses(
-          "flex min-w-0 overflow-hidden rounded-xl border p-3",
+          "flex w-fit min-w-0 max-w-full items-center gap-3 overflow-hidden rounded-xl border px-3 py-4",
           isMine
             ? "border-cyan-400/70 bg-cyan-700/50"
             : "border-slate-200 bg-slate-50",
-          compact ? "max-w-full" : "w-full max-w-sm",
+          compact ? "max-w-full" : "max-w-sm",
         )}
       >
-        <span
-          className={joinClasses(
-            "flex h-11 w-11 shrink-0 items-center justify-center rounded-full",
-            isMine ? "bg-cyan-500 text-white" : "bg-cyan-100 text-cyan-700",
-          )}
-        >
-          <Volume2 className="h-5 w-5" />
-        </span>
+        {!compact && senderName ? (
+          <span className="relative shrink-0">
+            <UserAvatar
+              name={senderName}
+              avatarUrl={senderAvatarUrl}
+              className="h-11 w-11 border-2 border-white/80"
+            />
 
-        <div className="min-w-0 flex-1">
-          <span className="block truncate text-sm font-semibold">
-            Voice note
+            <span
+              aria-hidden="true"
+              className="absolute -bottom-0.5 -right-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-cyan-600 text-white ring-2 ring-white"
+            >
+              <Mic className="h-3 w-3" />
+            </span>
           </span>
+        ) : (
+          <span
+            className={joinClasses(
+              "flex h-11 w-11 shrink-0 items-center justify-center rounded-full",
+              isMine ? "bg-cyan-500 text-white" : "bg-cyan-100 text-cyan-700",
+            )}
+          >
+            <Volume2 className="h-5 w-5" />
+          </span>
+        )}
 
+        <div className="min-w-0">
           {!compact && (
             <VoiceNotePlayer
               src={attachment.url}
               initialDuration={attachment.duration}
               isMine={isMine}
+              waveform={attachment.waveform}
             />
           )}
 
           {compact && (
-            <span
-              className={joinClasses(
-                "mt-1 block text-xs",
-                isMine ? "text-cyan-100" : "text-slate-500",
-              )}
-            >
-              {formatAudioDuration(attachment.duration)}
+            <span className="block truncate text-sm font-semibold">
+              Voice note · {formatAudioDuration(attachment.duration)}
             </span>
           )}
         </div>

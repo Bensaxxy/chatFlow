@@ -10,6 +10,7 @@ import {
 } from "../config/cloudinary";
 import { Conversation } from "../models/conversation.model";
 import { Message } from "../models/message.model";
+import { ConversationPreference } from "../models/conversation-preference.model";
 import { User } from "../models/user.model";
 import { getSocketServer } from "../socket/socket.server";
 import { AppError } from "../utils/app-error";
@@ -174,6 +175,7 @@ interface StoredMessageAttachment {
   width: number | null;
   height: number | null;
   duration: number | null;
+  waveform?: number[];
 }
 
 interface StoredCloudinaryAttachment {
@@ -544,8 +546,19 @@ const createRealtimeMessage = async ({
     });
   }
 
+  const mutedPreferences = await ConversationPreference.find({
+    user: { $in: recipientIds },
+    conversation: conversationId,
+    $or: [
+      { isMuted: true, mutedUntil: null },
+      { mutedUntil: { $gt: new Date() } },
+    ],
+  }).select("user").lean();
+  const mutedUserIds = new Set(mutedPreferences.map((preference) => preference.user.toString()));
+  const notificationRecipientIds = recipientIds.filter((recipientId) => !mutedUserIds.has(recipientId));
+
   void sendMessagePushNotifications({
-    recipientIds,
+    recipientIds: notificationRecipientIds,
     conversationId,
     messageId: message._id.toString(),
     senderName: getMessageSenderName(realtimeMessage),
@@ -556,7 +569,7 @@ const createRealtimeMessage = async ({
   });
 
   void sendMessageEmailNotifications({
-    recipientIds: offlineRecipientIds,
+    recipientIds: offlineRecipientIds.filter((recipientId) => !mutedUserIds.has(recipientId)),
     conversationId,
     senderName: getMessageSenderName(realtimeMessage),
   }).catch((error: unknown) => {
@@ -681,6 +694,9 @@ export const sendMessageAttachment = async (
       (isAudio || isVideo) && typeof uploadResult.duration === "number"
         ? uploadResult.duration
         : null,
+    ...(isAudio && input.waveform?.length
+      ? { waveform: input.waveform }
+      : {}),
   };
 
   try {
@@ -794,6 +810,9 @@ export const forwardMessage = async (
           width: sourceMessage.attachment.width ?? null,
           height: sourceMessage.attachment.height ?? null,
           duration: sourceMessage.attachment.duration ?? null,
+          ...(sourceMessage.attachment.waveform?.length
+            ? { waveform: sourceMessage.attachment.waveform }
+            : {}),
         }
       : null;
 

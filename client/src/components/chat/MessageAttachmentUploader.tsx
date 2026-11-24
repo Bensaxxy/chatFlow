@@ -19,6 +19,7 @@ interface MessageAttachmentUploaderProps {
     content: string,
     replyToMessageId: string | null,
   ) => void;
+  onRegisterFileHandler?: (handler: (file: File) => void) => void;
 }
 
 const MAX_FILE_SIZE = 15 * 1024 * 1024;
@@ -148,6 +149,7 @@ export default function MessageAttachmentUploader({
   replyToMessageId,
   disabled = false,
   onAttachmentQueued,
+  onRegisterFileHandler,
 }: MessageAttachmentUploaderProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -210,6 +212,24 @@ export default function MessageAttachmentUploader({
       setPreviewUrl(null);
     }
   };
+
+  useEffect(() => {
+    onRegisterFileHandler?.((file) => {
+      if (disabled) return;
+      if (file.size > MAX_FILE_SIZE) {
+        toast.error("The attachment cannot exceed 15 MB");
+        return;
+      }
+      if (!isSupportedAttachment(file)) {
+        toast.error("Choose an image, video, audio file, PDF, document, spreadsheet, presentation, text file, or ZIP file");
+        return;
+      }
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      setSelectedFile(file);
+      setCaption("");
+      setPreviewUrl(isImageAttachment(file) || isVideoAttachment(file) ? URL.createObjectURL(file) : null);
+    });
+  }, [disabled, onRegisterFileHandler, previewUrl]);
 
   const handleUpload = (): void => {
     if (!selectedFile) return;

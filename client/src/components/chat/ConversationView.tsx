@@ -96,6 +96,7 @@ const getAttachmentMessageType = (
 const createLocalAttachment = (
   file: File,
   url: string,
+  waveform?: number[],
 ): MessageAttachment => ({
   url,
   resourceType: file.type.startsWith("image/")
@@ -109,6 +110,7 @@ const createLocalAttachment = (
   width: null,
   height: null,
   duration: null,
+  ...(waveform?.length ? { waveform } : {}),
 });
 
 const formatMessageDateLabel = (value: string): string => {
@@ -802,6 +804,7 @@ export default function ConversationView({
       isPinned: boolean;
       isMarkedUnread: boolean;
       clearedAt: string | null;
+      mutedUntil: string | null;
     }): void => {
       if (payload.conversationId !== conversationId || !payload.clearedAt) {
         return;
@@ -1347,6 +1350,7 @@ export default function ConversationView({
     file: File,
     content: string,
     replyToMessageId: string | null,
+    waveform?: number[],
   ): void => {
     const clientMessageId = createClientMessageId();
     const previewUrl = URL.createObjectURL(file);
@@ -1354,7 +1358,7 @@ export default function ConversationView({
       clientMessageId,
       content,
       replyToMessageId,
-      attachment: createLocalAttachment(file, previewUrl),
+      attachment: createLocalAttachment(file, previewUrl, waveform),
       type: getAttachmentMessageType(file),
       uploadProgress: 0,
     });
@@ -1384,6 +1388,7 @@ export default function ConversationView({
               ),
             );
           },
+          waveform,
         ),
       releasePreviewUrl: () => URL.revokeObjectURL(previewUrl),
     });
@@ -1394,8 +1399,9 @@ export default function ConversationView({
   const handleVoiceNoteQueued = (
     file: File,
     replyToMessageId: string | null,
+    waveform: number[],
   ): void => {
-    handleAttachmentQueued(file, "", replyToMessageId);
+    handleAttachmentQueued(file, "", replyToMessageId, waveform);
   };
 
   const handleSendMessage = async (

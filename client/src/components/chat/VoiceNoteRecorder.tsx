@@ -7,7 +7,11 @@ import { toast } from "react-toastify";
 interface VoiceNoteRecorderProps {
   replyToMessageId?: string | null;
   disabled?: boolean;
-  onVoiceNoteQueued: (file: File, replyToMessageId: string | null) => void;
+  onVoiceNoteQueued: (
+    file: File,
+    replyToMessageId: string | null,
+    waveform: number[],
+  ) => void;
   onStatusChange?: (status: VoiceNoteStatus) => void;
 }
 
@@ -15,6 +19,78 @@ export type VoiceNoteStatus = "idle" | "recording";
 type StopAction = "cancel" | "send" | null;
 
 const MAX_VOICE_NOTE_SIZE = 15 * 1024 * 1024;
+// The server accepts up to 96 samples per voice note. We always store the full
+// 96 so the player can resample to whatever width it renders at.
+const WAVEFORM_SAMPLE_COUNT = 96;
+
+type WebkitAudioWindow = Window & {
+  webkitAudioContext?: typeof AudioContext;
+};
+
+const createAudioWaveform = async (file: File): Promise<number[]> => {
+  const AudioContextConstructor =
+    window.AudioContext ?? (window as WebkitAudioWindow).webkitAudioContext;
+
+  if (!AudioContextConstructor) {
+    return [];
+  }
+
+  const context = new AudioContextConstructor();
+
+  try {
+    const audioBuffer = await context.decodeAudioData(await file.arrayBuffer());
+    const totalFrames = audioBuffer.length;
+
+    if (totalFrames === 0) {
+      return [];
+    }
+
+    const channels = Array.from(
+      { length: audioBuffer.numberOfChannels },
+      (_, channel) => audioBuffer.getChannelData(channel),
+    );
+    const bucketCount = Math.min(WAVEFORM_SAMPLE_COUNT, totalFrames);
+
+    // RMS (loudness) per time slice, which is what the ear perceives. Raw
+    // peaks make the waveform spiky and let one click flatten everything.
+    const levels = Array.from({ length: bucketCount }, (_, index) => {
+      const start = Math.floor((index * totalFrames) / bucketCount);
+      const end = Math.max(
+        start + 1,
+        Math.floor(((index + 1) * totalFrames) / bucketCount),
+      );
+      let sumOfSquares = 0;
+      let counted = 0;
+
+      for (const samples of channels) {
+        const limit = Math.min(end, samples.length);
+
+        for (let frame = start; frame < limit; frame += 1) {
+          sumOfSquares += samples[frame] * samples[frame];
+          counted += 1;
+        }
+      }
+
+      return counted > 0 ? Math.sqrt(sumOfSquares / counted) : 0;
+    });
+
+    // Scale against the 95th percentile instead of the single loudest slice,
+    // so quiet and loud recordings both use the full height. The small floor
+    // stops a silent recording from having its noise blown up.
+    const sorted = [...levels].sort((a, b) => a - b);
+    const reference = Math.max(
+      sorted[Math.floor((sorted.length - 1) * 0.95)],
+      0.01,
+    );
+
+    return levels.map(
+      (level) =>
+        Math.round(Math.min(1, Math.pow(level / reference, 0.7)) * 100) / 100,
+    );
+  } finally {
+    await context.close().catch(() => undefined);
+  }
+};
 
 const preferredAudioMimeTypes = [
   "audio/webm;codecs=opus",
@@ -34,7 +110,10 @@ const getRecorderOptions = (): MediaRecorderOptions | undefined => {
     MediaRecorder.isTypeSupported(candidate),
   );
 
-  return mimeType ? { mimeType } : undefined;
+  return {
+    audioBitsPerSecond: 64_000,
+    ...(mimeType ? { mimeType } : {}),
+  };
 };
 
 const extensionForMimeType = (mimeType: string): string => {
@@ -105,11 +184,15 @@ export default function VoiceNoteRecorder({
   };
 
   const queueRecording = (file: File): void => {
-    onVoiceNoteQueued(file, replyToMessageId ?? null);
+    void createAudioWaveform(file)
+      .catch(() => [])
+      .then((waveform) => {
+        onVoiceNoteQueued(file, replyToMessageId ?? null, waveform);
 
-    if (isMountedRef.current) {
-      resetRecording();
-    }
+        if (isMountedRef.current) {
+          resetRecording();
+        }
+      });
   };
 
   const handleRecordingStopped = (): void => {
@@ -175,7 +258,12 @@ export default function VoiceNoteRecorder({
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        audio: true,
+        audio: {
+          channelCount: { ideal: 1 },
+          echoCancellation: { ideal: true },
+          noiseSuppression: { ideal: true },
+          autoGainControl: { ideal: true },
+        },
       });
 
       if (!isMountedRef.current) {

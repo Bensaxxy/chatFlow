@@ -7,6 +7,9 @@ import {
   getUserConversations,
   markConversationAsUnread,
   updateConversationPinnedState,
+  muteUserConversation,
+  deleteUserConversation,
+  unmuteUserConversation,
 } from "../services/conversation.service";
 import type { ConversationPreferences } from "../services/conversation-preference.service";
 import { getSocketServer } from "../socket/socket.server";
@@ -15,6 +18,7 @@ import type {
   CreateDirectConversationInput,
   UpdateConversationPinInput,
 } from "../validations/conversation.validation";
+import { muteConversationSchema } from "../validations/conversation.validation";
 import { conversationParamsSchema } from "../validations/message.validation";
 
 const getAuthenticatedUserId = (userId?: string): string => {
@@ -35,6 +39,8 @@ const emitPreferencesUpdate = (
     isPinned: preferences.isPinned,
     isMarkedUnread: preferences.isMarkedUnread,
     clearedAt: preferences.clearedAt?.toISOString() ?? null,
+    mutedUntil: preferences.mutedUntil?.toISOString() ?? null,
+    isMuted: preferences.isMuted,
   });
 };
 
@@ -160,3 +166,27 @@ export const clearConversation: RequestHandler = asyncHandler(
     });
   },
 );
+
+export const muteConversation: RequestHandler = asyncHandler(async (request, response) => {
+  const userId = getAuthenticatedUserId(request.auth?.userId);
+  const { conversationId } = conversationParamsSchema.parse(request.params);
+  const { durationHours } = muteConversationSchema.parse(request.body);
+  const preferences = await muteUserConversation(conversationId, userId, durationHours);
+  emitPreferencesUpdate(userId, conversationId, preferences);
+  response.status(200).json({ success: true, message: "Conversation muted", data: { preferences } });
+});
+
+export const unmuteConversation: RequestHandler = asyncHandler(async (request, response) => {
+  const userId = getAuthenticatedUserId(request.auth?.userId);
+  const { conversationId } = conversationParamsSchema.parse(request.params);
+  const preferences = await unmuteUserConversation(conversationId, userId);
+  emitPreferencesUpdate(userId, conversationId, preferences);
+  response.status(200).json({ success: true, message: "Conversation unmuted", data: { preferences } });
+});
+
+export const deleteConversation: RequestHandler = asyncHandler(async (request, response) => {
+  const userId = getAuthenticatedUserId(request.auth?.userId);
+  const { conversationId } = conversationParamsSchema.parse(request.params);
+  await deleteUserConversation(conversationId, userId);
+  response.status(200).json({ success: true, message: "Conversation deleted", data: {} });
+});

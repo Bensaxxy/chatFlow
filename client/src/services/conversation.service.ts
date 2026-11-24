@@ -102,3 +102,17 @@ export const clearConversation = async (
 
   return data.data.preferences;
 };
+
+export const muteConversation = async (conversationId: string, durationHours: 8 | 168 | "always"): Promise<ConversationPreferences> => {
+  const { data } = await apiClient.patch<ConversationPreferencesResponse>(`/conversations/${conversationId}/mute`, { durationHours });
+  return data.data.preferences;
+};
+
+export const unmuteConversation = async (conversationId: string): Promise<ConversationPreferences> => {
+  const { data } = await apiClient.patch<ConversationPreferencesResponse>(`/conversations/${conversationId}/unmute`);
+  return data.data.preferences;
+};
+
+export const deleteConversation = async (conversationId: string): Promise<void> => {
+  await apiClient.delete(`/conversations/${conversationId}`);
+};

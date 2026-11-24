@@ -51,6 +51,15 @@ const messageAttachmentSchema = new Schema(
       min: 0,
       default: null,
     },
+
+    waveform: {
+      type: [Number],
+      default: undefined,
+      validate: {
+        validator: (samples: number[]) => samples.length <= 96,
+        message: "Waveform cannot contain more than 96 samples",
+      },
+    },
   },
   {
     _id: false,

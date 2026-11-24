@@ -45,6 +45,8 @@ export interface Conversation {
   isPinned?: boolean;
   isMarkedUnread?: boolean;
   clearedAt?: string | null;
+  mutedUntil?: string | null;
+  isMuted?: boolean;
   directMessagingAccess?: {
     isBlockedByCurrentUser: boolean;
     canMessage: boolean;
@@ -57,6 +59,8 @@ export interface ConversationPreferences {
   isPinned: boolean;
   isMarkedUnread: boolean;
   clearedAt: string | null;
+  mutedUntil: string | null;
+  isMuted: boolean;
 }
 
 export interface CreateDirectConversationData {

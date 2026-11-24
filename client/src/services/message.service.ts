@@ -139,11 +139,16 @@ export const sendConversationAttachment = async (
   replyToMessageId?: string | null,
   clientMessageId?: string,
   onUploadProgress?: AttachmentUploadProgressHandler,
+  waveform?: number[],
 ): Promise<ChatMessage> => {
   const formData = new FormData();
 
   formData.append("attachment", file);
   formData.append("content", content);
+
+  if (waveform?.length) {
+    formData.append("waveform", JSON.stringify(waveform));
+  }
 
   if (replyToMessageId) {
     formData.append("replyToMessageId", replyToMessageId);

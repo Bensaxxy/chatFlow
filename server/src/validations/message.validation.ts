@@ -62,6 +62,19 @@ export const sendAttachmentMessageSchema = z.object({
   ).optional(),
 
   clientMessageId: optionalClientMessageId,
+
+  waveform: z.preprocess(
+    (value) => {
+      if (typeof value !== "string" || value.length === 0) return undefined;
+
+      try {
+        return JSON.parse(value);
+      } catch {
+        return value;
+      }
+    },
+    z.array(z.number().finite().min(0).max(1)).max(96).optional(),
+  ),
 });
 
 export const forwardMessageSchema = z.object({

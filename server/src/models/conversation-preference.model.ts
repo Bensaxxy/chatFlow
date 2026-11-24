@@ -26,6 +26,9 @@ const conversationPreferenceSchema = new Schema(
       type: Date,
       default: null,
     },
+    mutedUntil: { type: Date, default: null },
+    isMuted: { type: Boolean, default: false },
+    deletedAt: { type: Date, default: null },
   },
   {
     timestamps: true,

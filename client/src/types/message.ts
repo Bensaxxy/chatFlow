@@ -43,6 +43,7 @@ export interface MessageAttachment {
   width: number | null;
   height: number | null;
   duration: number | null;
+  waveform?: number[];
 }
 
 export interface MessageLinkPreview {
