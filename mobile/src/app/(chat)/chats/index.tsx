@@ -14,6 +14,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import UserAvatar from "@/components/common/user-avatar";
+import AppTabBar from "@/components/common/app-tab-bar";
 import { useAuth } from "@/contexts/auth-context";
 import { useSocket } from "@/contexts/socket-context";
 import { getApiErrorMessage } from "@/lib/api/errors";
@@ -139,10 +140,10 @@ export default function ChatsScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={["top", "left", "right"]}>
       <View style={styles.header}>
         <Pressable
-          onPress={() => router.push("/profile")}
+          onPress={() => router.replace("/profile")}
           style={styles.profileButton}
           accessibilityRole="button"
           accessibilityLabel="Open profile"
@@ -246,6 +247,8 @@ export default function ChatsScreen() {
           ) : undefined
         }
       />
+
+      <AppTabBar activeTab="chats" />
     </SafeAreaView>
   );
 }

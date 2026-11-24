@@ -1,12 +1,13 @@
-import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, StyleSheet, Text } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function FullScreenLoader() {
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
       <ActivityIndicator size="large" color="#67e8f9" />
 
       <Text style={styles.text}>Loading ChatFlow...</Text>
-    </View>
+    </SafeAreaView>
   );
 }
 

@@ -3,7 +3,9 @@ import { io, type Socket } from "socket.io-client";
 import { apiClient } from "@/lib/api/client";
 import { API_URL } from "@/lib/api/config";
 import type { ApiSuccessResponse } from "@/types/api";
+import type { FriendshipChangedPayload } from "@/types/friend";
 import type { ChatMessage } from "@/types/message";
+import type { StatusDeletedPayload, StatusNewPayload } from "@/types/status";
 
 interface SocketResult {
   success: boolean;
@@ -35,6 +37,9 @@ interface ServerToClientEvents {
     userId: string;
     isTyping: boolean;
   }) => void;
+  "status:new": (payload: StatusNewPayload) => void;
+  "status:deleted": (payload: StatusDeletedPayload) => void;
+  "friendship:changed": (payload: FriendshipChangedPayload) => void;
 }
 
 interface ClientToServerEvents {
