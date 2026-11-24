@@ -127,6 +127,28 @@ export default function StatusViewer({
 
   const [isDeleting, setIsDeleting] = useState(false);
 
+  const uniqueViewers = useMemo(() => {
+    const viewersByUserId = new Map<string, StatusViewerRecord>();
+
+    for (const viewer of viewers) {
+      const existingViewer = viewersByUserId.get(viewer.user._id);
+
+      if (
+        !existingViewer ||
+        new Date(viewer.viewedAt).getTime() >
+          new Date(existingViewer.viewedAt).getTime()
+      ) {
+        viewersByUserId.set(viewer.user._id, viewer);
+      }
+    }
+
+    return [...viewersByUserId.values()].sort(
+      (firstViewer, secondViewer) =>
+        new Date(secondViewer.viewedAt).getTime() -
+        new Date(firstViewer.viewedAt).getTime(),
+    );
+  }, [viewers]);
+
   useEffect(() => {
     setIsMounted(true);
   }, []);
@@ -581,14 +603,14 @@ export default function StatusViewer({
           type="button"
           onClick={handlePrevious}
           aria-label="Previous status"
-          className="absolute bottom-28 left-0 top-24 z-10 w-1/3 cursor-default"
+          className="absolute bottom-28 left-0 top-24 z-[25] w-1/3 touch-manipulation cursor-default"
         />
 
         <button
           type="button"
           onClick={handleNext}
           aria-label="Next status"
-          className="absolute bottom-28 right-0 top-24 z-10 w-1/3 cursor-default"
+          className="absolute bottom-28 right-0 top-24 z-[25] w-1/3 touch-manipulation cursor-default"
         />
 
         <div className="relative z-20 flex min-h-0 flex-1 items-center justify-center px-6 py-8">
@@ -615,15 +637,34 @@ export default function StatusViewer({
 
         <footer className="relative z-30 shrink-0 px-4 pb-5">
           {isOwnStatus ? (
-            <button
-              type="button"
-              onClick={() => void handleOpenViewers()}
-              className="mx-auto flex items-center gap-2 rounded-full bg-black/35 px-4 py-2 text-sm font-semibold text-white backdrop-blur transition hover:bg-black/50"
-            >
-              <Eye className="h-4 w-4" />
-              {activeStatus.viewCount}{" "}
-              {activeStatus.viewCount === 1 ? "view" : "views"}
-            </button>
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <button
+                type="button"
+                onClick={() => void handleOpenViewers()}
+                className="flex items-center gap-2 rounded-full bg-black/35 px-4 py-2 text-sm font-semibold text-white backdrop-blur transition hover:bg-black/50"
+              >
+                <Eye className="h-4 w-4" />
+                {activeStatus.viewCount}{" "}
+                {activeStatus.viewCount === 1 ? "view" : "views"}
+              </button>
+
+              {activeStatus.reactionSummary.length > 0 && (
+                <div
+                  aria-label={`${activeStatus.reactionCount} ${activeStatus.reactionCount === 1 ? "reaction" : "reactions"}`}
+                  className="flex max-w-full flex-wrap items-center justify-center gap-1.5 rounded-full bg-black/35 px-3 py-2 text-sm font-semibold text-white backdrop-blur"
+                >
+                  {activeStatus.reactionSummary.map(({ emoji, count }) => (
+                    <span
+                      key={emoji}
+                      className="inline-flex items-center gap-1"
+                    >
+                      <span aria-hidden="true">{emoji}</span>
+                      <span className="text-xs">{count}</span>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
           ) : (
             <>
               <div className="mb-3 flex justify-center gap-2">
@@ -707,7 +748,7 @@ export default function StatusViewer({
                   <div className="px-6 py-12 text-center text-sm text-red-600">
                     {viewerError}
                   </div>
-                ) : viewers.length === 0 ? (
+                ) : uniqueViewers.length === 0 ? (
                   <div className="px-6 py-12 text-center">
                     <Eye className="mx-auto h-10 w-10 text-slate-300" />
 
@@ -717,9 +758,9 @@ export default function StatusViewer({
                   </div>
                 ) : (
                   <div className="divide-y divide-slate-100">
-                    {viewers.map((viewer) => (
+                    {uniqueViewers.map((viewer) => (
                       <div
-                        key={viewer.user._id}
+                        key={`${viewer.user._id}-${viewer.viewedAt}`}
                         className="flex items-center gap-3 px-5 py-3"
                       >
                         <UserAvatar
@@ -739,7 +780,17 @@ export default function StatusViewer({
                           </p>
                         </div>
 
-                        <Eye className="h-4 w-4 text-cyan-600" />
+                        {viewer.reaction ? (
+                          <span
+                            title="Reacted to this status"
+                            aria-label={`Reacted ${viewer.reaction}`}
+                            className="flex h-8 min-w-8 items-center justify-center rounded-full bg-cyan-50 px-1 text-base"
+                          >
+                            {viewer.reaction}
+                          </span>
+                        ) : (
+                          <Eye className="h-4 w-4 text-cyan-600" />
+                        )}
                       </div>
                     ))}
                   </div>

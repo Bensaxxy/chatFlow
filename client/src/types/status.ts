@@ -29,6 +29,11 @@ export const STATUS_REACTION_EMOJIS = [
 
 export type StatusReactionEmoji = (typeof STATUS_REACTION_EMOJIS)[number];
 
+export interface StatusReactionSummary {
+  emoji: StatusReactionEmoji;
+  count: number;
+}
+
 export interface StatusAuthor {
   _id: string;
   name: string;
@@ -60,6 +65,7 @@ export interface ChatStatus {
   updatedAt: string;
   viewCount: number;
   reactionCount: number;
+  reactionSummary: StatusReactionSummary[];
   viewerHasViewed: boolean;
   viewerReaction: StatusReactionEmoji | null;
 }
@@ -67,6 +73,7 @@ export interface ChatStatus {
 export interface StatusViewer {
   user: StatusAuthor;
   viewedAt: string;
+  reaction: StatusReactionEmoji | null;
 }
 
 export interface CreateTextStatusInput {

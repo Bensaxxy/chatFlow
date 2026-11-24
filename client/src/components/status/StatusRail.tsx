@@ -68,9 +68,11 @@ export default function StatusRail({
       aria-label="Status shortcuts"
       className="relative hidden h-dvh w-16 shrink-0 flex-col items-center border-r border-[var(--chat-border)] bg-[var(--chat-sidebar)] px-1.5 py-3 md:flex"
     >
-      <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[var(--chat-accent-soft)] text-[11px] font-black tracking-tight text-[var(--chat-accent)]">
-        CF
-      </div>
+      <img
+        src="/icon.svg"
+        alt="ChatFlow"
+        className="h-8 w-8 rounded-xl shadow-sm"
+      />
 
       <div className="mt-5 flex w-full flex-col items-center">
         <button

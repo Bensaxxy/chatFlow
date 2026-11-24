@@ -46,6 +46,22 @@ const asRecord = (value: unknown): Record<string, unknown> | null =>
     ? (value as Record<string, unknown>)
     : null;
 
+const asPlainRecord = (value: unknown): Record<string, unknown> | null => {
+  const record = asRecord(value);
+
+  if (!record) {
+    return null;
+  }
+
+  const toObject = record.toObject;
+
+  if (typeof toObject !== "function") {
+    return record;
+  }
+
+  return asRecord(toObject.call(value)) ?? record;
+};
+
 const normalizeId = (value: unknown): string => {
   if (typeof value === "string") {
     return value;
@@ -263,6 +279,17 @@ const serializeStatusForViewer = (
 
   const viewerReactionRecord = asRecord(viewerReaction);
   const authorRecord = asRecord(rawStatus.author);
+  const reactionCounts = new Map<string, number>();
+
+  for (const reaction of reactions) {
+    const emoji = asRecord(reaction)?.emoji;
+
+    if (typeof emoji !== "string") {
+      continue;
+    }
+
+    reactionCounts.set(emoji, (reactionCounts.get(emoji) ?? 0) + 1);
+  }
 
   const serializedStatus: Record<string, unknown> = {
     ...rawStatus,
@@ -276,6 +303,10 @@ const serializeStatusForViewer = (
 
     viewCount: viewers.length,
     reactionCount: reactions.length,
+    reactionSummary: [...reactionCounts].map(([emoji, count]) => ({
+      emoji,
+      count,
+    })),
     viewerHasViewed,
     viewerReaction:
       typeof viewerReactionRecord?.emoji === "string"
@@ -683,9 +714,16 @@ export const getStatusViewers = async (statusId: string, ownerId: string) => {
     throw new AppError("Status was not found", 404, "STATUS_NOT_FOUND");
   }
 
+  const reactionByUserId = new Map(
+    status.reactions.map((reaction) => [
+      getEntityId(reaction.user),
+      reaction.emoji,
+    ]),
+  );
+
   return status.viewers
     .map((viewer) => {
-      const viewerRecord = asRecord(viewer.user);
+      const viewerRecord = asPlainRecord(viewer.user);
 
       if (!viewerRecord) {
         return null;
@@ -697,6 +735,7 @@ export const getStatusViewers = async (statusId: string, ownerId: string) => {
           ownerId,
         ),
         viewedAt: viewer.viewedAt.toISOString(),
+        reaction: reactionByUserId.get(getEntityId(viewer.user)) ?? null,
       };
     })
     .filter((viewer): viewer is NonNullable<typeof viewer> => viewer !== null)
