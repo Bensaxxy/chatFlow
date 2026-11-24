@@ -15,7 +15,15 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type SetStateAction,
+} from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "react-toastify";
 
 import UserAvatar from "@/components/chat/UserAvatar";
@@ -26,10 +34,11 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useSocket } from "@/contexts/SocketContext";
 import { useStatuses } from "@/contexts/StatusContext";
 import { getApiErrorMessage } from "@/lib/api/errors";
+import { queryKeys } from "@/lib/query/query-keys";
 import {
-  invalidateConversationCache,
-  updateCachedConversationMessage,
-} from "@/lib/chat/conversation-cache";
+  updateConversationMessageCache,
+  type ConversationCacheEntry,
+} from "@/lib/query/conversation-cache";
 import {
   clearConversation,
   getConversationById,
@@ -116,23 +125,44 @@ export default function ConversationList({
   const pathname = usePathname();
   const router = useRouter();
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const { statusGroups } = useStatuses();
 
   const { socket, isConnected, onlineUserIds, updatedProfiles } = useSocket();
 
   const currentUserId = user?._id;
 
-  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const conversationsQueryKey = useMemo(
+    () => queryKeys.conversations(currentUserId ?? ""),
+    [currentUserId],
+  );
+  const conversationsQuery = useQuery({
+    queryKey: conversationsQueryKey,
+    queryFn: async ({ signal }) =>
+      sortConversations(await getConversations(signal)),
+    enabled: Boolean(currentUserId),
+    staleTime: 20_000,
+  });
+  const conversations = useMemo(
+    () => conversationsQuery.data ?? [],
+    [conversationsQuery.data],
+  );
+  const setConversations = useCallback(
+    (updater: SetStateAction<Conversation[]>) =>
+      queryClient.setQueryData<Conversation[]>(
+        queryKeys.conversations(currentUserId ?? ""),
+        (current) =>
+          typeof updater === "function"
+            ? updater(current ?? [])
+            : updater,
+      ),
+    [queryClient, currentUserId],
+  );
 
   const [typingConversationIds, setTypingConversationIds] = useState<
     Set<string>
   >(() => new Set());
 
-  const [isLoading, setIsLoading] = useState(true);
-
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-
-  const [reloadKey, setReloadKey] = useState(0);
   const [openMenuConversationId, setOpenMenuConversationId] = useState<
     string | null
   >(null);
@@ -148,6 +178,19 @@ export default function ConversationList({
   >(() => new Map());
 
   const typingTimeoutsRef = useRef<Map<string, number>>(new Map());
+  const wasConnectedRef = useRef(isConnected);
+
+  useEffect(() => {
+    if (isConnected && !wasConnectedRef.current && currentUserId) {
+      void queryClient.invalidateQueries({
+        queryKey: ["conversations", currentUserId],
+      });
+      void queryClient.invalidateQueries({
+        queryKey: ["conversation-messages", currentUserId],
+      });
+    }
+    wasConnectedRef.current = isConnected;
+  }, [currentUserId, isConnected, queryClient]);
 
   useEffect(() => {
     if (!user) {
@@ -171,35 +214,6 @@ export default function ConversationList({
       });
     });
   }, [user]);
-
-  useEffect(() => {
-    const controller = new AbortController();
-
-    const loadConversations = async (): Promise<void> => {
-      try {
-        setIsLoading(true);
-        setErrorMessage(null);
-
-        const results = await getConversations(controller.signal);
-
-        if (!controller.signal.aborted) {
-          setConversations(sortConversations(results));
-        }
-      } catch (error) {
-        if (!controller.signal.aborted) {
-          setErrorMessage(getApiErrorMessage(error));
-        }
-      } finally {
-        if (!controller.signal.aborted) {
-          setIsLoading(false);
-        }
-      }
-    };
-
-    void loadConversations();
-
-    return () => controller.abort();
-  }, [reloadKey]);
 
   useEffect(() => {
     const now = Date.now();
@@ -257,12 +271,12 @@ export default function ConversationList({
       incrementUnread: boolean;
     }): void => {
       clearTypingConversation(conversationId);
-      updateCachedConversationMessage(
-        `${currentUserId}:${conversationId}`,
-        normalizeMessage(message),
-        {
-          isLatestMessage: true,
-        },
+      queryClient.setQueryData<ConversationCacheEntry>(
+        queryKeys.conversationMessages(currentUserId, conversationId),
+        (cached) =>
+          updateConversationMessageCache(cached, normalizeMessage(message), {
+            isLatestMessage: true,
+          }),
       );
 
       setConversations((current) => {
@@ -369,9 +383,10 @@ export default function ConversationList({
       conversationId: string;
       message: ChatMessage;
     }): void => {
-      updateCachedConversationMessage(
-        `${currentUserId}:${payload.conversationId}`,
-        normalizeMessage(payload.message),
+      queryClient.setQueryData<ConversationCacheEntry>(
+        queryKeys.conversationMessages(currentUserId, payload.conversationId),
+        (cached) =>
+          updateConversationMessageCache(cached, normalizeMessage(payload.message)),
       );
 
       setConversations((current) =>
@@ -395,7 +410,12 @@ export default function ConversationList({
     };
 
     const handleMessageDeleted = (payload: MessageDeletedPayload): void => {
-      invalidateConversationCache(`${currentUserId}:${payload.conversationId}`);
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.conversationMessages(
+          currentUserId,
+          payload.conversationId,
+        ),
+      });
 
       setConversations((current) =>
         current.map((conversation) => {
@@ -454,6 +474,34 @@ export default function ConversationList({
       mutedUntil: string | null;
       isMuted: boolean;
     }): void => {
+      queryClient.setQueryData<ConversationCacheEntry>(
+        queryKeys.conversationMessages(currentUserId, payload.conversationId),
+        (cached) => {
+          if (!cached) return cached;
+          const lastMessageWasCleared =
+            Boolean(payload.clearedAt) &&
+            (!cached.conversation.lastMessage ||
+              new Date(cached.conversation.lastMessage.createdAt).getTime() <=
+                new Date(payload.clearedAt!).getTime());
+          return {
+            ...cached,
+            conversation: {
+              ...cached.conversation,
+              isPinned: payload.isPinned,
+              isMarkedUnread: payload.isMarkedUnread,
+              clearedAt: payload.clearedAt,
+              mutedUntil: payload.mutedUntil,
+              isMuted: payload.isMuted,
+              ...(lastMessageWasCleared && { lastMessage: null }),
+            },
+            ...(lastMessageWasCleared && {
+              messages: [],
+              nextCursor: null,
+              hasMore: false,
+            }),
+          };
+        },
+      );
       setConversations((current) =>
         sortConversations(
           current.map((conversation) => {
@@ -511,7 +559,7 @@ export default function ConversationList({
 
       socket.off("conversation:preferences-updated", handlePreferencesUpdate);
     };
-  }, [socket, isConnected, pathname, currentUserId]);
+  }, [socket, isConnected, pathname, currentUserId, queryClient, setConversations]);
 
   useEffect(() => {
     if (!isConnected || !currentUserId) return;
@@ -606,6 +654,34 @@ export default function ConversationList({
     conversationId: string,
     preferences: ConversationPreferences,
   ): void => {
+    queryClient.setQueryData<ConversationCacheEntry>(
+      queryKeys.conversationMessages(currentUserId ?? "", conversationId),
+      (cached) => {
+        if (!cached) return cached;
+        const lastMessageWasCleared =
+          Boolean(preferences.clearedAt) &&
+          (!cached.conversation.lastMessage ||
+            new Date(cached.conversation.lastMessage.createdAt).getTime() <=
+              new Date(preferences.clearedAt!).getTime());
+        return {
+          ...cached,
+          conversation: {
+            ...cached.conversation,
+            isPinned: preferences.isPinned,
+            isMarkedUnread: preferences.isMarkedUnread,
+            clearedAt: preferences.clearedAt,
+            mutedUntil: preferences.mutedUntil,
+            isMuted: preferences.isMuted,
+            ...(lastMessageWasCleared && { lastMessage: null }),
+          },
+          ...(lastMessageWasCleared && {
+            messages: [],
+            nextCursor: null,
+            hasMore: false,
+          }),
+        };
+      },
+    );
     setConversations((current) =>
       sortConversations(
         current.map((conversation) => {
@@ -644,6 +720,20 @@ export default function ConversationList({
     conversationId: string,
     preferences: ConversationPreferences,
   ): void => {
+    queryClient.setQueryData<ConversationCacheEntry>(
+      queryKeys.conversationMessages(currentUserId ?? "", conversationId),
+      (cached) =>
+        cached
+          ? {
+              ...cached,
+              conversation: {
+                ...cached.conversation,
+                mutedUntil: preferences.mutedUntil,
+                isMuted: preferences.isMuted,
+              },
+            }
+          : cached,
+    );
     setConversations((current) =>
       current.map((conversation) =>
         conversation._id === conversationId
@@ -705,7 +795,13 @@ export default function ConversationList({
       applyConversationPreferences(conversationId, preferences);
 
       if (currentUserId) {
-        invalidateConversationCache(`${currentUserId}:${conversationId}`);
+        queryClient.setQueryData<ConversationCacheEntry>(
+          queryKeys.conversationMessages(currentUserId, conversationId),
+          (cached) =>
+            cached
+              ? { ...cached, messages: [], nextCursor: null, hasMore: false }
+              : cached,
+        );
       }
 
       toast.success("Chat cleared for you");
@@ -760,6 +856,13 @@ export default function ConversationList({
       setConversations((current) =>
         current.filter((item) => item._id !== conversationId),
       );
+      queryClient.removeQueries({
+        queryKey: queryKeys.conversationMessages(
+          currentUserId ?? "",
+          conversationId,
+        ),
+        exact: true,
+      });
       if (pathname === `/chats/${conversationId}`) router.push("/chats");
       toast.success("Chat deleted for you");
     } catch (error) {
@@ -793,7 +896,10 @@ export default function ConversationList({
       );
 
       if (currentUserId) {
-        invalidateConversationCache(`${currentUserId}:${conversationId}`);
+        queryClient.removeQueries({
+          queryKey: queryKeys.conversationMessages(currentUserId, conversationId),
+          exact: true,
+        });
       }
 
       toast.success(isBlocked ? "User unblocked" : "User blocked");
@@ -860,20 +966,20 @@ export default function ConversationList({
 
   if (!user) return null;
 
-  if (isLoading) {
+  if (conversationsQuery.isPending) {
     return <ChatFlowLoader compact message="Loading conversations..." />;
   }
 
-  if (errorMessage) {
+  if (conversationsQuery.isError && !conversationsQuery.data) {
     return (
       <div className="px-6 py-10 text-center">
         <AlertCircle className="mx-auto h-10 w-10 text-red-400" />
 
-        <p className="mt-3 text-sm text-red-600">{errorMessage}</p>
+        <p className="mt-3 text-sm text-red-600">{getApiErrorMessage(conversationsQuery.error)}</p>
 
         <button
           type="button"
-          onClick={() => setReloadKey((current) => current + 1)}
+          onClick={() => void conversationsQuery.refetch()}
           className="mt-4 rounded-lg bg-slate-950 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800"
         >
           Try again

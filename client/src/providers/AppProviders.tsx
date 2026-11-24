@@ -10,6 +10,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { ChatThemeProvider } from "@/contexts/ChatThemeContext";
 import { SocketProvider } from "@/contexts/SocketContext";
 import { StatusProvider } from "@/contexts/StatusContext";
+import QueryProvider from "@/providers/QueryProvider";
 
 interface AppProvidersProps {
   children: ReactNode;
@@ -17,26 +18,27 @@ interface AppProvidersProps {
 
 export default function AppProviders({ children }: AppProvidersProps) {
   return (
-    <AuthProvider>
-      <ChatThemeProvider>
-        <SocketProvider>
-          <StatusProvider>
-            <AudioCallProvider>{children}</AudioCallProvider>
-          </StatusProvider>
+    <QueryProvider>
+      <AuthProvider>
+        <ChatThemeProvider>
+          <SocketProvider>
+            <StatusProvider>
+              <AudioCallProvider>{children}</AudioCallProvider>
+            </StatusProvider>
+            <MessageNotificationFeedback />
 
-          <MessageNotificationFeedback />
-
-          <ToastContainer
-            position="top-right"
-            autoClose={4000}
-            newestOnTop
-            closeOnClick
-            pauseOnHover
-            limit={3}
-            theme="colored"
-          />
-        </SocketProvider>
-      </ChatThemeProvider>
-    </AuthProvider>
+            <ToastContainer
+              position="top-right"
+              autoClose={4000}
+              newestOnTop
+              closeOnClick
+              pauseOnHover
+              limit={3}
+              theme="colored"
+            />
+          </SocketProvider>
+        </ChatThemeProvider>
+      </AuthProvider>
+    </QueryProvider>
   );
 }

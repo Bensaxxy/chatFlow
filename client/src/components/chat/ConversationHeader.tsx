@@ -8,11 +8,11 @@ import UserAvatar from "@/components/chat/UserAvatar";
 interface ConversationHeaderProps {
   displayName: string;
   avatarUrl: string | null;
-  canViewProfile: boolean;
+  profileHref: string | null;
   isOtherUserOnline: boolean;
   statusText: string;
   isMessageSearchOpen: boolean;
-  onViewProfile: () => void;
+  onPrefetchProfile: () => void;
   onOpenSearch: () => void;
   onOpenMediaGallery: () => void;
 }
@@ -20,11 +20,11 @@ interface ConversationHeaderProps {
 export default function ConversationHeader({
   displayName,
   avatarUrl,
-  canViewProfile,
+  profileHref,
   isOtherUserOnline,
   statusText,
   isMessageSearchOpen,
-  onViewProfile,
+  onPrefetchProfile,
   onOpenSearch,
   onOpenMediaGallery,
 }: ConversationHeaderProps) {
@@ -38,32 +38,56 @@ export default function ConversationHeader({
         <ArrowLeft className="h-5 w-5" />
       </Link>
 
-      <button
-        type="button"
-        disabled={!canViewProfile}
-        onClick={onViewProfile}
-        aria-label={"View " + displayName + "'s profile"}
-        title={"View " + displayName + "'s profile"}
-        className="relative shrink-0 rounded-full disabled:cursor-default"
-      >
-        <UserAvatar
-          name={displayName}
-          avatarUrl={avatarUrl}
-          className="h-10 w-10 sm:h-11 sm:w-11"
-          fallbackClassName="bg-cyan-100 font-semibold text-cyan-800"
-        />
-
-        {isOtherUserOnline && (
-          <span
-            title="Online"
-            aria-label="Online"
-            className="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full border-2 border-white bg-emerald-500 shadow-sm"
+      {profileHref ? (
+        <Link
+          href={profileHref}
+          onMouseEnter={onPrefetchProfile}
+          onFocus={onPrefetchProfile}
+          aria-label={"View " + displayName + "'s profile"}
+          title={"View " + displayName + "'s profile"}
+          className="relative shrink-0 rounded-full"
+        >
+          <UserAvatar
+            name={displayName}
+            avatarUrl={avatarUrl}
+            className="h-10 w-10 sm:h-11 sm:w-11"
+            fallbackClassName="bg-cyan-100 font-semibold text-cyan-800"
           />
-        )}
-      </button>
+
+          {isOtherUserOnline && (
+            <span
+              title="Online"
+              aria-label="Online"
+              className="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full border-2 border-white bg-emerald-500 shadow-sm"
+            />
+          )}
+        </Link>
+      ) : (
+        <span className="relative shrink-0 rounded-full" aria-hidden="true">
+          <UserAvatar
+            name={displayName}
+            avatarUrl={avatarUrl}
+            className="h-10 w-10 sm:h-11 sm:w-11"
+            fallbackClassName="bg-cyan-100 font-semibold text-cyan-800"
+          />
+        </span>
+      )}
 
       <div className="min-w-0 flex-1">
-        <h1 className="truncate font-semibold text-[var(--chat-text)]">{displayName}</h1>
+        <h1 className="truncate font-semibold text-[var(--chat-text)]">
+          {profileHref ? (
+            <Link
+              href={profileHref}
+              onMouseEnter={onPrefetchProfile}
+              onFocus={onPrefetchProfile}
+              className="cursor-pointer"
+            >
+              {displayName}
+            </Link>
+          ) : (
+            displayName
+          )}
+        </h1>
 
         <p
           className={[

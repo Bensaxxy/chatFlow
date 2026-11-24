@@ -6,12 +6,15 @@ import { useRouter } from "next/navigation";
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ChangeEvent,
   type FormEvent,
+  type SetStateAction,
 } from "react";
 import { toast } from "react-toastify";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import ConversationComposer from "@/components/chat/ConversationComposer";
 import ConversationHeader from "@/components/chat/ConversationHeader";
@@ -24,13 +27,10 @@ import ChatFlowLoader from "@/components/shared/ChatFlowLoader";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSocket } from "@/contexts/SocketContext";
 import { getApiErrorMessage } from "@/lib/api/errors";
-import {
-  getCachedConversation,
-  invalidateConversationCache,
-  saveConversationCache,
-  type ConversationCacheEntry,
-} from "@/lib/chat/conversation-cache";
+import type { ConversationCacheEntry } from "@/lib/query/conversation-cache";
+import { queryKeys } from "@/lib/query/query-keys";
 import { getConversationById } from "@/services/conversation.service";
+import { getPublicUserProfile } from "@/services/user.service";
 import {
   deleteConversationMessage,
   editConversationMessage,
@@ -353,21 +353,96 @@ export default function ConversationView({
   } = useSocket();
 
   const currentUserId = user?._id;
+  const queryClient = useQueryClient();
+  const conversationCacheKey = useMemo(
+    () => queryKeys.conversationMessages(currentUserId ?? "", conversationId),
+    [currentUserId, conversationId],
+  );
+  const conversationQuery = useQuery({
+    queryKey: conversationCacheKey,
+    queryFn: async ({ signal }): Promise<ConversationCacheEntry> => {
+      const [conversationResult, messageResult] = await Promise.all([
+        getConversationById(conversationId, signal),
+        getConversationMessages(conversationId, null, signal),
+      ]);
+      return {
+        conversation: conversationResult,
+        messages: messageResult.messages.map(normalizeMessage),
+        nextCursor: messageResult.nextCursor,
+        hasMore: messageResult.hasMore,
+      };
+    },
+    enabled: Boolean(currentUserId),
+    staleTime: 20_000,
+  });
+  const conversation = conversationQuery.data?.conversation ?? null;
+  const messages = useMemo(
+    () => conversationQuery.data?.messages ?? [],
+    [conversationQuery.data?.messages],
+  );
+  const nextCursor = conversationQuery.data?.nextCursor ?? null;
+  const hasMore = conversationQuery.data?.hasMore ?? false;
+  const isLoading = conversationQuery.isPending;
+  const errorMessage =
+    conversationQuery.isError && !conversationQuery.data
+      ? getApiErrorMessage(conversationQuery.error)
+      : null;
 
-  const conversationCacheKey = currentUserId
-    ? `${currentUserId}:${conversationId}`
-    : null;
-
-  const [initialCache] = useState<ConversationCacheEntry | null>(() =>
-    getCachedConversation(conversationCacheKey),
+  const setMessages = useCallback(
+    (updater: SetStateAction<ChatMessage[]>): void => {
+      queryClient.setQueryData<ConversationCacheEntry>(
+        conversationCacheKey,
+        (cached) => {
+          if (!cached) return cached;
+          return {
+            ...cached,
+            messages:
+              typeof updater === "function"
+                ? updater(cached.messages)
+                : updater,
+          };
+        },
+      );
+    },
+    [queryClient, conversationCacheKey],
   );
 
-  const [conversation, setConversation] = useState<Conversation | null>(
-    () => initialCache?.conversation ?? null,
+  const setNextCursor = useCallback(
+    (updater: SetStateAction<string | null>): void => {
+      queryClient.setQueryData<ConversationCacheEntry>(
+        conversationCacheKey,
+        (cached) =>
+          cached
+            ? {
+                ...cached,
+                nextCursor:
+                  typeof updater === "function"
+                    ? updater(cached.nextCursor)
+                    : updater,
+              }
+            : cached,
+      );
+    },
+    [queryClient, conversationCacheKey],
   );
 
-  const [messages, setMessages] = useState<ChatMessage[]>(
-    () => initialCache?.messages ?? [],
+  const setHasMore = useCallback(
+    (updater: SetStateAction<boolean>): void => {
+      queryClient.setQueryData<ConversationCacheEntry>(
+        conversationCacheKey,
+        (cached) =>
+          cached
+            ? {
+                ...cached,
+                hasMore:
+                  typeof updater === "function"
+                    ? updater(cached.hasMore)
+                    : updater,
+              }
+            : cached,
+      );
+    },
+    [queryClient, conversationCacheKey],
   );
 
   const [messageText, setMessageText] = useState("");
@@ -385,17 +460,7 @@ export default function ConversationView({
     restoreCurrentDraft();
   }, [restoreCurrentDraft]);
 
-  const [nextCursor, setNextCursor] = useState<string | null>(
-    () => initialCache?.nextCursor ?? null,
-  );
-
-  const [hasMore, setHasMore] = useState(() => initialCache?.hasMore ?? false);
-
-  const [isLoading, setIsLoading] = useState(() => initialCache === null);
-
   const [isLoadingOlder, setIsLoadingOlder] = useState(false);
-
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const [isOtherUserTyping, setIsOtherUserTyping] = useState(false);
 
@@ -553,90 +618,11 @@ export default function ConversationView({
   }, []);
 
   useEffect(() => {
-    const controller = new AbortController();
-
-    const loadConversation = async (): Promise<void> => {
-      if (initialCache) {
-        void getConversationById(conversationId)
-          .then((latestConversation) => {
-            if (!controller.signal.aborted) {
-              setConversation(latestConversation);
-            }
-          })
-          .catch((loadError) => {
-            if (!controller.signal.aborted) {
-              console.error("Could not refresh conversation details:", loadError);
-            }
-          });
-
-        void markConversationRead(conversationId).catch((readError) => {
-          console.error("Could not mark conversation as read:", readError);
-        });
-
-        return;
-      }
-
-      try {
-        setIsLoading(true);
-        setErrorMessage(null);
-
-        const [conversationResult, messageResult] = await Promise.all([
-          getConversationById(conversationId, controller.signal),
-          getConversationMessages(conversationId, null, controller.signal),
-        ]);
-
-        if (controller.signal.aborted) {
-          return;
-        }
-
-        setConversation(conversationResult);
-
-        setMessages(messageResult.messages.map(normalizeMessage));
-
-        setNextCursor(messageResult.nextCursor);
-
-        setHasMore(messageResult.hasMore);
-
-        try {
-          await markConversationRead(conversationId);
-        } catch (readError) {
-          console.error("Could not mark conversation as read:", readError);
-        }
-      } catch (error) {
-        if (!controller.signal.aborted) {
-          setErrorMessage(getApiErrorMessage(error));
-        }
-      } finally {
-        if (!controller.signal.aborted) {
-          setIsLoading(false);
-        }
-      }
-    };
-
-    void loadConversation();
-
-    return () => controller.abort();
-  }, [conversationId, initialCache]);
-
-  useEffect(() => {
-    if (!conversationCacheKey || !conversation || isLoading) {
-      return;
-    }
-
-    saveConversationCache(conversationCacheKey, {
-      conversation,
-      messages,
-      nextCursor,
-      hasMore,
+    if (!currentUserId) return;
+    void markConversationRead(conversationId).catch((readError) => {
+      console.error("Could not mark conversation as read:", readError);
     });
-  }, [
-    conversationCacheKey,
-    conversation,
-    messages,
-    nextCursor,
-    hasMore,
-    isLoading,
-  ]);
+  }, [conversationId, currentUserId]);
 
   const stopTyping = useCallback((): void => {
     if (typingTimeoutRef.current !== null) {
@@ -810,7 +796,11 @@ export default function ConversationView({
         return;
       }
 
-      invalidateConversationCache(`${currentUserId}:${conversationId}`);
+      queryClient.setQueryData<ConversationCacheEntry>(conversationCacheKey, (cached) =>
+        cached
+          ? { ...cached, messages: [], nextCursor: null, hasMore: false }
+          : cached,
+      );
       setMessages([]);
       setNextCursor(null);
       setHasMore(false);
@@ -863,7 +853,18 @@ export default function ConversationView({
         socket.emit("conversation:leave", conversationId);
       }
     };
-  }, [socket, isConnected, conversationId, currentUserId, stopTyping]);
+  }, [
+    socket,
+    isConnected,
+    conversationId,
+    currentUserId,
+    stopTyping,
+    queryClient,
+    conversationCacheKey,
+    setMessages,
+    setNextCursor,
+    setHasMore,
+  ]);
 
   useEffect(() => {
     if (!isLoading) {
@@ -1796,6 +1797,16 @@ export default function ConversationView({
 
   const otherParticipantId = otherParticipant?._id;
 
+  const prefetchOtherProfile = (): void => {
+    if (!otherParticipantId) return;
+
+    void queryClient.prefetchQuery({
+      queryKey: queryKeys.publicProfile(otherParticipantId),
+      queryFn: ({ signal }) => getPublicUserProfile(otherParticipantId, signal),
+      staleTime: 60_000,
+    });
+  };
+
   const isOtherUserOnline =
     isDirectConversation &&
     Boolean(otherParticipantId && onlineUserIds.has(otherParticipantId));
@@ -1835,7 +1846,7 @@ export default function ConversationView({
               null)
             : null
         }
-        canViewProfile={Boolean(otherParticipantId)}
+        profileHref={otherParticipantId ? `/users/${otherParticipantId}` : null}
         isOtherUserOnline={isOtherUserOnline}
         statusText={
           isDirectConversation
@@ -1843,11 +1854,7 @@ export default function ConversationView({
             : "Group conversation"
         }
         isMessageSearchOpen={isMessageSearchOpen}
-        onViewProfile={() => {
-          if (otherParticipantId) {
-            router.push(`/users/${otherParticipantId}`);
-          }
-        }}
+        onPrefetchProfile={prefetchOtherProfile}
         onOpenSearch={openMessageSearch}
         onOpenMediaGallery={openMediaGallery}
       />

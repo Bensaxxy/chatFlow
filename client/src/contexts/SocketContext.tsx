@@ -10,6 +10,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 
 import { useAuth } from "@/contexts/AuthContext";
 import { apiClient } from "@/lib/api/client";
@@ -37,6 +38,7 @@ interface SocketProviderProps {
 }
 
 export function SocketProvider({ children }: SocketProviderProps) {
+  const queryClient = useQueryClient();
   const { user, isAuthenticated, isAuthLoading, refreshUser } = useAuth();
 
   const [isConnected, setIsConnected] = useState(chatSocket.connected);
@@ -132,6 +134,10 @@ export function SocketProvider({ children }: SocketProviderProps) {
         return nextProfiles;
       });
 
+      void queryClient.invalidateQueries({
+        queryKey: ["public-profile", payload.user._id],
+      });
+
       /*
        * Keep the authenticated user synchronized
        * across their other tabs and devices.
@@ -208,6 +214,7 @@ export function SocketProvider({ children }: SocketProviderProps) {
     isAuthLoading,
     currentUserId,
     refreshUser,
+    queryClient,
     connectSocket,
     disconnectSocket,
   ]);
