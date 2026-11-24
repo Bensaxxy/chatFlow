@@ -10,6 +10,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 
 import {
   getCurrentUser,
@@ -71,6 +72,7 @@ interface AuthProviderProps {
 }
 
 export function AuthProvider({ children }: AuthProviderProps) {
+  const queryClient = useQueryClient();
   const [user, setUser] = useState<AuthUser | null>(null);
 
   const [isAuthLoading, setIsAuthLoading] = useState(true);
@@ -85,11 +87,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       return currentUser;
     } catch {
+      queryClient.clear();
       setUser(null);
 
       return null;
     }
-  }, []);
+  }, [queryClient]);
 
   useEffect(() => {
     if (initialCheckStarted.current) {
@@ -112,10 +115,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const login = useCallback(async (input: LoginInput): Promise<AuthUser> => {
     const authenticatedUser = await loginUser(input);
 
+    queryClient.clear();
     setUser(authenticatedUser);
 
     return authenticatedUser;
-  }, []);
+  }, [queryClient]);
 
   const register = useCallback(
     async (input: RegisterInput): Promise<AuthUser> => {
@@ -129,27 +133,36 @@ export function AuthProvider({ children }: AuthProviderProps) {
       const updatedUser = await updateMyProfile(input);
 
       setUser(updatedUser);
+      void queryClient.invalidateQueries({
+        queryKey: ["public-profile", updatedUser._id],
+      });
 
       return updatedUser;
     },
-    [],
+    [queryClient],
   );
 
   const updateAvatar = useCallback(async (file: File): Promise<AuthUser> => {
     const updatedUser = await uploadMyAvatar(file);
 
     setUser(updatedUser);
+    void queryClient.invalidateQueries({
+      queryKey: ["public-profile", updatedUser._id],
+    });
 
     return updatedUser;
-  }, []);
+  }, [queryClient]);
 
   const removeAvatar = useCallback(async (): Promise<AuthUser> => {
     const updatedUser = await removeMyAvatar();
 
     setUser(updatedUser);
+    void queryClient.invalidateQueries({
+      queryKey: ["public-profile", updatedUser._id],
+    });
 
     return updatedUser;
-  }, []);
+  }, [queryClient]);
 
   const updateChatTheme = useCallback(
     async (theme: ChatThemeSettings): Promise<AuthUser> => {
@@ -195,19 +208,21 @@ export function AuthProvider({ children }: AuthProviderProps) {
        * after a successful password change.
        */
       setUser(null);
+      queryClient.clear();
 
       return message;
     },
-    [],
+    [queryClient],
   );
 
   const logout = useCallback(async (): Promise<void> => {
     try {
       await logoutUser();
     } finally {
+      queryClient.clear();
       setUser(null);
     }
-  }, []);
+  }, [queryClient]);
 
   const value = useMemo<AuthContextValue>(
     () => ({

@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "react-toastify";
 
 import UserAvatar from "@/components/chat/UserAvatar";
@@ -25,6 +26,7 @@ import ConfirmModal from "@/components/ui/ConfirmModal";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSocket } from "@/contexts/SocketContext";
 import { getApiErrorMessage } from "@/lib/api/errors";
+import { queryKeys } from "@/lib/query/query-keys";
 import { createDirectConversation } from "@/services/conversation.service";
 import {
   blockUser,
@@ -96,9 +98,14 @@ export default function PublicProfilePage() {
 
   const userId = params.userId;
 
-  const [profile, setProfile] = useState<PublicUserProfile | null>(null);
-
-  const [isLoading, setIsLoading] = useState(true);
+  const queryClient = useQueryClient();
+  const profileQuery = useQuery({
+    queryKey: queryKeys.publicProfile(userId),
+    queryFn: ({ signal }) => getPublicUserProfile(userId, signal),
+    enabled: Boolean(userId),
+    staleTime: 60_000,
+  });
+  const profile = profileQuery.data ?? null;
 
   const [isStartingConversation, setIsStartingConversation] = useState(false);
 
@@ -107,7 +114,6 @@ export default function PublicProfilePage() {
   const [isBlockConfirmModalOpen, setIsBlockConfirmModalOpen] =
     useState(false);
 
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [expandedImage, setExpandedImage] = useState<{ src: string; alt: string } | null>(null);
 
   useEffect(() => {
@@ -118,39 +124,6 @@ export default function PublicProfilePage() {
     window.addEventListener("keydown", closeOnEscape);
     return () => window.removeEventListener("keydown", closeOnEscape);
   }, [expandedImage]);
-
-  useEffect(() => {
-    const controller = new AbortController();
-
-    const loadProfile = async (): Promise<void> => {
-      try {
-        setIsLoading(true);
-        setErrorMessage(null);
-
-        const result = await getPublicUserProfile(userId, controller.signal);
-
-        if (controller.signal.aborted) {
-          return;
-        }
-
-        setProfile(result);
-      } catch (error) {
-        if (!controller.signal.aborted) {
-          setErrorMessage(getApiErrorMessage(error));
-        }
-      } finally {
-        if (!controller.signal.aborted) {
-          setIsLoading(false);
-        }
-      }
-    };
-
-    void loadProfile();
-
-    return () => {
-      controller.abort();
-    };
-  }, [userId]);
 
   const handlePrimaryAction = async (): Promise<void> => {
     if (
@@ -171,6 +144,9 @@ export default function PublicProfilePage() {
       setIsStartingConversation(true);
 
       const conversation = await createDirectConversation(profile._id);
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.conversations(currentUser._id),
+      });
 
       router.push(`/chats/${conversation._id}`);
     } catch (error) {
@@ -192,8 +168,9 @@ export default function PublicProfilePage() {
         ? await unblockUser(profile._id)
         : await blockUser(profile._id);
 
-      setProfile((current) =>
-        current
+      queryClient.setQueryData<PublicUserProfile>(
+        queryKeys.publicProfile(userId),
+        (current) => current
           ? {
               ...current,
               ...blockStatus,
@@ -214,11 +191,11 @@ export default function PublicProfilePage() {
     }
   };
 
-  if (isLoading) {
+  if (profileQuery.isPending) {
     return <ChatFlowLoader message="Loading profile..." />;
   }
 
-  if (errorMessage || !profile) {
+  if (!profile) {
     return (
       <div className="public-profile-page flex h-full w-full flex-col bg-slate-50">
         <header className="flex h-20 shrink-0 items-center border-b border-[var(--chat-border)] bg-[var(--chat-surface)] px-4 sm:px-6">
@@ -237,7 +214,7 @@ export default function PublicProfilePage() {
             <UserRound className="mx-auto h-12 w-12 text-slate-300" />
 
             <p className="mt-4 font-medium text-red-600">
-              {errorMessage ?? "Profile could not be loaded"}
+              {getApiErrorMessage(profileQuery.error) ?? "Profile could not be loaded"}
             </p>
 
             <button

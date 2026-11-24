@@ -6,12 +6,14 @@ import { useRouter } from "next/navigation";
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ChangeEvent,
   type FormEvent,
 } from "react";
 import { toast } from "react-toastify";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import ConversationComposer from "@/components/chat/ConversationComposer";
 import ConversationHeader from "@/components/chat/ConversationHeader";
@@ -24,12 +26,8 @@ import ChatFlowLoader from "@/components/shared/ChatFlowLoader";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSocket } from "@/contexts/SocketContext";
 import { getApiErrorMessage } from "@/lib/api/errors";
-import {
-  getCachedConversation,
-  invalidateConversationCache,
-  saveConversationCache,
-  type ConversationCacheEntry,
-} from "@/lib/chat/conversation-cache";
+import type { ConversationCacheEntry } from "@/lib/query/conversation-cache";
+import { queryKeys } from "@/lib/query/query-keys";
 import { getConversationById } from "@/services/conversation.service";
 import {
   deleteConversationMessage,
@@ -353,14 +351,31 @@ export default function ConversationView({
   } = useSocket();
 
   const currentUserId = user?._id;
-
-  const conversationCacheKey = currentUserId
-    ? `${currentUserId}:${conversationId}`
-    : null;
-
-  const [initialCache] = useState<ConversationCacheEntry | null>(() =>
-    getCachedConversation(conversationCacheKey),
+  const queryClient = useQueryClient();
+  const conversationCacheKey = useMemo(
+    () => queryKeys.conversationMessages(currentUserId ?? "", conversationId),
+    [currentUserId, conversationId],
   );
+  const conversationQuery = useQuery({
+    queryKey: conversationCacheKey,
+    queryFn: async ({ signal }): Promise<ConversationCacheEntry> => {
+      const [conversationResult, messageResult] = await Promise.all([
+        getConversationById(conversationId, signal),
+        getConversationMessages(conversationId, null, signal),
+      ]);
+      return {
+        conversation: conversationResult,
+        messages: messageResult.messages.map(normalizeMessage),
+        nextCursor: messageResult.nextCursor,
+        hasMore: messageResult.hasMore,
+      };
+    },
+    enabled: Boolean(currentUserId),
+    staleTime: 20_000,
+  });
+  const initialCache =
+    conversationQuery.data ??
+    queryClient.getQueryData<ConversationCacheEntry>(conversationCacheKey);
 
   const [conversation, setConversation] = useState<Conversation | null>(
     () => initialCache?.conversation ?? null,
@@ -391,7 +406,7 @@ export default function ConversationView({
 
   const [hasMore, setHasMore] = useState(() => initialCache?.hasMore ?? false);
 
-  const [isLoading, setIsLoading] = useState(() => initialCache === null);
+  const [isLoading, setIsLoading] = useState(() => initialCache === undefined);
 
   const [isLoadingOlder, setIsLoadingOlder] = useState(false);
 
@@ -553,89 +568,48 @@ export default function ConversationView({
   }, []);
 
   useEffect(() => {
-    const controller = new AbortController();
-
-    const loadConversation = async (): Promise<void> => {
-      if (initialCache) {
-        void getConversationById(conversationId)
-          .then((latestConversation) => {
-            if (!controller.signal.aborted) {
-              setConversation(latestConversation);
-            }
-          })
-          .catch((loadError) => {
-            if (!controller.signal.aborted) {
-              console.error("Could not refresh conversation details:", loadError);
-            }
-          });
-
-        void markConversationRead(conversationId).catch((readError) => {
-          console.error("Could not mark conversation as read:", readError);
-        });
-
-        return;
-      }
-
-      try {
-        setIsLoading(true);
-        setErrorMessage(null);
-
-        const [conversationResult, messageResult] = await Promise.all([
-          getConversationById(conversationId, controller.signal),
-          getConversationMessages(conversationId, null, controller.signal),
-        ]);
-
-        if (controller.signal.aborted) {
-          return;
-        }
-
-        setConversation(conversationResult);
-
-        setMessages(messageResult.messages.map(normalizeMessage));
-
-        setNextCursor(messageResult.nextCursor);
-
-        setHasMore(messageResult.hasMore);
-
-        try {
-          await markConversationRead(conversationId);
-        } catch (readError) {
-          console.error("Could not mark conversation as read:", readError);
-        }
-      } catch (error) {
-        if (!controller.signal.aborted) {
-          setErrorMessage(getApiErrorMessage(error));
-        }
-      } finally {
-        if (!controller.signal.aborted) {
-          setIsLoading(false);
-        }
-      }
-    };
-
-    void loadConversation();
-
-    return () => controller.abort();
-  }, [conversationId, initialCache]);
+    if (conversationQuery.data) {
+      setConversation(conversationQuery.data.conversation);
+      setMessages(conversationQuery.data.messages);
+      setNextCursor(conversationQuery.data.nextCursor);
+      setHasMore(conversationQuery.data.hasMore);
+      setErrorMessage(null);
+      setIsLoading(false);
+    } else if (conversationQuery.isError && !conversationQuery.data) {
+      setErrorMessage(getApiErrorMessage(conversationQuery.error));
+      setIsLoading(false);
+    } else if (conversationQuery.isPending) {
+      setIsLoading(true);
+    }
+  }, [conversationQuery.data, conversationQuery.error, conversationQuery.isError, conversationQuery.isPending]);
 
   useEffect(() => {
-    if (!conversationCacheKey || !conversation || isLoading) {
+    if (!currentUserId) return;
+    void markConversationRead(conversationId).catch((readError) => {
+      console.error("Could not mark conversation as read:", readError);
+    });
+  }, [conversationId, currentUserId]);
+
+  useEffect(() => {
+    if (!currentUserId || !conversation || isLoading) {
       return;
     }
 
-    saveConversationCache(conversationCacheKey, {
+    queryClient.setQueryData<ConversationCacheEntry>(conversationCacheKey, {
       conversation,
       messages,
       nextCursor,
       hasMore,
     });
   }, [
+    currentUserId,
     conversationCacheKey,
     conversation,
     messages,
     nextCursor,
     hasMore,
     isLoading,
+    queryClient,
   ]);
 
   const stopTyping = useCallback((): void => {
@@ -810,7 +784,11 @@ export default function ConversationView({
         return;
       }
 
-      invalidateConversationCache(`${currentUserId}:${conversationId}`);
+      queryClient.setQueryData<ConversationCacheEntry>(conversationCacheKey, (cached) =>
+        cached
+          ? { ...cached, messages: [], nextCursor: null, hasMore: false }
+          : cached,
+      );
       setMessages([]);
       setNextCursor(null);
       setHasMore(false);
@@ -863,7 +841,7 @@ export default function ConversationView({
         socket.emit("conversation:leave", conversationId);
       }
     };
-  }, [socket, isConnected, conversationId, currentUserId, stopTyping]);
+  }, [socket, isConnected, conversationId, currentUserId, stopTyping, queryClient, conversationCacheKey]);
 
   useEffect(() => {
     if (!isLoading) {
